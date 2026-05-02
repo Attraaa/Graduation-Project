@@ -1,5 +1,5 @@
 {
-  "name": "front",
+  "name": "postureai",
   "private": true,
   "version": "0.0.0",
   "main": "dist-electron/main.js",
@@ -13,8 +13,9 @@
     "preview": "vite preview"
   },
   "build": {
-    "appId": "com.graduation.front",
-    "productName": "FrontApp",
+    "appId": "com.graduation.postureai",
+    "productName": "PostureAI",
+    "icon": "public/icon.png",
     "directories": {
       "output": "release"
     },
@@ -24,13 +25,26 @@
     ],
     "win": {
       "target": [
-        "portable"
+        "nsis"
       ]
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": false,
+      "createDesktopShortcut": true
     }
   },
   "dependencies": {
+    "@tailwindcss/vite": "^4.2.4",
+    "autoprefixer": "^10.5.0",
+    "lucide-react": "^1.14.0",
+    "postcss": "^8.5.13",
     "react": "^19.2.5",
-    "react-dom": "^19.2.5"
+    "react-dom": "^19.2.5",
+    "react-router-dom": "^7.14.2",
+    "recharts": "^3.8.1",
+    "tailwindcss": "^4.2.4"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

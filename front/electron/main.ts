@@ -18,10 +18,27 @@ process.env.VITE_PUBLIC = app.isPackaged ? process.env.DIST : path.join(__dirnam
 
 
 let win: BrowserWindow | null
-
+let splash: BrowserWindow | null
 function createWindow() {
+  // Create Splash Screen
+  splash = new BrowserWindow({
+    width: 350,
+    height: 400,
+    transparent: true,
+    frame: false,
+    alwaysOnTop: true,
+    icon: path.join(process.env.VITE_PUBLIC, 'icon.png')
+  })
+  splash.loadFile(path.join(process.env.VITE_PUBLIC, 'splash.html'))
+
   win = new BrowserWindow({
-    icon: path.join(process.env.VITE_PUBLIC, 'favicon.svg'),
+    width: 1100,
+    height: 800,
+    minWidth: 800,
+    minHeight: 600,
+    autoHideMenuBar: true,
+    show: false, // Don't show until ready
+    icon: path.join(process.env.VITE_PUBLIC, 'icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
     },
@@ -30,6 +47,17 @@ function createWindow() {
   // Test active push message to Renderer-process.
   win.webContents.on('did-finish-load', () => {
     win?.webContents.send('main-process-message', (new Date).toLocaleString())
+  })
+
+  // Show when ready and after animation
+  win.once('ready-to-show', () => {
+    setTimeout(() => {
+      if (splash) {
+        splash.close()
+        splash = null
+      }
+      win?.show()
+    }, 2800) // Wait 2.8s for the CSS progress bar to complete
   })
 
   if (process.env.VITE_DEV_SERVER_URL) {
