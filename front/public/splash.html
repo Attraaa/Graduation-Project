@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Loading PostureAI</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #f7f7f7;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      font-family: 'Inter', system-ui, sans-serif;
+      overflow: hidden;
+      -webkit-app-region: drag;
+    }
+
+    .container {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 40px;
+      box-sizing: border-box;
+    }
+    
+    .logo-container {
+      width: 100px;
+      height: 100px;
+      background-color: white;
+      border-radius: 25px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.08);
+      margin-bottom: 25px;
+      animation: float 3s ease-in-out infinite;
+    }
+
+    .logo-img {
+      width: 65px;
+      height: 65px;
+      object-fit: contain;
+    }
+
+    h1 {
+      color: #374151;
+      font-size: 26px;
+      font-weight: 900;
+      margin: 0 0 8px 0;
+      letter-spacing: -0.5px;
+    }
+
+    p {
+      color: #6b7280;
+      font-size: 14px;
+      font-weight: 600;
+      margin: 0 0 30px 0;
+    }
+
+    /* Progress bar container */
+    .progress-wrapper {
+      width: 280px;
+      height: 10px;
+      background-color: #e5e7eb;
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: inset 0 1px 3px rgba(0,0,0,0.1);
+    }
+
+    /* The moving progress fill */
+    .progress-fill {
+      height: 100%;
+      background-color: #58cc02;
+      width: 0%;
+      border-radius: 10px;
+      /* Animate width from 0 to 100% over 2.8s */
+      animation: fillBar 2.8s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    }
+
+    @keyframes float {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-12px); }
+    }
+
+    @keyframes fillBar {
+      0% { width: 0%; }
+      30% { width: 40%; }
+      60% { width: 70%; }
+      100% { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="logo-container">
+      <img src="./icon.png" alt="Logo" class="logo-img" />
+    </div>
+    <h1>PostureAI</h1>
+    <p id="status-text">업데이트를 확인하는 중...</p>
+    
+    <div class="progress-wrapper">
+      <div class="progress-fill"></div>
+    </div>
+  </div>
+
+  <script>
+    // Change status text to mimic Discord's updater steps
+    const statusText = document.getElementById('status-text');
+    
+    setTimeout(() => {
+      statusText.innerText = '필수 모듈 로딩 중...';
+    }, 800);
+
+    setTimeout(() => {
+      statusText.innerText = 'AI 엔진 초기화 완료!';
+      statusText.style.color = '#58cc02';
+    }, 2200);
+  </script>
+</body>
+</html>
