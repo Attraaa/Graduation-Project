@@ -55,7 +55,7 @@ const Login = () => {
             </Button>
             
             <Link to="/register" className="block">
-              <Button type="button" variant="outline" fullWidth>
+              <Button type="button" variant="outline" fullWidth style={{ color: '#000000' }}>
                 새 계정 만들기
               </Button>
             </Link>

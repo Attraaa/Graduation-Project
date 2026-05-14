@@ -1,21 +1,21 @@
-import { contextBridge as e, ipcRenderer as t } from "electron";
+import { contextBridge, ipcRenderer } from "electron";
 //#region electron/preload.ts
-e.exposeInMainWorld("ipcRenderer", {
-	on(...e) {
-		let [n, r] = e;
-		return t.on(n, (e, ...t) => r(e, ...t));
+contextBridge.exposeInMainWorld("ipcRenderer", {
+	on(...args) {
+		const [channel, listener] = args;
+		return ipcRenderer.on(channel, (event, ...args) => listener(event, ...args));
 	},
-	off(...e) {
-		let [n, ...r] = e;
-		return t.off(n, ...r);
+	off(...args) {
+		const [channel, ...omit] = args;
+		return ipcRenderer.off(channel, ...omit);
 	},
-	send(...e) {
-		let [n, ...r] = e;
-		return t.send(n, ...r);
+	send(...args) {
+		const [channel, ...omit] = args;
+		return ipcRenderer.send(channel, ...omit);
 	},
-	invoke(...e) {
-		let [n, ...r] = e;
-		return t.invoke(n, ...r);
+	invoke(...args) {
+		const [channel, ...omit] = args;
+		return ipcRenderer.invoke(channel, ...omit);
 	}
 });
 //#endregion
