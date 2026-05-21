@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Loading PostureAI</title>
+  <title>Loading Moti</title>
   <style>
     body {
       margin: 0;
@@ -75,7 +75,7 @@
     /* The moving progress fill */
     .progress-fill {
       height: 100%;
-      background-color: #58cc02;
+      background: linear-gradient(90deg, #1cb0f6, #58cc02);
       width: 0%;
       border-radius: 10px;
       /* Animate width from 0 to 100% over 2.8s */
@@ -100,7 +100,7 @@
     <div class="logo-container">
       <img src="./icon.png" alt="Logo" class="logo-img" />
     </div>
-    <h1>PostureAI</h1>
+    <h1>Moti</h1>
     <p id="status-text">업데이트를 확인하는 중...</p>
     
     <div class="progress-wrapper">
@@ -118,7 +118,7 @@
 
     setTimeout(() => {
       statusText.innerText = 'AI 엔진 초기화 완료!';
-      statusText.style.color = '#58cc02';
+      statusText.style.color = '#26c281';
     }, 2200);
   </script>
 </body>
