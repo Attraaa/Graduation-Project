@@ -1,29 +1,34 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import Button from '../components/Button';
-import { MonitorUp } from 'lucide-react';
+import { loginUser } from '../utils/authStore';
+import motiIconUrl from '../assets/moti-icon.svg';
+import { useDialog } from '../components/AppDialog';
 
 const Login = () => {
   const navigate = useNavigate();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const { notify } = useDialog();
+  const [userId, setUserId] = useState('admin');
+  const [password, setPassword] = useState('admin');
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    if(email && password) {
-      localStorage.setItem('isLoggedIn', 'true');
-      navigate('/dashboard');
+    const result = loginUser(userId, password);
+    if (!result.ok) {
+      void notify({ title: '로그인 실패', message: result.message, tone: 'warning' });
+      return;
     }
+    navigate('/dashboard');
   };
 
   return (
     <div className="flex min-h-screen w-screen items-center justify-center bg-white md:bg-[#f7f7f7]">
       <div className="w-full max-w-md p-8 md:card-duo">
         <div className="mb-8 flex flex-col items-center justify-center space-y-4">
-          <div className="flex h-24 w-24 items-center justify-center rounded-3xl bg-[#58cc02] shadow-sm">
-            <MonitorUp size={48} className="text-white" />
+          <div className="flex h-24 w-24 items-center justify-center rounded-3xl shadow-sm">
+            <img src={motiIconUrl} alt="Moti" className="h-24 w-24 rounded-3xl" />
           </div>
-          <h1 className="text-center text-3xl font-black text-[#58cc02]">바른자세</h1>
+          <h1 className="text-center text-3xl font-black text-[#26c281]">Moti</h1>
           <p className="text-center text-gray-500 font-bold">
             AI 기반 VDT 증후군 교정 프로그램
           </p>
@@ -33,10 +38,10 @@ const Login = () => {
           <div className="space-y-4">
             <input
               type="text"
-              placeholder="이메일 또는 아이디"
+              placeholder="아이디"
               className="w-full rounded-2xl border-2 border-gray-200 bg-gray-50 px-4 py-4 font-bold text-gray-700 outline-none transition focus:border-[#1cb0f6] focus:bg-white"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              value={userId}
+              onChange={(e) => setUserId(e.target.value)}
               required
             />
             <input
@@ -49,6 +54,12 @@ const Login = () => {
             />
           </div>
 
+          <div className="flex justify-center gap-4 text-sm font-bold text-gray-600">
+            <Link to="/find-id" className="hover:text-[#1cb0f6] transition">아이디 찾기</Link>
+            <span>|</span>
+            <Link to="/find-password" className="hover:text-[#1cb0f6] transition">비밀번호 찾기</Link>
+          </div>
+
           <div className="space-y-3 pt-4">
             <Button type="submit" variant="primary" fullWidth>
               시작하기
@@ -56,7 +67,7 @@ const Login = () => {
             
             <Link to="/register" className="block">
               <Button type="button" variant="outline" fullWidth>
-                새 계정 만들기
+                회원가입
               </Button>
             </Link>
           </div>

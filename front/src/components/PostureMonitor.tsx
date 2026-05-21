@@ -1,37 +1,27 @@
 import { useEffect, useState, useRef } from 'react';
-import { Camera, AlertCircle, CheckCircle, XCircle } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 import { useWebcam } from '../hooks/useWebcam';
 import { useMediaPipe } from '../hooks/useMediaPipe';
 import { calculateNeckAngle } from '../utils/postureCalculator';
 
 interface PostureMonitorProps {
   mode: string;
+  isRunning?: boolean;
 }
 
-const formatTime = (seconds: number) => {
-  const m = Math.floor(seconds / 60).toString().padStart(2, '0');
-  const s = (seconds % 60).toString().padStart(2, '0');
-  return `${m}:${s}`;
-};
-
-const PostureMonitor = ({ mode }: PostureMonitorProps) => {
-  const [elapsedTime, setElapsedTime] = useState(0);
+const PostureMonitor = ({ mode, isRunning = true }: PostureMonitorProps) => {
   const [postureStatus, setPostureStatus] = useState<'GOOD' | 'WARNING'>('GOOD');
-  const [score, setScore] = useState(100);
   
   const statsRef = useRef({ totalFrames: 0, badFrames: 0, lastUpdateTime: 0 });
   const { videoRef, startWebcam, stopWebcam, webcamError } = useWebcam();
   const { canvasRef, initMediaPipe, startProcessing, stopProcessing, aiError, isLoaded } = useMediaPipe();
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      setElapsedTime(prev => prev + 1);
-    }, 1000);
-
     const setup = async () => {
       // 1. 카메라 시작
       const stream = await startWebcam();
       if (!stream) return;
+      if (!isRunning) return;
 
       // 2. MediaPipe 초기화 및 뼈대 그리기 로직 설정
       const pose = await initMediaPipe((results: any) => {
@@ -134,11 +124,8 @@ const PostureMonitor = ({ mode }: PostureMonitorProps) => {
               const now = Date.now();
               if (now - statsRef.current.lastUpdateTime > 500) {
                 statsRef.current.lastUpdateTime = now;
-                const newScore = Math.max(0, Math.round(((statsRef.current.totalFrames - statsRef.current.badFrames) / statsRef.current.totalFrames) * 100));
-                
                 // 최근 0.5초 동안 불량 프레임이 절반 이상이면 경고
                 setPostureStatus(isTurtleNeck ? 'WARNING' : 'GOOD');
-                setScore(newScore);
                 
                 // 프레임 카운트 초기화 (다음 0.5초 계산을 위해)
                 statsRef.current.totalFrames = 0;
@@ -164,16 +151,15 @@ const PostureMonitor = ({ mode }: PostureMonitorProps) => {
     setup();
 
     return () => {
-      clearInterval(interval);
       stopProcessing();
       stopWebcam();
     };
-  }, [startWebcam, initMediaPipe, startProcessing, stopProcessing, stopWebcam, mode]);
+  }, [startWebcam, initMediaPipe, startProcessing, stopProcessing, stopWebcam, mode, isRunning]);
 
   const errorMsg = webcamError || aiError;
 
   return (
-    <div className="bg-gray-50 flex flex-col border-t-2 border-gray-100">
+    <div className="flex h-full min-h-0 flex-col border-t-2 border-gray-100 bg-gray-50">
       {errorMsg ? (
         <div className="bg-red-50 border-2 border-red-200 p-4 m-4 rounded-2xl flex items-start">
           <AlertCircle size={24} className="text-red-500 mr-3 mt-0.5" />
@@ -184,46 +170,24 @@ const PostureMonitor = ({ mode }: PostureMonitorProps) => {
         </div>
       ) : (
         <>
-          <div className="flex justify-between items-center px-6 py-4 bg-white border-b border-gray-100">
-            <div className="flex flex-col">
-              <span className="text-sm font-bold text-gray-500 mb-1">현재 상태</span>
-              {postureStatus === 'GOOD' ? (
-                <div className="flex items-center text-green-600">
-                  <CheckCircle size={20} className="mr-2" />
-                  <span className="font-black text-lg">바른 자세 유지 중</span>
-                </div>
-              ) : (
-                <div className="flex items-center text-red-500 animate-pulse">
-                  <XCircle size={20} className="mr-2" />
-                  <span className="font-black text-lg">목이 너무 앞으로 나왔어요!</span>
-                </div>
-              )}
-            </div>
-            
-            <div className="flex flex-col items-end">
-              <span className="text-sm font-bold text-gray-500 mb-1">자세 점수</span>
-              <div className="flex items-baseline">
-                <span className={`font-black text-3xl ${score >= 80 ? 'text-green-500' : score >= 50 ? 'text-yellow-500' : 'text-red-500'}`}>
-                  {score}
-                </span>
-                <span className="text-gray-400 font-bold ml-1 text-sm">점</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="relative bg-black flex justify-center items-center overflow-hidden h-64 w-full">
+          <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-black">
             <video 
               ref={videoRef}
               autoPlay 
               playsInline 
               muted 
-              className="absolute inset-0 w-full h-full object-cover transform scale-x-[-1]"
+              className="absolute inset-0 h-full w-full object-cover transform scale-x-[-1]"
             />
             <canvas
               ref={canvasRef}
-              className="absolute inset-0 w-full h-full object-cover pointer-events-none transform scale-x-[-1]"
+              className="absolute inset-0 h-full w-full object-cover pointer-events-none transform scale-x-[-1]"
             />
-            {!isLoaded && (
+            {!isRunning && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/50 text-white font-bold z-10">
+                자세교정 시작 버튼을 누르면 AI 분석이 시작됩니다.
+              </div>
+            )}
+            {isRunning && !isLoaded && (
               <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/50 text-white font-bold z-10">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mb-2"></div>
                 AI 모델 로딩 중...
@@ -232,18 +196,6 @@ const PostureMonitor = ({ mode }: PostureMonitorProps) => {
           </div>
         </>
       )}
-      <div className="px-6 py-4 flex items-center justify-between border-t-2 border-gray-100">
-        <div className="flex items-center text-sm font-bold text-[#58cc02]">
-          <div className="relative flex h-3 w-3 mr-3">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#58cc02] opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-3 w-3 bg-[#58cc02]"></span>
-          </div>
-          <Camera size={16} className="mr-1 animate-pulse" /> AI 카메라 분석 중 ({mode})...
-        </div>
-        <div className="text-[#58cc02] font-black font-mono text-lg">
-          {formatTime(elapsedTime)}
-        </div>
-      </div>
     </div>
   );
 };

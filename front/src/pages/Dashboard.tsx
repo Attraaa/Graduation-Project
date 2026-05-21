@@ -1,18 +1,7 @@
-import { useState } from 'react';
 import { AlertCircle } from 'lucide-react';
 import ModeSelector from '../components/ModeSelector';
 
 const Dashboard = () => {
-  const [activeMode, setActiveMode] = useState<string | null>(null);
-
-  const handleModeToggle = (id: string) => {
-    if (activeMode === id) {
-      setActiveMode(null);
-    } else {
-      setActiveMode(id);
-    }
-  };
-
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <header className="flex items-center justify-between mb-8">
@@ -35,7 +24,7 @@ const Dashboard = () => {
         </div>
       </div>
 
-      <ModeSelector activeMode={activeMode} onModeToggle={handleModeToggle} />
+      <ModeSelector />
     </div>
   );
 };

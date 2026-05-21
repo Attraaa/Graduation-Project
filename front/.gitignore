@@ -13,7 +13,16 @@ dist-ssr
 dist-electron
 release
 *.local
-release
+.tsbuildinfo/
+.vite-cache/
+.vite-cache-screenshots/
+vite.screenshots.config.ts
+
+# Local planning/report drafts
+1차 기획서.html
+postureai-planning-architecture.html
+POSTUREAI_FINAL_REPORT_DRAFT.md
+SYSTEM_ARCHITECTURE_FLOW.md
 
 # Editor directories and files
 .vscode/*

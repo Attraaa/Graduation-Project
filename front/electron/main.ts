@@ -16,6 +16,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 process.env.DIST = path.join(__dirname, '../dist')
 process.env.VITE_PUBLIC = app.isPackaged ? process.env.DIST : path.join(__dirname, '../public')
 
+app.setName('Moti')
 
 let win: BrowserWindow | null
 let splash: BrowserWindow | null

@@ -32,27 +32,64 @@ body {
 
 /* Duolingo style button base */
 .btn-duo {
-  @apply relative rounded-2xl font-bold uppercase tracking-wider text-white transition-all active:translate-y-1 active:border-b-0;
+  @apply relative rounded-2xl font-bold uppercase tracking-wider transition-all active:translate-y-1 active:border-b-0;
   border-bottom-width: 4px;
 }
 
 .btn-primary {
-  @apply bg-primary border-primary-border hover:bg-primary-hover;
+  @apply bg-primary border-primary-border text-white hover:bg-primary-hover;
 }
 
 .btn-secondary {
-  @apply bg-secondary border-secondary-border hover:opacity-90;
+  @apply bg-secondary border-secondary-border text-white hover:opacity-90;
 }
 
 .btn-danger {
-  @apply bg-danger border-danger-border hover:opacity-90;
+  @apply bg-danger border-danger-border text-white hover:opacity-90;
 }
 
 .btn-warning {
-  @apply bg-warning border-warning-border hover:opacity-90;
+  @apply bg-warning border-warning-border text-white hover:opacity-90;
 }
 
 /* Card style */
 .card-duo {
   @apply bg-surface rounded-3xl border-2 border-gray-200 p-6;
+}
+
+.dark-theme body {
+  background-color: #111827;
+  color: #e5e7eb;
+}
+
+.dark-theme main,
+.dark-theme .bg-\[\#f7f7f7\] {
+  background-color: #111827;
+}
+
+.dark-theme .card-duo,
+.dark-theme .bg-white {
+  background-color: #1f2937;
+  border-color: #374151;
+}
+
+.dark-theme .bg-gray-50 {
+  background-color: #111827;
+}
+
+.dark-theme .text-gray-700 {
+  color: #f3f4f6;
+}
+
+.dark-theme .text-gray-600,
+.dark-theme .text-gray-500,
+.dark-theme .text-gray-400 {
+  color: #9ca3af;
+}
+
+.dark-theme input,
+.dark-theme select {
+  background-color: #111827;
+  border-color: #374151;
+  color: #f3f4f6;
 }

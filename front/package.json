@@ -1,5 +1,5 @@
 {
-  "name": "postureai",
+  "name": "moti",
   "private": true,
   "version": "0.0.0",
   "main": "dist-electron/main.js",
@@ -13,9 +13,9 @@
     "preview": "vite preview"
   },
   "build": {
-    "appId": "com.graduation.postureai",
-    "productName": "PostureAI",
-    "icon": "public/icon.png",
+    "appId": "com.graduation.moti",
+    "productName": "Moti",
+    "icon": "public/icon.ico",
     "directories": {
       "output": "release"
     },
@@ -24,15 +24,19 @@
       "dist-electron"
     ],
     "win": {
+      "icon": "public/icon.ico",
       "target": [
         "nsis"
       ]
     },
     "nsis": {
-      "oneClick": true,
+      "oneClick": false,
       "perMachine": false,
-      "allowToChangeInstallationDirectory": false,
-      "createDesktopShortcut": true
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "license": "privacy-agreement.txt",
+      "installerIcon": "public/icon.ico",
+      "uninstallerIcon": "public/icon.ico"
     }
   },
   "dependencies": {

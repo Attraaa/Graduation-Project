@@ -6,6 +6,7 @@ import renderer from 'vite-plugin-electron-renderer'
 
 // https://vite.dev/config/
 export default defineConfig({
+  cacheDir: './.vite-cache-screenshots',
   plugins: [
     tailwindcss(),
     react(),
