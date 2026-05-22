@@ -1,5 +1,6 @@
 # Local generated reports and capture output
 /reports/
+.DS_Store
 
 # One-off local helper scripts for report/screenshot generation
 /scripts/capture-moti-screenshots.mjs
