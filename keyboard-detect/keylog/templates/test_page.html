@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<title>Realtime Key Finger Test</title>
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 16px;
+    font-family: Arial, sans-serif;
+    background: #111318;
+    color: #eceff4;
+  }
+  h1 { margin: 0 0 12px; font-size: 18px; }
+  .stage {
+    position: relative;
+    display: inline-block;
+    background: #000;
+    border: 1px solid #343843;
+  }
+  video, canvas {
+    display: block;
+    width: min(960px, calc(100vw - 32px));
+    height: auto;
+  }
+  canvas { position: absolute; inset: 0; }
+  .hud {
+    margin-top: 10px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    max-width: 980px;
+  }
+  .hud > * {
+    min-height: 30px;
+    padding: 5px 9px;
+    border: 1px solid #343843;
+    background: #1d2028;
+    border-radius: 4px;
+    font-size: 13px;
+  }
+  button {
+    color: #eceff4;
+    cursor: pointer;
+  }
+  input[type="number"] {
+    width: 74px;
+    background: #111318;
+    color: #eceff4;
+    border: 1px solid #4b5160;
+    border-radius: 3px;
+    padding: 2px 4px;
+  }
+  .ok { color: #85f0a3; }
+  .warn { color: #ffd166; }
+  .err { color: #ff7d7d; }
+  #result {
+    margin-top: 10px;
+    max-width: 980px;
+    padding: 10px;
+    border: 1px solid #343843;
+    background: #171a21;
+    border-radius: 4px;
+    font: 13px/1.45 Consolas, monospace;
+    white-space: pre-wrap;
+  }
+</style>
+</head>
+<body>
+  <h1>Realtime Key Finger Test</h1>
+  <div class="stage">
+    <video id="video" autoplay playsinline muted></video>
+    <canvas id="overlay"></canvas>
+  </div>
+  <div class="hud">
+    <span>Socket: <b id="socket">init</b></span>
+    <span>Frames: <b id="frames">0</b></span>
+    <span>Fingers: <b id="fingers">0</b></span>
+    <span>Last key: <b id="lastKey">-</b></span>
+    <label><input type="checkbox" id="browserKeys" checked> Browser key source</label>
+    <button id="startGlobal">Start global keylogger</button>
+    <button id="stopGlobal">Stop global keylogger</button>
+    <label>Camera delay <input id="camDelay" type="number" value="{{ camera_delay_ms }}" step="5"> ms</label>
+    <label>Wait <input id="waitMs" type="number" value="{{ analysis_wait_ms }}" step="5"> ms</label>
+    <button id="saveTiming">Apply timing</button>
+  </div>
+  <div id="result">Waiting for camera and key events...</div>
+
+<script>
+const TOKEN = "{{ token }}";
+const video = document.getElementById("video");
+const overlay = document.getElementById("overlay");
+const ctx = overlay.getContext("2d");
+const $socket = document.getElementById("socket");
+const $frames = document.getElementById("frames");
+const $fingers = document.getElementById("fingers");
+const $lastKey = document.getElementById("lastKey");
+const $result = document.getElementById("result");
+let lastFrame = null;
+let lastPress = null;
+let sending = false;
+
+const socket = io({ auth: { token: TOKEN }, transports: ["websocket", "polling"] });
+socket.on("connect", () => setSocket("connected", "ok"));
+socket.on("disconnect", () => setSocket("disconnected", "err"));
+socket.on("connect_error", (err) => setSocket(err.message, "err"));
+socket.on("press_result", (payload) => {
+  lastPress = payload;
+  $lastKey.textContent = payload.pressed_key || payload.key_event.key;
+  const finger = payload.pressed_finger;
+  const text = finger
+    ? `${finger.hand} ${finger.finger} -> ${finger.key || "(no key)"}`
+    : "(no fingertip)";
+  $result.textContent = [
+    `ok: ${payload.ok}`,
+    `pressed key: ${payload.pressed_key}`,
+    `finger: ${text}`,
+    `frame delta: ${fmt(payload.frame_delta_ms)} ms`,
+    `analysis: ${fmt(payload.latency && payload.latency.analysis_ms)} ms`,
+    `error: ${payload.error || "-"}`,
+  ].join("\n");
+  draw();
+});
+
+function setSocket(text, klass) {
+  $socket.textContent = text;
+  $socket.className = klass;
+}
+
+async function startCamera() {
+  const stream = await navigator.mediaDevices.getUserMedia({
+    video: { width: { ideal: 1280 }, height: { ideal: 720 } },
+    audio: false,
+  });
+  video.srcObject = stream;
+  await new Promise(resolve => video.onloadedmetadata = resolve);
+  sizeCanvas();
+  requestAnimationFrame(drawLoop);
+  setInterval(sendFrame, 66);
+}
+
+function sizeCanvas() {
+  overlay.width = video.videoWidth || 1280;
+  overlay.height = video.videoHeight || 720;
+  overlay.style.width = video.clientWidth + "px";
+  overlay.style.height = video.clientHeight + "px";
+}
+window.addEventListener("resize", sizeCanvas);
+
+function captureFrame() {
+  const width = 800;
+  const height = Math.round(video.videoHeight / video.videoWidth * width);
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  canvas.getContext("2d").drawImage(video, 0, 0, width, height);
+  return {
+    image: canvas.toDataURL("image/jpeg", 0.64),
+    browser_perf_ms: performance.now(),
+  };
+}
+
+function sendFrame() {
+  if (sending || !socket.connected || video.videoWidth === 0) return;
+  sending = true;
+  socket.emit("frame", { token: TOKEN, ...captureFrame() }, (reply) => {
+    sending = false;
+    if (!reply || !reply.ok) return;
+    lastFrame = reply.frame;
+    $frames.textContent = reply.buffered_frames;
+    $fingers.textContent = (reply.frame.fingers || []).length;
+  });
+}
+
+window.addEventListener("keydown", (event) => {
+  if (!document.getElementById("browserKeys").checked) return;
+  if (event.repeat) return;
+  socket.emit("browser_key", {
+    token: TOKEN,
+    key: event.key,
+    code: event.code,
+    location: event.location,
+    browser_perf_ms: performance.now(),
+  });
+});
+
+document.getElementById("startGlobal").onclick = () => post("/api/keylogger/start", {});
+document.getElementById("stopGlobal").onclick = () => post("/api/keylogger/stop", {});
+document.getElementById("saveTiming").onclick = () => post("/api/timing", {
+  camera_receive_delay_ms: Number(document.getElementById("camDelay").value),
+  analysis_wait_ms: Number(document.getElementById("waitMs").value),
+});
+
+async function post(url, body) {
+  const reply = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Keylog-Token": TOKEN,
+    },
+    body: JSON.stringify({ token: TOKEN, ...body }),
+  });
+  const payload = await reply.json();
+  $result.textContent = JSON.stringify(payload, null, 2);
+}
+
+function drawLoop() {
+  draw();
+  requestAnimationFrame(drawLoop);
+}
+
+function draw() {
+  ctx.clearRect(0, 0, overlay.width, overlay.height);
+  if (lastPress && lastPress.keyboard && lastPress.keyboard.keys) {
+    drawKeys(lastPress.keyboard.keys);
+  }
+  if (lastFrame && lastFrame.fingers) {
+    drawFingers(lastFrame.fingers, "rgba(255,209,102,0.95)");
+  }
+  if (lastPress && lastPress.pressed_finger) {
+    drawFingers([lastPress.pressed_finger], "rgba(79,255,154,1)");
+  }
+}
+
+function scalePoint(x, y, sourceSize) {
+  const sx = overlay.width / sourceSize[0];
+  const sy = overlay.height / sourceSize[1];
+  return [x * sx, y * sy];
+}
+
+function drawKeys(keys) {
+  const size = lastPress.keyboard.size || [overlay.width, overlay.height];
+  ctx.lineWidth = 1.5;
+  ctx.strokeStyle = "rgba(82, 185, 255, 0.85)";
+  ctx.fillStyle = "rgba(225, 240, 255, 0.85)";
+  ctx.font = "11px Arial";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  for (const [name, poly] of Object.entries(keys)) {
+    ctx.beginPath();
+    const p0 = scalePoint(poly[0][0], poly[0][1], size);
+    ctx.moveTo(p0[0], p0[1]);
+    for (let i = 1; i < poly.length; i++) {
+      const p = scalePoint(poly[i][0], poly[i][1], size);
+      ctx.lineTo(p[0], p[1]);
+    }
+    ctx.closePath();
+    ctx.stroke();
+    const cx = poly.reduce((sum, p) => sum + p[0], 0) / poly.length;
+    const cy = poly.reduce((sum, p) => sum + p[1], 0) / poly.length;
+    const c = scalePoint(cx, cy, size);
+    ctx.fillText(name, c[0], c[1]);
+  }
+}
+
+function drawFingers(fingers, color) {
+  const sourceSize = lastFrame ? lastFrame.size : [overlay.width, overlay.height];
+  ctx.fillStyle = color;
+  ctx.strokeStyle = "#111318";
+  ctx.lineWidth = 2;
+  ctx.font = "12px Arial";
+  for (const finger of fingers) {
+    const p = scalePoint(finger.x, finger.y, sourceSize);
+    ctx.beginPath();
+    ctx.arc(p[0], p[1], 7, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillText(`${finger.hand} ${finger.finger}`, p[0] + 9, p[1] - 8);
+  }
+}
+
+function fmt(value) {
+  return Number.isFinite(value) ? value.toFixed(1) : "-";
+}
+
+startCamera().catch((err) => {
+  $result.textContent = "camera error: " + err.message;
+});
+</script>
+</body>
+</html>

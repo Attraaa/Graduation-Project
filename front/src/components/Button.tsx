@@ -22,7 +22,7 @@ const Button = ({ children, variant = 'primary', fullWidth = false, className = 
       variantClass = 'btn-warning';
       break;
     case 'outline':
-      variantClass = 'bg-white text-gray-400 border-gray-200 hover:bg-gray-50';
+      variantClass = 'border-b-2 bg-white text-gray-700 border-gray-200 hover:bg-gray-50 hover:border-gray-300';
       break;
   }
 

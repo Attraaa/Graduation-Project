@@ -1,0 +1,8 @@
+# Local generated reports and capture output
+/reports/
+.DS_Store
+
+# One-off local helper scripts for report/screenshot generation
+/scripts/capture-moti-screenshots.mjs
+/scripts/create-moti-flow-svg.mjs
+/scripts/create_moti_report.py

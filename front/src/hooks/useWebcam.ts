@@ -8,9 +8,27 @@ export const useWebcam = () => {
   const startWebcam = useCallback(async () => {
     try {
       setWebcamError(null);
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: { ideal: 640 }, height: { ideal: 480 } }
-      });
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            width: { exact: 1280 },
+            height: { exact: 720 },
+            aspectRatio: { exact: 16 / 9 },
+          }
+        });
+      } catch (err: any) {
+        if (err?.name !== 'OverconstrainedError') {
+          throw err;
+        }
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+            aspectRatio: { ideal: 16 / 9 },
+          }
+        });
+      }
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;

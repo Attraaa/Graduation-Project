@@ -2,7 +2,7 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   BarChart, Bar
 } from 'recharts';
-import { ShieldCheck, TrendingUp, AlertTriangle } from 'lucide-react';
+import { ShieldCheck, TrendingUp, AlertTriangle, Sparkles } from 'lucide-react';
 
 const mockData = [
   { time: '09:00', score: 95 },
@@ -102,16 +102,17 @@ const Statistics = () => {
       </div>
 
       {/* AI Feedback */}
-      <div className="card-duo bg-[#58cc02] border-[#46a302] text-white">
-        <h3 className="text-xl font-black mb-2 flex items-center">
-          💡 AI 맞춤형 피드백 및 의학 정보
+      <div className="card-duo border-green-200 bg-white">
+        <h3 className="mb-2 flex items-center text-xl font-black text-gray-700">
+          <Sparkles className="mr-2 text-[#26c281]" />
+          AI 맞춤형 피드백 및 의학 정보
         </h3>
-        <p className="font-bold mb-4 opacity-90">
+        <p className="mb-4 font-bold leading-7 text-gray-600">
           누적된 자세 데이터를 분석한 결과, 오후 시간대에 목 각도가 평균 15도 이상 앞으로 쏠리는 현상이 관찰되었습니다. 이는 전형적인 거북목 증후군의 전조 증상입니다.
         </p>
-        <div className="bg-white/20 rounded-2xl p-4">
-          <h4 className="font-black mb-2">오늘의 추천 스트레칭</h4>
-          <ul className="list-disc list-inside font-bold opacity-90 space-y-1">
+        <div className="rounded-2xl border-2 border-green-100 bg-green-50 p-4">
+          <h4 className="mb-2 font-black text-gray-700">오늘의 추천 스트레칭</h4>
+          <ul className="list-disc list-inside space-y-1 font-bold leading-7 text-gray-600">
             <li>턱 당기기(Chin Tuck) 스트레칭: 10초 유지 x 5회 반복</li>
             <li>양팔을 뒤로 깍지 끼고 가슴 펴기: 15초 유지</li>
             <li>모니터 상단을 눈높이에 맞추어 시선이 15도 아래를 향하도록 작업 환경 개선 권장</li>
