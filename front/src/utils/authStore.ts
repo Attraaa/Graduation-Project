@@ -73,10 +73,20 @@ export const loginUser = (id: string, password: string) => {
 
 export const logoutUser = () => {
   localStorage.removeItem(CURRENT_USER_KEY);
+  localStorage.removeItem('postureAI.currentUser');
   localStorage.removeItem('isLoggedIn');
+  localStorage.removeItem('moti.token');
 };
 
-export const getCurrentUser = () => {
+export const getCurrentUser = (): { id: string; nickname: string; password?: string } | null => {
+  const stored = localStorage.getItem('postureAI.currentUser');
+  if (stored) {
+    try {
+      return JSON.parse(stored) as { id: string; nickname: string };
+    } catch {
+      // fall through to legacy lookup
+    }
+  }
   const currentId = localStorage.getItem(CURRENT_USER_KEY);
   return currentId ? findUserById(currentId) : null;
 };
@@ -84,8 +94,15 @@ export const getCurrentUser = () => {
 export const updateCurrentUser = (nickname: string, currentPassword: string) => {
   const current = getCurrentUser();
   if (!current) return { ok: false, message: '로그인이 필요합니다.' };
-  if (current.password !== currentPassword) return { ok: false, message: '비밀번호 인증에 실패했습니다.' };
 
+  const stored = localStorage.getItem('postureAI.currentUser');
+  if (stored) {
+    const parsed = JSON.parse(stored) as { id: string; nickname: string };
+    localStorage.setItem('postureAI.currentUser', JSON.stringify({ ...parsed, nickname: nickname.trim() }));
+    return { ok: true, message: '계정 정보가 변경되었습니다.' };
+  }
+
+  if (current.password !== currentPassword) return { ok: false, message: '비밀번호 인증에 실패했습니다.' };
   const users = readUsers().map((user) =>
     user.id === current.id ? { ...user, nickname: nickname.trim() } : user,
   );

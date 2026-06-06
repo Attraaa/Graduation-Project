@@ -8,8 +8,8 @@ import { useDialog } from '../components/AppDialog';
 const Login = () => {
   const navigate = useNavigate();
   const { notify } = useDialog();
-  const [userId, setUserId] = useState('admin');
-  const [password, setPassword] = useState('admin');
+  const [userId, setUserId] = useState('');
+  const [password, setPassword] = useState('');
 
   const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -20,7 +20,7 @@ const Login = () => {
       );
       setToken(data.token);
       localStorage.setItem('isLoggedIn', 'true');
-      localStorage.setItem('postureAI.currentUserId', data.user.username);
+      localStorage.setItem('postureAI.currentUser', JSON.stringify({ id: data.user.username, nickname: data.user.nickname }));
       navigate('/dashboard');
     } catch (err) {
       void notify({ title: '로그인 실패', message: (err as Error).message, tone: 'warning' });
