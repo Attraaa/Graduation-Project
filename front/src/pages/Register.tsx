@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import Button from '../components/Button';
 import { UserPlus } from 'lucide-react';
-import { isDuplicateId, registerUser } from '../utils/authStore';
+import { api } from '../utils/api';
 import { useDialog } from '../components/AppDialog';
 
 const Register = () => {
@@ -21,12 +21,13 @@ const Register = () => {
     setFormData(next);
 
     if (e.target.name === 'userId') {
-      if (!e.target.value.trim()) {
+      const val = e.target.value.trim();
+      if (!val) {
         setIdMessage('');
-      } else if (isDuplicateId(e.target.value)) {
-        setIdMessage('이미 사용 중인 아이디입니다.');
       } else {
-        setIdMessage('사용 가능한 아이디입니다.');
+        api.get<{ exists: boolean }>(`/api/auth/check/${val}`, false)
+          .then(({ exists }) => setIdMessage(exists ? '이미 사용 중인 아이디입니다.' : '사용 가능한 아이디입니다.'))
+          .catch(() => setIdMessage(''));
       }
     }
   };
@@ -37,22 +38,20 @@ const Register = () => {
       void notify({ title: '입력 확인', message: '닉네임, 아이디, 비밀번호, 비밀번호 확인을 모두 입력해 주세요.', tone: 'warning' });
       return;
     }
-    if (isDuplicateId(formData.userId)) {
-      void notify({ title: '아이디 중복', message: '이미 사용 중인 아이디입니다. 다시 작성해 주세요.', tone: 'warning' });
-      return;
-    }
-    if(formData.password !== formData.confirmPassword) {
+    if (formData.password !== formData.confirmPassword) {
       void notify({ title: '비밀번호 확인', message: '비밀번호가 일치하지 않습니다.', tone: 'warning' });
       return;
     }
-    const result = registerUser({
-      id: formData.userId,
-      nickname: formData.nickname,
-      password: formData.password,
-    });
-    await notify({ title: result.ok ? '가입 완료' : '가입 실패', message: result.message, tone: result.ok ? 'success' : 'warning' });
-    if (result.ok) {
+    try {
+      await api.post('/api/auth/register', {
+        username: formData.userId,
+        nickname: formData.nickname,
+        password: formData.password,
+      });
+      await notify({ title: '가입 완료', message: '회원가입이 완료되었습니다. 로그인해 주세요.', tone: 'success' });
       navigate('/login');
+    } catch (err) {
+      void notify({ title: '가입 실패', message: (err as Error).message, tone: 'warning' });
     }
   };
 

@@ -1,0 +1,20 @@
+sequenceDiagram
+    actor User
+    participant Front as Frontend (React)
+    participant Server as Backend (Express)
+    participant DB as MySQL
+
+    User->>Front: 아이디 입력
+    Front->>Server: GET /api/auth/check/:username
+    Server->>DB: 중복 확인
+    DB-->>Server: exists: true/false
+    Server-->>Front: 중복 여부 반환
+    Front-->>User: 사용 가능 / 불가 표시
+
+    User->>Front: 회원가입 제출
+    Front->>Server: POST /api/auth/register
+    Server->>Server: bcrypt 비밀번호 해싱
+    Server->>DB: INSERT INTO users
+    DB-->>Server: 성공
+    Server-->>Front: 가입 완료
+    Front-->>User: 로그인 페이지 이동

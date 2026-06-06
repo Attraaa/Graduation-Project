@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import Button from '../components/Button';
-import { loginUser } from '../utils/authStore';
+import { api, setToken } from '../utils/api';
 import motiIconUrl from '../assets/moti-icon.svg';
 import { useDialog } from '../components/AppDialog';
 
@@ -11,14 +11,20 @@ const Login = () => {
   const [userId, setUserId] = useState('admin');
   const [password, setPassword] = useState('admin');
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const result = loginUser(userId, password);
-    if (!result.ok) {
-      void notify({ title: '로그인 실패', message: result.message, tone: 'warning' });
-      return;
+    try {
+      const data = await api.post<{ token: string; user: { id: number; username: string; nickname: string } }>(
+        '/api/auth/login',
+        { username: userId, password },
+      );
+      setToken(data.token);
+      localStorage.setItem('isLoggedIn', 'true');
+      localStorage.setItem('postureAI.currentUserId', data.user.username);
+      navigate('/dashboard');
+    } catch (err) {
+      void notify({ title: '로그인 실패', message: (err as Error).message, tone: 'warning' });
     }
-    navigate('/dashboard');
   };
 
   return (
@@ -60,6 +66,12 @@ const Login = () => {
             <Link to="/find-password" className="hover:text-[#1cb0f6] transition">비밀번호 찾기</Link>
           </div>
 
+          {/* 로그인 api 연동해야함 */}
+          <Link to="/login" className="block">
+            <Button type="button" variant="outline" fullWidth>
+              로그인
+            </Button>
+          </Link>
           <div className="space-y-3 pt-4">
             <Button type="submit" variant="primary" fullWidth>
               시작하기

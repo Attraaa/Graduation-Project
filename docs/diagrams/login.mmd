@@ -1,0 +1,14 @@
+sequenceDiagram
+    actor User
+    participant Front as Frontend (React)
+    participant Server as Backend (Express)
+    participant DB as MySQL
+
+    User->>Front: 아이디 / 비밀번호 입력
+    Front->>Server: POST /api/auth/login
+    Server->>DB: SELECT users WHERE username = ?
+    DB-->>Server: 사용자 정보 반환
+    Server->>Server: bcrypt 비밀번호 검증
+    Server-->>Front: JWT 토큰 발급
+    Front->>Front: localStorage에 토큰 저장
+    Front-->>User: 대시보드 이동

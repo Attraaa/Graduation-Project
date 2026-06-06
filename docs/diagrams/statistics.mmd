@@ -1,0 +1,18 @@
+sequenceDiagram
+    actor User
+    participant Front as Frontend (React)
+    participant Server as Backend (Express)
+    participant DB as MySQL
+
+    User->>Front: 통계 페이지 진입
+    Front->>Server: GET /api/statistics/today (JWT 포함)
+    Server->>Server: JWT 검증
+    Server->>DB: SELECT daily_statistics WHERE user_id = ?
+    DB-->>Server: 오늘 통계
+    Server-->>Front: 평균점수 / 세션수 / 모니터링 시간
+
+    Front->>Server: GET /api/statistics/trend?date=오늘
+    Server->>DB: SELECT posture_logs GROUP BY 시간대
+    DB-->>Server: 시간대별 점수
+    Server-->>Front: 꺾은선 그래프 데이터
+    Front-->>User: 통계 차트 렌더링

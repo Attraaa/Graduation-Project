@@ -1,0 +1,27 @@
+sequenceDiagram
+    actor User
+    participant Front as Frontend (React)
+    participant AI as MediaPipe (AI)
+    participant Server as Backend (Express)
+    participant DB as MySQL
+
+    User->>Front: 세션 시작
+    Front->>Server: POST /api/sessions { mode }
+    Server->>DB: INSERT INTO sessions
+    DB-->>Server: session_id 반환
+    Server-->>Front: session_id
+
+    loop 실시간 자세 분석
+        Front->>AI: 웹캠 프레임 전달
+        AI-->>Front: 자세 점수 / 상태 반환
+        Front->>Server: POST /api/sessions/:id/logs
+        Server->>DB: INSERT INTO posture_logs
+    end
+
+    User->>Front: 세션 종료
+    Front->>Server: PATCH /api/sessions/:id/end { score, alertCount }
+    Server->>DB: UPDATE sessions SET ended_at
+    Server->>DB: UPSERT daily_statistics
+    DB-->>Server: 완료
+    Server-->>Front: 세션 종료 완료
+    Front-->>User: 결과 화면 표시
