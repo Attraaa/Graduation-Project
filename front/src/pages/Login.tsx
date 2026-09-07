@@ -3,7 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import Button from '../components/Button';
 import { loginUser } from '../utils/authStore';
 import motiIconUrl from '../assets/moti-icon.svg';
-import { useDialog } from '../components/AppDialog';
+import { useDialog } from '../components/dialog/useDialog';
 
 const Login = () => {
   const navigate = useNavigate();

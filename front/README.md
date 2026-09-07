@@ -1,73 +1,15 @@
-# React + TypeScript + Vite
+# Moti 프론트엔드와 Electron
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React 화면과 Electron 데스크톱 진입점이 있는 폴더입니다. 팀 공통 설치·실행은 [루트 README](../README.md)를 따릅니다.
 
-Currently, two official plugins are available:
+- [현재 구조와 기능별 코드 위치](../docs/architecture.md)
+- [의존성과 버전 관리](../docs/dependencies.md)
+- [설치·실행·검증 결과](../docs/development.md)
+- [캘리브레이션 계약](../docs/calibration.md)
+- [사용자 결정](../docs/product-decisions.md), [다음 작업](../docs/roadmap.md)
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+루트에서 `moti.cmd app`으로 개발 앱을 실행합니다. 이 폴더의 `npm run build`는 타입 검사와 UI/Electron 빌드, `npm run package`는 Windows 설치 파일 생성입니다. 단독 브라우저 확인은 `npm run dev:browser`입니다. npm을 직접 쓸 때도 루트의 프로젝트 전용 도구 환경을 적용합니다.
 
-## React Compiler
+상체 측정은 매번 안정된 기준 자세를 수집하고 기준 대비 화면상 변화·유효 관찰 시간을 표시합니다. 기존 난수 점수는 제거했고 새 점수 산식은 아직 없습니다. 로그인·통계·이력은 데모 상태이며 Express API와 Python 키보드 분석은 아직 연결되지 않았습니다.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
-
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
-
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+공통 화면 틀은 `src/components/layout`, 디자인 토큰은 `src/styles`, 순수 측정 로직은 `src/features/posture`에서 시작합니다. MediaPipe 생성 자원은 직접 편집하지 않습니다. `database_schema.sql`은 현재 서버 쿼리와 다른 과거 자료입니다.

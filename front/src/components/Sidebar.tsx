@@ -2,7 +2,7 @@ import type React from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Home, BarChart2, Settings, LogOut, CalendarDays } from 'lucide-react';
 import { logoutUser } from '../utils/authStore';
-import { useDialog } from './AppDialog';
+import { useDialog } from './dialog/useDialog';
 
 const Sidebar = () => {
   const location = useLocation();
@@ -31,10 +31,10 @@ const Sidebar = () => {
   };
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-50 flex items-center justify-around border-t-2 border-gray-200 bg-white px-4 py-3 md:relative md:w-64 md:flex-col md:justify-start md:border-r-2 md:border-t-0 md:px-4 md:py-8">
+    <div className="fixed bottom-0 left-0 right-0 z-50 flex items-center justify-around border-t-2 border-border bg-surface px-4 py-3 md:relative md:w-64 md:flex-col md:justify-start md:border-r-2 md:border-t-0 md:px-4 md:py-8">
       {/* Logo Area (Hidden on mobile) */}
       <div className="mb-10 hidden w-full px-4 md:block">
-        <h1 className="text-3xl font-black text-[#26c281] tracking-tight">Moti</h1>
+        <h1 className="text-3xl font-black text-brand tracking-tight">Moti</h1>
       </div>
 
       {/* Nav Items */}
@@ -47,8 +47,8 @@ const Sidebar = () => {
               to={item.path}
               className={`flex items-center rounded-2xl px-4 py-3 font-bold transition-colors ${
                 isActive
-                  ? 'bg-blue-50 text-[#1cb0f6] border-2 border-blue-200'
-                  : 'text-gray-500 hover:bg-gray-100'
+                  ? 'bg-blue-50 text-secondary border-2 border-blue-200'
+                  : 'text-muted hover:bg-gray-100'
               }`}
             >
               <div className="flex items-center justify-center md:mr-4">{item.icon}</div>

@@ -1,23 +1,23 @@
 import express from 'express';
 import cors from 'cors';
-import authRouter      from './routes/auth.js';
-import sessionsRouter  from './routes/sessions.js';
-import statisticsRouter from './routes/statistics.js';
+import type { Pool } from 'mysql2/promise';
+import type { ServerConfig } from './config.js';
+import { createAuth } from './auth.js';
+import { handleError } from './http.js';
+import { createAuthRouter } from './routes/auth.js';
+import { createSessionsRouter } from './routes/sessions.js';
+import { createStatisticsRouter } from './routes/statistics.js';
 
-const app = express();
-
-app.use(cors({ origin: '*' }));
-app.use(express.json());
-
-app.use('/api/auth',       authRouter);
-app.use('/api/sessions',   sessionsRouter);
-app.use('/api/statistics', statisticsRouter);
-
-app.get('/health', (_req, res) => res.json({ status: 'ok' }));
-
-app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  console.error(err);
-  res.status(500).json({ message: '서버 오류가 발생했습니다.' });
-});
-
-export default app;
+export function createApp(config: ServerConfig, pool: Pool) {
+  const app = express();
+  const auth = createAuth(config.jwt);
+  app.use(cors({ origin: '*' }));
+  app.use(express.json());
+  app.use('/api/auth', createAuthRouter(pool, auth));
+  app.use('/api/sessions', createSessionsRouter(pool, auth));
+  app.use('/api/statistics', createStatisticsRouter(pool, auth));
+  // Liveness only: this intentionally does not imply that a DB has been provisioned.
+  app.get('/health', (_req, res) => res.json({ status: 'ok' }));
+  app.use(handleError);
+  return app;
+}

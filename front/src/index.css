@@ -1,20 +1,5 @@
 @import "tailwindcss";
-
-@theme {
-  --color-primary: #58cc02;
-  --color-primary-hover: #46a302;
-  --color-primary-border: #46a302;
-  --color-secondary: #1cb0f6;
-  --color-secondary-border: #1899d6;
-  --color-danger: #ff4b4b;
-  --color-danger-border: #ea2b2b;
-  --color-warning: #ffc800;
-  --color-warning-border: #c69b00;
-  --color-surface: #ffffff;
-  --color-background: #f7f7f7;
-  --color-text: #3c3c3c;
-  --color-text-light: #777777;
-}
+@import "./styles/tokens.css";
 
 @utility font-duo {
   font-family: 'Nunito', 'Inter', system-ui, sans-serif;
@@ -54,42 +39,39 @@ body {
 
 /* Card style */
 .card-duo {
-  @apply bg-surface rounded-3xl border-2 border-gray-200 p-6;
+  @apply bg-surface rounded-3xl border-2 border-border p-6;
 }
 
-.dark-theme body {
-  background-color: #111827;
-  color: #e5e7eb;
-}
-
+/* Compatibility for pages still using literal Tailwind colors. Migrate these
+   selectors alongside each page, after it adopts the shared tokens. */
 .dark-theme main,
 .dark-theme .bg-\[\#f7f7f7\] {
-  background-color: #111827;
+  background-color: var(--color-background);
 }
 
 .dark-theme .card-duo,
 .dark-theme .bg-white {
-  background-color: #1f2937;
-  border-color: #374151;
+  background-color: var(--color-surface);
+  border-color: var(--color-border);
 }
 
 .dark-theme .bg-gray-50 {
-  background-color: #111827;
+  background-color: var(--color-surface-muted);
 }
 
 .dark-theme .text-gray-700 {
-  color: #f3f4f6;
+  color: var(--color-heading);
 }
 
 .dark-theme .text-gray-600,
 .dark-theme .text-gray-500,
 .dark-theme .text-gray-400 {
-  color: #9ca3af;
+  color: var(--color-muted);
 }
 
 .dark-theme input,
 .dark-theme select {
-  background-color: #111827;
-  border-color: #374151;
-  color: #f3f4f6;
+  background-color: var(--color-surface-muted);
+  border-color: var(--color-border);
+  color: var(--color-heading);
 }

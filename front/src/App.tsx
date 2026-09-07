@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import { useEffect } from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Login from './pages/Login';
 import Register from './pages/Register';
@@ -7,23 +7,10 @@ import FindPassword from './pages/FindPassword';
 import Dashboard from './pages/Dashboard';
 import Statistics from './pages/Statistics';
 import Settings from './pages/Settings';
-import Sidebar from './components/Sidebar';
+import AppLayout from './components/layout/AppLayout';
 import LearningSession from './pages/LearningSession';
 import LearningHistory from './pages/LearningHistory';
 import { DialogProvider } from './components/AppDialog';
-
-function AppLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="flex h-screen w-screen bg-[#f7f7f7]">
-      <Sidebar />
-      <main className="flex-1 overflow-y-auto p-8 pb-24 md:pb-8">
-        <div className="mx-auto max-w-4xl h-full">
-          {children}
-        </div>
-      </main>
-    </div>
-  );
-}
 
 function App() {
   useEffect(() => {
@@ -40,46 +27,13 @@ function App() {
           <Route path="/register" element={<Register />} />
           <Route path="/find-id" element={<FindId />} />
           <Route path="/find-password" element={<FindPassword />} />
-          <Route
-            path="/dashboard"
-            element={
-              <AppLayout>
-                <Dashboard />
-              </AppLayout>
-            }
-          />
-          <Route
-            path="/learn/:modeId"
-            element={
-              <AppLayout>
-                <LearningSession />
-              </AppLayout>
-            }
-          />
-          <Route
-            path="/statistics"
-            element={
-              <AppLayout>
-                <Statistics />
-              </AppLayout>
-            }
-          />
-          <Route
-            path="/history"
-            element={
-              <AppLayout>
-                <LearningHistory />
-              </AppLayout>
-            }
-          />
-          <Route
-            path="/settings"
-            element={
-              <AppLayout>
-                <Settings />
-              </AppLayout>
-            }
-          />
+          <Route element={<AppLayout />}>
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/learn/:modeId" element={<LearningSession />} />
+            <Route path="/statistics" element={<Statistics />} />
+            <Route path="/history" element={<LearningHistory />} />
+            <Route path="/settings" element={<Settings />} />
+          </Route>
         </Routes>
       </HashRouter>
     </DialogProvider>

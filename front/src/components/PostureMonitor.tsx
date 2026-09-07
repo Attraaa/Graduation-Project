@@ -1,200 +1,188 @@
-import { useEffect, useState, useRef } from 'react';
-import { AlertCircle } from 'lucide-react';
+import { useCallback, useEffect, useRef } from 'react';
+import { AlertCircle, CameraOff } from 'lucide-react';
 import { useWebcam } from '../hooks/useWebcam';
 import { useMediaPipe } from '../hooks/useMediaPipe';
-import { calculateNeckAngle } from '../utils/postureCalculator';
+import { advanceCalibration, createCalibration, extractFrontalMeasurement } from '../features/posture/calibration';
+import type { CalibrationReason, FrontalMetrics } from '../features/posture/calibration';
 
-interface PostureMonitorProps {
-  mode: string;
-  isRunning?: boolean;
+export interface MonitorSnapshot {
+  phase: 'loading' | 'calibrating' | 'observing' | 'unavailable' | 'error';
+  progress: number;
+  reason: CalibrationReason | null;
+  observedSeconds: number;
+  delta: FrontalMetrics | null;
 }
 
-const PostureMonitor = ({ mode, isRunning = true }: PostureMonitorProps) => {
-  const [postureStatus, setPostureStatus] = useState<'GOOD' | 'WARNING'>('GOOD');
-  
-  const statsRef = useRef({ totalFrames: 0, badFrames: 0, lastUpdateTime: 0 });
+interface PostureMonitorProps {
+  isRunning: boolean;
+  deviceId: string;
+  onUpdate: (snapshot: MonitorSnapshot) => void;
+}
+
+const PostureMonitor = ({ isRunning, deviceId, onUpdate }: PostureMonitorProps) => {
+  const latest = useRef<MonitorSnapshot>({ phase: 'loading', progress: 0, reason: null, observedSeconds: 0, delta: null });
+  const publish = useCallback((snapshot: MonitorSnapshot) => {
+    latest.current = snapshot;
+    onUpdate(snapshot);
+  }, [onUpdate]);
   const { videoRef, startWebcam, stopWebcam, webcamError } = useWebcam();
   const { canvasRef, initMediaPipe, startProcessing, stopProcessing, aiError, isLoaded } = useMediaPipe();
 
   useEffect(() => {
+    if (!isRunning) return;
+    const abort = new AbortController();
+    let calibration = createCalibration();
+    let lastUiAt = -Infinity;
+    let lastValidAt: number | null = null;
+    let observedSeconds = 0;
+    let removeTrackListener = () => {};
+    let watchdog: ReturnType<typeof setInterval> | undefined;
+    let lastFrameAt: number | null = null;
     const setup = async () => {
-      // 1. 카메라 시작
-      const stream = await startWebcam();
-      if (!stream) return;
-      if (!isRunning) return;
-
-      // 2. MediaPipe 초기화 및 뼈대 그리기 로직 설정
-      const pose = await initMediaPipe((results: any) => {
-        if (!canvasRef.current) return;
-        const canvasCtx = canvasRef.current.getContext('2d');
-        if (!canvasCtx) return;
-
-        const POSE_CONNECTIONS = (window as any).POSE_CONNECTIONS;
-        const drawConnectors = (window as any).drawConnectors;
-        const drawLandmarks = (window as any).drawLandmarks;
-
-        if (videoRef.current && canvasRef.current.width !== videoRef.current.videoWidth) {
-          canvasRef.current.width = videoRef.current.videoWidth;
-          canvasRef.current.height = videoRef.current.videoHeight;
+      const stream = await startWebcam(deviceId || undefined);
+      if (abort.signal.aborted) return;
+      if (!stream) {
+        publish({ phase: 'error', progress: 0, reason: null, observedSeconds: 0, delta: null });
+        return;
+      }
+      const track = stream.getVideoTracks()[0];
+      const ended = () => {
+        if (abort.signal.aborted) return;
+        publish({ ...latest.current, phase: 'error', reason: 'interrupted', delta: null });
+        stopWebcam();
+        void stopProcessing();
+      };
+      track.addEventListener('ended', ended);
+      removeTrackListener = () => track.removeEventListener('ended', ended);
+      const pose = await initMediaPipe((results, capturedAtMs) => {
+        const video = videoRef.current;
+        const canvas = canvasRef.current;
+        if (abort.signal.aborted || !video || !canvas) return;
+        lastFrameAt = performance.now();
+        if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
         }
-
-        canvasCtx.save();
-        canvasCtx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-        
-        if (results.poseLandmarks) {
-          // 상태에 따라 선 색상 변경 (정상: 초록, 경고: 빨강)
-          const isBadNow = statsRef.current.totalFrames > 0 && 
-                          ((statsRef.current.badFrames / statsRef.current.totalFrames) > 0.5 || postureStatus === 'WARNING');
-          
-          const lineColor = isBadNow ? '#FF0000' : '#00FF00';
-
-          // [사용자 요청] 불필요한 얼굴 쪽 미디어파이프(안면 그물망) 제거하고 필요한 뼈대만 직접 그리기
-          const drawLine = (p1: any, p2: any) => {
-            if (p1 && p2 && p1.visibility > 0.5 && p2.visibility > 0.5) {
-              canvasCtx.beginPath();
-              canvasCtx.moveTo(p1.x * canvasRef.current!.width, p1.y * canvasRef.current!.height);
-              canvasCtx.lineTo(p2.x * canvasRef.current!.width, p2.y * canvasRef.current!.height);
-              canvasCtx.strokeStyle = lineColor;
-              canvasCtx.lineWidth = 4;
-              canvasCtx.stroke();
-            }
-          };
-
-          const drawPoint = (p: any) => {
-            if (p && p.visibility > 0.5) {
-              canvasCtx.beginPath();
-              canvasCtx.arc(p.x * canvasRef.current!.width, p.y * canvasRef.current!.height, 5, 0, 2 * Math.PI);
-              canvasCtx.fillStyle = '#FFFFFF';
-              canvasCtx.fill();
-            }
-          };
-
+        const context = canvas.getContext('2d');
+        if (context) {
+          context.clearRect(0, 0, canvas.width, canvas.height);
+          context.strokeStyle = '#38bdf8';
+          context.fillStyle = '#ffffff';
+          context.lineWidth = 3;
           const landmarks = results.poseLandmarks;
-          
-          // 거북목 모드일 때 그릴 뼈대 (귀, 어깨)
-          if (mode === 'turtle' || mode === 'shoulder') {
-            // 어깨선 (좌측 11번, 우측 12번)
-            drawLine(landmarks[11], landmarks[12]);
-            // 귀와 어깨 연결선 (목뼈 대용) (좌측 귀 7번, 우측 귀 8번)
-            drawLine(landmarks[11], landmarks[7]);
-            drawLine(landmarks[12], landmarks[8]);
-            
-            // 점 찍기
-            drawPoint(landmarks[11]); drawPoint(landmarks[12]);
-            drawPoint(landmarks[7]); drawPoint(landmarks[8]);
-          } else {
-            // 기본 뼈대 (기존 라이브러리 사용)
-            if (drawConnectors && drawLandmarks) {
-               drawConnectors(canvasCtx, landmarks, POSE_CONNECTIONS, {color: lineColor, lineWidth: 4});
-               drawLandmarks(canvasCtx, landmarks, {color: '#FFFFFF', lineWidth: 2});
-            }
+          for (const [from, to] of [[11, 12], [11, 7], [12, 8]]) {
+            const a = landmarks?.[from];
+            const b = landmarks?.[to];
+            if (!a || !b || (a.visibility ?? 0) < 0.7 || (b.visibility ?? 0) < 0.7) continue;
+            context.beginPath();
+            context.moveTo(a.x * canvas.width, a.y * canvas.height);
+            context.lineTo(b.x * canvas.width, b.y * canvas.height);
+            context.stroke();
           }
-          
-          if (mode === 'turtle') {
-            const leftEar = results.poseLandmarks[7];
-            const leftShoulder = results.poseLandmarks[11];
-            const rightEar = results.poseLandmarks[8];
-            const rightShoulder = results.poseLandmarks[12];
-
-            if (leftEar && leftShoulder && rightEar && rightShoulder) {
-              // 양쪽의 각도 평균을 구함
-              const leftAngle = calculateNeckAngle(leftEar, leftShoulder);
-              const rightAngle = calculateNeckAngle(rightEar, rightShoulder);
-              
-              // 화면 정면보다는 측면으로 살짝 돌렸을 때 가장 정확합니다.
-              // 값이 가시성을 가질 때만 평균 계산
-              let avgAngle = 0;
-              if (leftEar.visibility > 0.7 && rightEar.visibility > 0.7) {
-                avgAngle = (leftAngle + rightAngle) / 2;
-              } else if (leftEar.visibility > 0.7) {
-                avgAngle = leftAngle;
-              } else if (rightEar.visibility > 0.7) {
-                avgAngle = rightAngle;
-              }
-
-              // 임계값 (거북목 판별 기준 각도)
-              const isTurtleNeck = avgAngle > 15; // 각도 기준을 약간 타이트하게(민감하게) 조정
-
-              statsRef.current.totalFrames += 1;
-              if (isTurtleNeck) {
-                statsRef.current.badFrames += 1;
-              }
-
-              // 0.5초마다 UI 상태 업데이트
-              const now = Date.now();
-              if (now - statsRef.current.lastUpdateTime > 500) {
-                statsRef.current.lastUpdateTime = now;
-                // 최근 0.5초 동안 불량 프레임이 절반 이상이면 경고
-                setPostureStatus(isTurtleNeck ? 'WARNING' : 'GOOD');
-                
-                // 프레임 카운트 초기화 (다음 0.5초 계산을 위해)
-                statsRef.current.totalFrames = 0;
-                statsRef.current.badFrames = 0;
-              }
-            }
+          for (const id of [0, 7, 8, 11, 12]) {
+            const point = landmarks?.[id];
+            if (!point || (point.visibility ?? 0) < 0.7) continue;
+            context.beginPath();
+            context.arc(point.x * canvas.width, point.y * canvas.height, 4, 0, Math.PI * 2);
+            context.fill();
           }
         }
-        canvasCtx.restore();
-      });
 
-      // 3. 비디오 준비 완료 시 프레임 처리 루프 시작
-      if (pose && videoRef.current) {
-        videoRef.current.onloadedmetadata = () => {
-          if (videoRef.current) {
-            videoRef.current.play().catch(e => console.error("Play error:", e));
-            startProcessing(videoRef.current);
-          }
+        const frame = {
+          landmarks: results.poseLandmarks, widthPx: video.videoWidth, heightPx: video.videoHeight,
+          sourceId: track.id, timestampMs: capturedAtMs,
         };
+        calibration = advanceCalibration(calibration, frame);
+        const current = extractFrontalMeasurement(frame);
+        let delta: FrontalMetrics | null = null;
+        if (calibration.reference && current.valid) {
+          // Only consecutive valid observations count; a missing camera image is not a break.
+          if (lastValidAt !== null && capturedAtMs - lastValidAt <= 500) {
+            observedSeconds += (capturedAtMs - lastValidAt) / 1000;
+          }
+          lastValidAt = capturedAtMs;
+          const baseline = calibration.reference.metrics;
+          delta = {
+            noseOffsetShoulderWidths: current.measurement.noseOffsetShoulderWidths - baseline.noseOffsetShoulderWidths,
+            noseHeightShoulderWidths: current.measurement.noseHeightShoulderWidths - baseline.noseHeightShoulderWidths,
+            shoulderHeightDifferenceShoulderWidths: current.measurement.shoulderHeightDifferenceShoulderWidths - baseline.shoulderHeightDifferenceShoulderWidths,
+          };
+        } else {
+          lastValidAt = null;
+        }
+        if (capturedAtMs - lastUiAt >= 200) {
+          lastUiAt = capturedAtMs;
+          publish({
+            phase: calibration.reference ? (current.valid ? 'observing' : 'unavailable') : 'calibrating',
+            progress: calibration.progress,
+            reason: current.valid ? calibration.reason : current.reason,
+            observedSeconds,
+            delta,
+          });
+        }
+      }, abort.signal);
+      if (abort.signal.aborted) return;
+      if (!pose) {
+        publish({ phase: 'error', progress: 0, reason: null, observedSeconds, delta: null });
+        stopWebcam();
+        return;
+      }
+      const video = videoRef.current;
+      if (video) {
+        await video.play();
+        if (!abort.signal.aborted) {
+          lastFrameAt = performance.now();
+          startProcessing(video);
+          watchdog = setInterval(() => {
+            if (!abort.signal.aborted && lastFrameAt !== null && performance.now() - lastFrameAt > 1500 && latest.current.phase !== 'error') {
+              lastValidAt = null;
+              publish({ ...latest.current, phase: 'unavailable', reason: 'interrupted', delta: null });
+            }
+          }, 500);
+        }
       }
     };
-
-    setup();
-
+    void setup().catch(() => {
+      if (!abort.signal.aborted) {
+        publish({ phase: 'error', progress: 0, reason: null, observedSeconds, delta: null });
+        stopWebcam();
+        void stopProcessing();
+      }
+    });
     return () => {
-      stopProcessing();
+      abort.abort();
+      clearInterval(watchdog);
+      removeTrackListener();
       stopWebcam();
+      void stopProcessing();
     };
-  }, [startWebcam, initMediaPipe, startProcessing, stopProcessing, stopWebcam, mode, isRunning]);
+  }, [isRunning, deviceId, publish, videoRef, canvasRef, startWebcam, stopWebcam, initMediaPipe, startProcessing, stopProcessing]);
 
-  const errorMsg = webcamError || aiError;
+  useEffect(() => {
+    if (isRunning && (aiError || webcamError)) {
+      publish({ ...latest.current, phase: 'error', delta: null });
+      stopWebcam();
+      void stopProcessing();
+    }
+  }, [isRunning, aiError, webcamError, publish, stopWebcam, stopProcessing]);
 
+  const error = webcamError || aiError;
   return (
-    <div className="flex h-full min-h-0 flex-col border-t-2 border-gray-100 bg-gray-50">
-      {errorMsg ? (
-        <div className="bg-red-50 border-2 border-red-200 p-4 m-4 rounded-2xl flex items-start">
-          <AlertCircle size={24} className="text-red-500 mr-3 mt-0.5" />
-          <div>
-            <h3 className="text-red-700 font-bold">카메라/AI 로딩 오류</h3>
-            <p className="text-red-600 text-sm mt-1">{errorMsg}</p>
-          </div>
+    <div className="relative min-h-[260px] flex-1 overflow-hidden rounded-2xl bg-slate-950">
+      <video ref={videoRef} autoPlay playsInline muted className="absolute inset-0 h-full w-full scale-x-[-1] object-contain" />
+      <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 h-full w-full scale-x-[-1] object-contain" />
+      {!isRunning && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center text-slate-300">
+          <CameraOff size={32} />
+          <p>시작하면 카메라를 켜고 기준 자세를 수집합니다.</p>
+          <p className="text-sm">측정을 중지하면 카메라도 꺼집니다.</p>
         </div>
-      ) : (
-        <>
-          <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-black">
-            <video 
-              ref={videoRef}
-              autoPlay 
-              playsInline 
-              muted 
-              className="absolute inset-0 h-full w-full object-cover transform scale-x-[-1]"
-            />
-            <canvas
-              ref={canvasRef}
-              className="absolute inset-0 h-full w-full object-cover pointer-events-none transform scale-x-[-1]"
-            />
-            {!isRunning && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/50 text-white font-bold z-10">
-                자세교정 시작 버튼을 누르면 AI 분석이 시작됩니다.
-              </div>
-            )}
-            {isRunning && !isLoaded && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/50 text-white font-bold z-10">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mb-2"></div>
-                AI 모델 로딩 중...
-              </div>
-            )}
-          </div>
-        </>
+      )}
+      {isRunning && !isLoaded && !error && <p className="absolute inset-x-0 bottom-5 text-center text-white">카메라와 분석 모델을 준비하고 있습니다.</p>}
+      {isRunning && error && (
+        <div role="alert" className="absolute inset-x-4 top-4 flex gap-3 rounded-xl bg-red-50 p-4 text-red-800">
+          <AlertCircle className="shrink-0" size={22} /><p>{error}</p>
+        </div>
       )}
     </div>
   );

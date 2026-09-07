@@ -13,8 +13,10 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 // │ │ └── main.js
 // │
 
-process.env.DIST = path.join(__dirname, '../dist')
-process.env.VITE_PUBLIC = app.isPackaged ? process.env.DIST : path.join(__dirname, '../public')
+const distDirectory = path.join(__dirname, '../dist')
+process.env.DIST = distDirectory
+const publicDirectory = app.isPackaged ? distDirectory : path.join(__dirname, '../public')
+process.env.VITE_PUBLIC = publicDirectory
 
 app.setName('Moti')
 
@@ -28,9 +30,9 @@ function createWindow() {
     transparent: true,
     frame: false,
     alwaysOnTop: true,
-    icon: path.join(process.env.VITE_PUBLIC, 'icon.png')
+    icon: path.join(publicDirectory, 'icon.png')
   })
-  splash.loadFile(path.join(process.env.VITE_PUBLIC, 'splash.html'))
+  splash.loadFile(path.join(publicDirectory, 'splash.html'))
 
   win = new BrowserWindow({
     width: 1100,
@@ -39,9 +41,9 @@ function createWindow() {
     minHeight: 600,
     autoHideMenuBar: true,
     show: false, // Don't show until ready
-    icon: path.join(process.env.VITE_PUBLIC, 'icon.png'),
+    icon: path.join(publicDirectory, 'icon.png'),
     webPreferences: {
-      preload: path.join(__dirname, 'preload.mjs'),
+      preload: path.join(__dirname, 'preload.cjs'),
     },
   })
 
@@ -65,7 +67,7 @@ function createWindow() {
     win.loadURL(process.env.VITE_DEV_SERVER_URL)
   } else {
     // win.loadFile('dist/index.html')
-    win.loadFile(path.join(process.env.DIST, 'index.html'))
+    win.loadFile(path.join(distDirectory, 'index.html'))
   }
 }
 

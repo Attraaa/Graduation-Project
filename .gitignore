@@ -2,6 +2,12 @@
 /reports/
 .DS_Store
 
+# Project-managed Windows runtimes and Python environments
+/.tools/
+**/.venv/
+**/__pycache__/
+*.py[cod]
+
 # One-off local helper scripts for report/screenshot generation
 /scripts/capture-moti-screenshots.mjs
 /scripts/create-moti-flow-svg.mjs

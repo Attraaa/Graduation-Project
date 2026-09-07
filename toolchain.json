@@ -1,0 +1,8 @@
+{
+  "node": "24.20.0",
+  "npm": "11.19.0",
+  "nodeWindowsX64Sha256": "6cac9ffbca8f6a47091e4b5c772e0606049c3871cb67d900c0cedde630e545ba",
+  "python": "3.12.14",
+  "uv": "0.12.10",
+  "uvWindowsX64Sha256": "f65744f94072152b1f86ba2aace4d01f1124d9a8ecb235805039e3718c36cac2"
+}

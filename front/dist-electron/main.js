@@ -1,56 +1,40 @@
-import { BrowserWindow, app } from "electron";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { BrowserWindow as e, app as t } from "electron";
+import n from "node:path";
+import { fileURLToPath as r } from "node:url";
 //#region electron/main.ts
-var __dirname = path.dirname(fileURLToPath(import.meta.url));
-process.env.DIST = path.join(__dirname, "../dist");
-process.env.VITE_PUBLIC = app.isPackaged ? process.env.DIST : path.join(__dirname, "../public");
-app.setName("Moti");
-var win;
-var splash;
-function createWindow() {
-	splash = new BrowserWindow({
+var i = n.dirname(r(import.meta.url)), a = n.join(i, "../dist");
+process.env.DIST = a;
+var o = t.isPackaged ? a : n.join(i, "../public");
+process.env.VITE_PUBLIC = o, t.setName("Moti");
+var s, c;
+function l() {
+	c = new e({
 		width: 350,
 		height: 400,
-		transparent: true,
-		frame: false,
-		alwaysOnTop: true,
-		icon: path.join(process.env.VITE_PUBLIC, "icon.png")
-	});
-	splash.loadFile(path.join(process.env.VITE_PUBLIC, "splash.html"));
-	win = new BrowserWindow({
+		transparent: !0,
+		frame: !1,
+		alwaysOnTop: !0,
+		icon: n.join(o, "icon.png")
+	}), c.loadFile(n.join(o, "splash.html")), s = new e({
 		width: 1100,
 		height: 800,
 		minWidth: 800,
 		minHeight: 600,
-		autoHideMenuBar: true,
-		show: false,
-		icon: path.join(process.env.VITE_PUBLIC, "icon.png"),
-		webPreferences: { preload: path.join(__dirname, "preload.mjs") }
-	});
-	win.webContents.on("did-finish-load", () => {
-		win?.webContents.send("main-process-message", (/* @__PURE__ */ new Date()).toLocaleString());
-	});
-	win.once("ready-to-show", () => {
+		autoHideMenuBar: !0,
+		show: !1,
+		icon: n.join(o, "icon.png"),
+		webPreferences: { preload: n.join(i, "preload.cjs") }
+	}), s.webContents.on("did-finish-load", () => {
+		s?.webContents.send("main-process-message", (/* @__PURE__ */ new Date()).toLocaleString());
+	}), s.once("ready-to-show", () => {
 		setTimeout(() => {
-			if (splash) {
-				splash.close();
-				splash = null;
-			}
-			win?.show();
+			c &&= (c.close(), null), s?.show();
 		}, 2800);
-	});
-	if (process.env.VITE_DEV_SERVER_URL) win.loadURL(process.env.VITE_DEV_SERVER_URL);
-	else win.loadFile(path.join(process.env.DIST, "index.html"));
+	}), process.env.VITE_DEV_SERVER_URL ? s.loadURL(process.env.VITE_DEV_SERVER_URL) : s.loadFile(n.join(a, "index.html"));
 }
-app.on("window-all-closed", () => {
-	if (process.platform !== "darwin") {
-		app.quit();
-		win = null;
-	}
-});
-app.on("activate", () => {
-	if (BrowserWindow.getAllWindows().length === 0) createWindow();
-});
-app.whenReady().then(createWindow);
+t.on("window-all-closed", () => {
+	process.platform !== "darwin" && (t.quit(), s = null);
+}), t.on("activate", () => {
+	e.getAllWindows().length === 0 && l();
+}), t.whenReady().then(l);
 //#endregion

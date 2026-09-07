@@ -1,0 +1,35 @@
+/* Shared palette: prefer semantic classes (bg-surface, text-heading, border-border)
+   in common components so theme changes have one source of truth. */
+@theme {
+  --color-brand: #26c281;
+  --color-primary: #58cc02;
+  --color-primary-hover: #46a302;
+  --color-primary-border: #46a302;
+  --color-secondary: #1cb0f6;
+  --color-secondary-border: #1899d6;
+  --color-danger: #ff4b4b;
+  --color-danger-border: #ea2b2b;
+  --color-warning: #ffc800;
+  --color-warning-border: #c69b00;
+  --color-surface: #ffffff;
+  --color-surface-muted: #f9fafb;
+  --color-background: #f7f7f7;
+  --color-border: #e5e7eb;
+  --color-border-strong: #d1d5db;
+  --color-heading: #374151;
+  --color-muted: #6b7280;
+  --color-text: #3c3c3c;
+  --color-text-light: #777777;
+}
+
+.dark-theme {
+  --color-surface: #1f2937;
+  --color-surface-muted: #111827;
+  --color-background: #111827;
+  --color-border: #374151;
+  --color-border-strong: #4b5563;
+  --color-heading: #f3f4f6;
+  --color-muted: #9ca3af;
+  --color-text: #e5e7eb;
+  --color-text-light: #9ca3af;
+}

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import Button from '../components/Button';
 import { Bell, Moon, User, Shield, SlidersHorizontal, Trash2 } from 'lucide-react';
 import { changePassword, clearStatistics, getCurrentUser, updateCurrentUser } from '../utils/authStore';
-import { useDialog } from '../components/AppDialog';
+import { useDialog } from '../components/dialog/useDialog';
 
 const Settings = () => {
   const { notify, confirm } = useDialog();

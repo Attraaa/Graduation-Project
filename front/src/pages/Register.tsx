@@ -3,7 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import Button from '../components/Button';
 import { UserPlus } from 'lucide-react';
 import { isDuplicateId, registerUser } from '../utils/authStore';
-import { useDialog } from '../components/AppDialog';
+import { useDialog } from '../components/dialog/useDialog';
 
 const Register = () => {
   const navigate = useNavigate();

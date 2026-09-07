@@ -11,7 +11,7 @@ const ModeSelector = () => {
         return (
           <div 
             key={mode.id}
-            className="relative overflow-hidden rounded-3xl border-2 border-gray-200 bg-white transition-all duration-300 hover:-translate-y-1 hover:shadow-md"
+            className="relative overflow-hidden rounded-3xl border-2 border-border bg-surface transition-all duration-300 hover:-translate-y-1 hover:shadow-md"
             style={{ borderBottomWidth: '4px' }}
           >
             <div className="p-6">
@@ -26,8 +26,8 @@ const ModeSelector = () => {
                 </div>
               </div>
               <div className="mt-4">
-                <h2 className="text-xl font-black text-gray-700">{mode.title}</h2>
-                <p className="mt-2 font-bold text-gray-500">{mode.desc}</p>
+                <h2 className="text-xl font-black text-heading">{mode.title}</h2>
+                <p className="mt-2 font-bold text-muted">{mode.desc}</p>
               </div>
             </div>
           </div>
