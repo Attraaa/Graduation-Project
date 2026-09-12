@@ -1,4 +1,7 @@
 param([switch]$ToolsOnly)
+# Use this PowerShell's modules even when a parent shell passes another version's PSModulePath.
+Import-Module (Join-Path $PSHOME 'Modules/Microsoft.PowerShell.Utility/Microsoft.PowerShell.Utility.psd1') -ErrorAction Stop
+Import-Module (Join-Path $PSHOME 'Modules/Microsoft.PowerShell.Archive/Microsoft.PowerShell.Archive.psd1') -ErrorAction Stop
 . (Join-Path $PSScriptRoot 'toolchain.ps1')
 
 if ($env:OS -ne 'Windows_NT' -or [Runtime.InteropServices.RuntimeInformation]::OSArchitecture -ne 'X64') {

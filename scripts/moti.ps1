@@ -1,4 +1,4 @@
-param([ValidateSet('help', 'setup', 'app', 'server', 'keyboard', 'keyboard-web', 'check', 'package')][string]$Task = 'help')
+param([ValidateSet('help', 'setup', 'app', 'server', 'keyboard', 'keyboard-web', 'check', 'package')][string]$Task = 'app')
 . (Join-Path $PSScriptRoot 'toolchain.ps1')
 if ($Task -eq 'help') {
     Write-Host 'moti.cmd setup | app | server | keyboard | keyboard-web | check | package'

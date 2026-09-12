@@ -17,7 +17,11 @@ Node/npm, uv, Python을 찾아 따로 설치할 필요가 없습니다. [toolcha
 
 현재 자동 설치는 Windows **x64** 전용입니다. 최소 Windows 버전과 ARM64 지원은 별도 검증 대상입니다. 이 스크립트는 개발 환경 설치용이며 일반 사용자는 추후 Windows 앱 설치 파일을 받는 구조입니다.
 
+`setup.cmd`는 Windows PowerShell로 실행됩니다. 다른 PowerShell 버전의 모듈 경로를 상속받아 `Get-FileHash`를 찾지 못하는 경우를 방지하기 위해, 설치 스크립트가 실행 중인 PowerShell에 포함된 Utility/Archive 모듈을 명시적으로 불러옵니다.
+
 ## 2. 일상적인 실행
+
+앱은 루트의 `moti.cmd`를 더블클릭하면 실행됩니다. 앱 종료 또는 실행 실패 후에는 메시지를 읽을 수 있도록 키 입력을 기다립니다. 명령 목록은 `.\moti.cmd help`로 확인합니다.
 
 프로젝트 루트의 PowerShell에서 각 프로세스는 별도 터미널로 실행합니다.
 
@@ -78,6 +82,8 @@ MediaPipe Pose의 스크립트·WASM·모델은 고정 npm 패키지에서 `publ
 | Python | 관리형 Windows CPython에서 cv2·NumPy·MediaPipe·Torch·YOLO import, `best.pt`와 키 맵 로딩 확인. 카메라/키 수집 없음 |
 | 화면 | 빌드된 측정 대기 화면과 미연결 모드 안내 확인. 실제 카메라 영상·측정 정확도는 미검증 |
 | 실제 통합·배포 | 원격 DB 연결, 프론트 계정/기록 연동, Python IPC, Windows 설치 파일 설치·실행은 미검증 |
+
+2026-09-12 실행 진입점 수정 후 이 PC에서 `setup.cmd` 전체 설치와 `moti.cmd check`를 다시 통과했습니다. 인수 없이 `moti.cmd`를 실행해 개발 서버와 제목이 Moti인 Electron 창의 생성도 확인했습니다. 탐색기 더블클릭 자체와 실제 카메라 동작은 별도로 검증하지 않았습니다.
 
 설치에서 일부 전이 의존성의 deprecated 경고와 npm의 install-scripts 정책 안내가 나올 수 있습니다. 현재 환경에서는 설치와 실행 검사가 통과했습니다. 다른 PC에서 실행 파일 누락 오류가 생기면 전체 스크립트를 무조건 허용하지 말고 해당 패키지와 설치 로그를 확인합니다.
 

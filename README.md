@@ -5,7 +5,7 @@
 ## 팀원 시작 방법
 
 1. 저장소를 받은 뒤 **`setup.cmd`를 실행**합니다. 첫 실행에는 인터넷과 설치 시간이 필요합니다.
-2. 앱 실행: `moti.cmd app`
+2. 앱 실행: **`moti.cmd`를 더블클릭**하거나 터미널에서 `moti.cmd app`을 실행합니다.
 3. 전체 개발 검사: `moti.cmd check`
 
 설정 스크립트가 프로젝트 안에 Node/npm, uv 관리 Python, JS/Python 의존성을 설치합니다. PC 전체의 PATH나 기존 Python을 바꾸지 않습니다. 현재 자동 설치 대상은 **Windows x64**이며 ARM64는 AI wheel 검증이 별도로 필요합니다.
