@@ -22,3 +22,8 @@ contextBridge.exposeInMainWorld('ipcRenderer', {
   // You can expose other apts you need here.
   // ...
 })
+
+contextBridge.exposeInMainWorld('motiKeyboard', {
+  start: () => ipcRenderer.invoke('keyboard-service:start'),
+  stop: () => ipcRenderer.invoke('keyboard-service:stop'),
+})

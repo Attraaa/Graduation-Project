@@ -44,6 +44,7 @@ front와 server는 각각 `package.json`과 `package-lock.json`을 유지합니�
 | recharts | 3.8.1 | 통계 차트 |
 | postcss / autoprefixer | 8.5.28 / 10.5.0 | CSS 처리 |
 | @mediapipe/pose | 0.5.1675469404 | 브라우저 자세 랜드마크 추론 |
+| socket.io-client | 4.8.1 | Electron 키보드 화면과 로컬 Python 분석 서비스 연결 |
 | electron / electron-builder | 41.10.7 / 26.15.3 | 데스크톱 실행·설치 파일 생성 |
 | vite / @vitejs/plugin-react | 8.2.2 / 6.0.1 | 개발·빌드 |
 | vite-plugin-electron | 0.29.1 | Electron 개발·빌드 연결 |
@@ -129,6 +130,6 @@ Python의 `mp.solutions.hands`와 브라우저의 기존 `Pose`는 Legacy API입
 
 MySQL 드라이버와 기존 저장소 구현은 남아 있지만 최종 서버 DB 제품·버전·운영 환경은 미정입니다. setup은 MySQL 설치나 스키마 실행을 하지 않습니다. 특히 `server/schema.sql`은 기존 테이블을 삭제하므로 일반 설치 과정으로 실행하면 안 됩니다.
 
-Windows 설치 파일 생성 경로는 `moti.cmd package`입니다. Electron 패키지에는 `dist`와 `dist-electron`, 로컬 브라우저 MediaPipe 자원이 포함됩니다. 현재 설정에는 **Python 실행 파일·키보드 분석 코드·YOLO 모델, 원격 서버·DB가 포함되지 않습니다.** 설치 파일만으로 키보드 분석과 서버 저장이 연결되었다고 판단하면 안 됩니다. Python 배포 방식과 프로세스 연결은 후속 통합 작업입니다.
+Windows 설치 파일 생성 경로는 `moti.cmd package`입니다. Electron 개발 앱은 프로젝트 `.venv`의 Python 키보드 분석기를 자동 실행하지만, 현재 설치 패키지에는 `dist`와 `dist-electron`, 로컬 브라우저 MediaPipe 자원만 들어갑니다. **Python 실행 파일·키보드 분석 코드·YOLO 모델, 원격 서버·DB는 아직 포함되지 않습니다.** 설치 파일만으로 키보드 분석과 서버 저장이 동작한다고 안내하면 안 됩니다. 다음 배포 작업에서 Python을 Windows exe로 고정하고 모델/맵과 함께 `extraResources`에 넣은 뒤 깨끗한 PC에서 검사해야 합니다.
 
 기존 `front/Dockerfile`은 현재 Windows 데스크톱 팀의 표준 설치 경로가 아닙니다. 원격 서버 배포 환경, Python 동봉 방식, 향후 SQLite 오프라인 기능은 [제품 결정](product-decisions.md)과 [로드맵](roadmap.md)에 따라 구체화합니다.

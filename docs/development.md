@@ -1,6 +1,6 @@
 # 설치·실행·검증 가이드
 
-기준: 2026-09-07. Windows x64에서 아래 자동 설치와 검사를 실행했습니다. 다른 세 팀원의 새 PC에서 재현한 결과는 아직 없습니다. 과거 환경의 실패는 [최초 감사 기록](development-initial-audit.md)에 보존했습니다.
+기준: 2026-09-12. Windows x64에서 아래 자동 설치와 검사를 실행했습니다. 다른 세 팀원의 새 PC에서 재현한 결과는 아직 없습니다. 과거 환경의 실패는 [최초 감사 기록](development-initial-audit.md)에 보존했습니다.
 
 ## 1. 처음 설치
 
@@ -34,7 +34,7 @@ Node/npm, uv, Python을 찾아 따로 설치할 필요가 없습니다. [toolcha
 | `.\moti.cmd check` | 프론트 타입·린트·테스트, 서버 빌드·테스트, Python import/모델 검사 |
 | `.\moti.cmd package` | 프론트/Electron 빌드 후 Windows 설치 패키징 |
 
-현재 프론트 로그인은 로컬 데모이며 통계·이력은 예시 데이터입니다. API와 Python을 함께 실행해도 자동 연결되지 않습니다. 상체 측정은 화면에서 **기준 자세 잡고 시작**을 누를 때 카메라를 요청하고 중지 시 해제합니다. 키보드·안구 모드는 제품 분석 연결 전까지 앱의 시작 버튼을 비활성화했습니다.
+현재 프론트 로그인은 로컬 데모이며 통계·이력은 예시 데이터입니다. 상체 측정은 화면에서 **기준 자세 잡고 시작**을 누를 때 카메라를 요청하고 중지 시 해제합니다. 키보드 모드는 **카메라 연결하고 시작**을 누르면 Electron이 로컬 Python 분석기를 자동 실행하고, 키보드 위치를 잡은 뒤 현재 Moti 화면의 키 입력만 실시간 판정합니다. 결과는 아직 저장/API 전송하지 않습니다. 안구 모드는 비활성입니다.
 
 Python 콘솔 테스트는 OpenCV 미리보기에서 키를 입력하고 ESC로 종료합니다. 다른 앱의 키까지 수집하는 것은 기본 실행 경로가 아닙니다. 키보드 전체와 손이 보이는 손캠 구도가 필요합니다.
 
@@ -64,7 +64,7 @@ npm test
 npm run build
 ```
 
-`build`는 타입 검사와 UI/Electron 파일 생성만 합니다. 설치 파일 생성은 `npm run package`로 분리했습니다. `npm run dev:browser`는 Electron을 띄우지 않고 화면을 검사하는 개발 명령입니다. 이 모드는 Electron IPC나 설치 후 동작을 검증하지 않습니다.
+`build`는 타입 검사와 UI/Electron 파일 생성만 합니다. 설치 파일 생성은 `npm run package`로 분리했습니다. `npm run dev:browser`는 Electron을 띄우지 않고 화면을 검사하는 개발 명령입니다. 키보드 Python 시작 IPC가 없으므로 브라우저 모드에서는 실시간 키보드 분석을 실행할 수 없습니다.
 
 MediaPipe Pose의 스크립트·WASM·모델은 고정 npm 패키지에서 `public/mediapipe/pose`로 복사되고 UI 빌드에 포함됩니다. 복사는 설치와 dev/build 전에 실행됩니다. 생성 폴더를 직접 수정하지 않습니다.
 
@@ -76,12 +76,12 @@ MediaPipe Pose의 스크립트·WASM·모델은 고정 npm 패키지에서 `publ
 | --- | --- |
 | 전체 설치 스크립트 | Node 24.20.0, npm 11.19.0, uv 0.12.10, Python 3.12.14로 완료. front/server `npm ci`, Python web extra 설치 성공 |
 | npm 보안 검사 | 설치 당시 front/server 모두 알려진 취약점 0건. 향후에도 유지된다는 보장은 아님 |
-| 프론트 | TypeScript(React·Vite·Electron)와 ESLint 통과. 캘리브레이션 10개·카메라/모델 생명주기 13개 테스트 통과 |
+| 프론트 | TypeScript(React·Vite·Electron)와 ESLint 통과. 캘리브레이션·카메라/모델 생명주기·키보드 정책/어댑터 총 29개 테스트 통과 |
 | 프론트 빌드 | Vite UI·Electron main·CommonJS preload 생성 성공. UI 청크 500 kB 초과 경고는 남음 |
 | 서버 | TypeScript 빌드와 15개 테스트 통과. 인증·HTTP 검증·소유권·종료 재시도·롤백 및 기존 bcrypt 해시 호환 검사 |
-| Python | 관리형 Windows CPython에서 cv2·NumPy·MediaPipe·Torch·YOLO import, `best.pt`와 키 맵 로딩 확인. 카메라/키 수집 없음 |
-| 화면 | 빌드된 측정 대기 화면과 미연결 모드 안내 확인. 실제 카메라 영상·측정 정확도는 미검증 |
-| 실제 통합·배포 | 원격 DB 연결, 프론트 계정/기록 연동, Python IPC, Windows 설치 파일 설치·실행은 미검증 |
+| Python | 한글/영문 물리 키 코드 정규화 2개 테스트 통과. 관리형 Windows CPython에서 cv2·NumPy·MediaPipe·Torch·YOLO import, `best.pt`와 키 맵 로딩 및 로컬 상태 API 응답 확인. 실제 손캠 정확도는 미검증 |
+| 화면 | 키보드 모드의 연결 버튼, 카메라 영역, 실시간 입력 지표·최근 판정 표를 브라우저 렌더링으로 확인. 브라우저 모드는 Electron IPC가 없어 실제 분석 시작 검증에는 사용하지 않음 |
+| 실제 통합·배포 | 개발 Electron–Python 시작/종료와 데이터 계약 구현. 실제 카메라 손가락 판정, 원격 DB/기록 연동, Python exe 동봉 설치 파일은 미검증 |
 
 2026-09-12 실행 진입점 수정 후 이 PC에서 `setup.cmd` 전체 설치와 `moti.cmd check`를 다시 통과했습니다. 인수 없이 `moti.cmd`를 실행해 개발 서버와 제목이 Moti인 Electron 창의 생성도 확인했습니다. 탐색기 더블클릭 자체와 실제 카메라 동작은 별도로 검증하지 않았습니다.
 

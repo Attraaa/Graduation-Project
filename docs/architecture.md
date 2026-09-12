@@ -8,6 +8,7 @@
 flowchart TD
   S[setup.cmd / moti.cmd] --> T[프로젝트 전용 Node / Python / 잠금 의존성]
   E[Electron main] --> R[React 앱]
+  E -->|시작·중지 IPC| K[로컬 Python 키보드 분석]
   R --> UI[공통 레이아웃 · 컴포넌트 · 디자인 토큰]
   R --> M[측정 페이지]
   M --> W[웹캠 생명주기]
@@ -16,10 +17,13 @@ flowchart TD
   R --> D[데모 계정 / 예시 통계]
   A[독립 Express API] --> V[검증 · 인증 · 세션 서비스]
   V --> DB[MySQL 저장소 어댑터]
-  K[독립 Python 테스트] --> F[YOLO 키보드 맵 · MediaPipe 손끝 · 키 입력 매칭]
+  M --> KM[키보드 카메라 · 실시간 결과 UI]
+  KM -->|loopback 프레임·현재 화면 keydown| K
+  K --> F[YOLO 키보드 맵 · MediaPipe 손끝 · 키 입력 매칭]
+  KM --> FP[버전된 권장 손가락 정책 · 보수적 판정]
 ```
 
-React와 API, Electron과 Python을 잇는 제품용 연결은 아직 없습니다. 동시에 프로세스를 실행하는 것만으로 연결되지 않습니다. MySQL은 현재 코드와 호환되는 어댑터이며 최종 DB 제품을 승인받았다는 의미가 아닙니다.
+Electron 개발 앱의 키보드 모드는 로컬 Python 프로세스를 자동 실행하고 현재 화면의 카메라 프레임·키 입력을 연결합니다. 결과 저장과 Express API 연결은 아직 없습니다. MySQL은 현재 코드와 호환되는 어댑터이며 최종 DB 제품을 승인받았다는 의미가 아닙니다.
 
 ## 파일별 책임
 
@@ -27,8 +31,8 @@ React와 API, Electron과 Python을 잇는 제품용 연결은 아직 없습니�
 | --- | --- |
 | `toolchain.json`, `scripts/setup.ps1`, `scripts/toolchain.ps1` | 정확한 도구 버전, 검증된 다운로드, 프로젝트 전용 환경 설치 |
 | `scripts/moti.ps1` | 앱/API/Python 실행과 검사 명령 묶음 |
-| `front/electron/main.ts` | 창·스플래시 생성, 개발 URL/설치 파일 로드 |
-| `front/electron/preload.ts` | Electron IPC 경계. 제품별 허용 명령 정의는 후속 작업 |
+| `front/electron/main.ts` | 창·스플래시 생성, 개발 URL/설치 파일 로드, 로컬 Python 키보드 프로세스 시작·종료 |
+| `front/electron/preload.ts` | 키보드 분석 프로세스의 좁은 시작·중지 IPC 경계 |
 | `front/vite.config.ts` | UI와 Electron 빌드, CommonJS preload 출력, 브라우저 검증 모드 |
 | `front/src/App.tsx` | 라우트 정의. 인증 보호 라우트는 아직 없음 |
 | `front/src/components/layout/AppLayout.tsx` | 사이드바와 공통 화면 틀/Outlet |
@@ -38,6 +42,8 @@ React와 API, Electron과 Python을 잇는 제품용 연결은 아직 없습니�
 | `front/src/components/dialog/dialogContext.ts`, `useDialog.ts` | 대화상자 타입/상태 계약과 호출 훅 |
 | `front/src/pages/LearningSession.tsx` | 모드별 화면, 실제 장치 선택, 시작/중지/기준 재수집, 관측 상태 표시 |
 | `front/src/components/PostureMonitor.tsx` | 웹캠·모델·기준 수집 연결, 오버레이, 누락/오류 상태 전달 |
+| `front/src/components/KeyboardMonitor.tsx` | 손캠 프레임 전송, 현재 화면 keydown 연결, 키 맵·손끝 오버레이와 최근 판정 전달 |
+| `front/src/features/keyboard/` | Python 인식 결과 어댑터, 버전된 권장 손가락표, 신뢰도·모호성 기반 순수 판정 |
 | `front/src/hooks/useWebcam.ts` | 장치 요청과 트랙 해제. 늦게 완료된 이전 요청도 폐기 |
 | `front/src/hooks/useMediaPipe.ts` | 로컬 Pose 파일 로드, 프레임 처리, 비동기 초기화/종료 제어 |
 | `front/src/features/posture/calibration.ts` | DOM 없는 기준 자세 수집/관측 계산. 단위·품질·샘플 정책 |
@@ -52,12 +58,14 @@ React와 API, Electron과 Python을 잇는 제품용 연결은 아직 없습니�
 | `server/test/` | 입력·인증·HTTP 오류·세션 재시도/소유권 회귀 검사 |
 | `keyboard-detect/pyproject.toml`, `uv.lock` | Python 의존성의 입력 선언과 정확한 해결 결과 |
 | `keyboard-detect/src/` | 키보드 검출·원근 변환·키 영역 판정 |
-| `keyboard-detect/keylog/` | 키 이벤트·프레임·손끝 연결. 기존 공개 데이터 구조 유지 |
+| `keyboard-detect/keylog/` | 로컬 Socket.IO 서비스, 키 이벤트·프레임 시간 매칭, 키 맵·손끝 후보 생성 |
 | `keyboard-detect/scripts/check_environment.py` | 카메라/키 수집 없이 Python import·모델·맵 확인 |
 
 ## 측정 화면의 계약
 
-`LearningSession → PostureMonitor → useWebcam/useMediaPipe → calibration` 순서입니다. 모드 변경과 기준 다시 잡기는 이전 스트림·모델 세션을 정리하고 새 기준을 수집합니다. 중지하면 카메라도 해제합니다. 기준 수집은 현재 `turtle`, `shoulder`에 연결되어 있습니다. 키보드·안구는 전용 분석 연결 전까지 해당 화면의 시작을 비활성화했습니다.
+상체는 `LearningSession → PostureMonitor → useWebcam/useMediaPipe → calibration` 순서입니다. 모드 변경과 기준 다시 잡기는 이전 스트림·모델 세션을 정리하고 새 기준을 수집합니다. 중지하면 카메라도 해제합니다. 기준 수집은 현재 `turtle`, `shoulder`에 연결되어 있으며 안구 모드는 아직 비활성입니다.
+
+키보드는 `LearningSession → KeyboardMonitor → loopback Python service → runtime adapter → finger policy` 순서입니다. Electron main은 빈 로컬 포트와 세션 토큰을 만들고 개발 환경의 `.venv` Python을 자식 프로세스로 실행합니다. 렌더러는 실행 중인 화면의 `keydown`만 전송하며 전역 키로거를 켜지 않습니다. Python은 키 영역·손끝 후보·프레임 시간차를 반환하고, 권장/허용/다름/판정 보류 결정은 앱의 버전된 정책이 담당합니다. 손 가림, 낮은 키보드 신뢰도, 프레임 시간차, 가까운 복수 후보는 오답으로 강제하지 않고 판정 보류합니다. 카메라 영상과 결과는 아직 저장하거나 원격 서버로 보내지 않습니다.
 
 `MonitorSnapshot`은 준비/수집/관찰/관찰 불가/오류 상태와 수집 진행률, 유효 관찰 시간, 기준 대비 변화량을 전달합니다. 사용자의 자세가 의학적으로 올바른지 판단하는 타입이 아닙니다.
 

@@ -24,7 +24,10 @@ switch ($Task) {
         Invoke-ProjectNpm 'server' 'build'
         Invoke-ProjectNpm 'server' 'test'
         Push-Location (Join-Path $MotiRoot 'keyboard-detect')
-        try { Invoke-MotiCommand $MotiUv @('run', '--locked', '--managed-python', '--extra', 'web', 'python', 'scripts/check_environment.py') }
+        try {
+            Invoke-MotiCommand $MotiUv @('run', '--locked', '--managed-python', '--extra', 'web', 'python', '-m', 'unittest', 'discover', '-s', 'tests')
+            Invoke-MotiCommand $MotiUv @('run', '--locked', '--managed-python', '--extra', 'web', 'python', 'scripts/check_environment.py')
+        }
         finally { Pop-Location }
     }
     { $_ -in @('keyboard', 'keyboard-web') } {

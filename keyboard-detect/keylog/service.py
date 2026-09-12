@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import os
 import queue
 import sys
 import threading
@@ -19,7 +20,7 @@ from typing import Optional
 
 import cv2
 import numpy as np
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, abort, jsonify, render_template, request
 
 from .analyzer import KeyboardPressAnalyzer
 from .events import FrameSnapshot, KeyEvent
@@ -49,6 +50,8 @@ class RealtimeAttributionService:
         max_frames: int = 180,
         enable_global_keylogger: bool = False,
         use_mediapipe: bool = True,
+        token: Optional[str] = None,
+        expose_test_page: bool = True,
     ):
         try:
             from flask_socketio import SocketIO
@@ -58,10 +61,11 @@ class RealtimeAttributionService:
                 "Install them with: pip install flask-socketio simple-websocket"
             ) from exc
 
-        self.security = LocalSessionSecurity()
+        self.security = LocalSessionSecurity(token=token)
         self.frame_buffer = FrameBuffer(max_frames=max_frames)
         self.camera_receive_delay_ms = camera_receive_delay_ms
         self.analysis_wait_ms = analysis_wait_ms
+        self.expose_test_page = expose_test_page
         self.event_queue: "queue.Queue[KeyEvent]" = queue.Queue()
         self._frame_sequence = 0
         self._browser_event_sequence = 0
@@ -92,6 +96,8 @@ class RealtimeAttributionService:
     def _bind_routes(self) -> None:
         @self.app.route("/")
         def index():
+            if not self.expose_test_page:
+                abort(404)
             return render_template(
                 "test_page.html",
                 token=self.security.token,
@@ -176,6 +182,8 @@ class RealtimeAttributionService:
         def browser_key(payload):
             if not self.security.require_token((payload or {}).get("token")):
                 return {"ok": False, "error": "unauthorized"}
+            if not self.analyzer.frozen:
+                return {"ok": False, "error": "keyboard_not_mapped"}
             self._browser_event_sequence += 1
             event = KeyEvent(
                 key=normalize_key_name(payload.get("key", ""), payload.get("code"), payload.get("location")),
@@ -190,6 +198,27 @@ class RealtimeAttributionService:
             )
             self.enqueue_key_event(event)
             return {"ok": True, "event": event.to_jsonable()}
+
+        @self.socketio.on("calibrate_keyboard")
+        def calibrate_keyboard(payload):
+            if not self.security.require_token((payload or {}).get("token")):
+                return {"ok": False, "error": "unauthorized"}
+            snapshot = self.frame_buffer.latest()
+            if snapshot is None:
+                return {"ok": False, "error": "no_frame_available"}
+
+            self.analyzer.unfreeze_mapping()
+            mapping = self.analyzer.map_keyboard(snapshot.frame)
+            if mapping.ok:
+                self.analyzer.freeze_mapping(mapping)
+            response_mapping = mapping.to_jsonable()
+            response_mapping["size"] = [snapshot.width, snapshot.height]
+            response_mapping["mode"] = "frozen" if mapping.ok else "live"
+            return {
+                "ok": mapping.ok,
+                "error": None if mapping.ok else (mapping.reason or "keyboard_mapping_failed"),
+                "mapping": response_mapping,
+            }
 
     def _authorized_request(self) -> bool:
         token = request.headers.get("X-Keylog-Token") or request.args.get("token")
@@ -218,7 +247,6 @@ class RealtimeAttributionService:
             self.socketio.emit("press_result", payload)
 
     def run(self, host: str, port: int, debug: bool = False) -> None:
-        print("[keylog] local token:", self.security.token)
         print(f"[keylog] open http://{host}:{port}")
         self.socketio.run(self.app, host=host, port=port, debug=debug, allow_unsafe_werkzeug=True)
 
@@ -246,6 +274,7 @@ def main(argv=None) -> int:
     parser.add_argument("--analysis-wait-ms", type=float, default=120.0)
     parser.add_argument("--global-keylogger", action="store_true")
     parser.add_argument("--no-mediapipe", action="store_true")
+    parser.add_argument("--embedded", action="store_true")
     args = parser.parse_args(argv)
 
     service = RealtimeAttributionService(
@@ -253,6 +282,8 @@ def main(argv=None) -> int:
         analysis_wait_ms=args.analysis_wait_ms,
         enable_global_keylogger=args.global_keylogger,
         use_mediapipe=not args.no_mediapipe,
+        token=os.environ.get("MOTI_KEYBOARD_TOKEN"),
+        expose_test_page=not args.embedded,
     )
     try:
         service.run(args.host, args.port)

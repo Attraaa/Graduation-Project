@@ -31,6 +31,7 @@ class MediaPipeFingerTracker:
         max_num_hands: int = 2,
         min_detection_confidence: float = 0.45,
         min_tracking_confidence: float = 0.45,
+        input_is_mirrored: bool = False,
     ):
         try:
             import mediapipe as mp
@@ -49,6 +50,7 @@ class MediaPipeFingerTracker:
             min_tracking_confidence=min_tracking_confidence,
         )
         self._lock = threading.Lock()
+        self._input_is_mirrored = input_is_mirrored
 
     def close(self) -> None:
         with self._lock:
@@ -68,6 +70,10 @@ class MediaPipeFingerTracker:
         points: List[FingerPoint] = []
         for hand_index, landmarks in enumerate(result.multi_hand_landmarks):
             hand_label = _hand_label(handedness, hand_index)
+            # MediaPipe Hands labels assume a mirrored selfie image. Browser
+            # camera frames are sent unmirrored so the physical labels swap.
+            if not self._input_is_mirrored:
+                hand_label = {"Left": "Right", "Right": "Left"}.get(hand_label, hand_label)
             for landmark_id, finger_name in TIP_LANDMARKS.items():
                 lm = landmarks.landmark[landmark_id]
                 points.append(

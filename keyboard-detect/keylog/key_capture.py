@@ -66,8 +66,13 @@ CODE_NAMES = {
 def normalize_key_name(key, code: Optional[str] = None, location: Optional[int] = None) -> str:
     """Normalize pynput/browser keys to names used by perfect_map.json."""
 
-    if code and code in CODE_NAMES:
-        return CODE_NAMES[code]
+    if code:
+        if code in CODE_NAMES:
+            return CODE_NAMES[code]
+        if len(code) == 4 and code.startswith("Key") and code[3].isalpha():
+            return code[3].upper()
+        if len(code) == 6 and code.startswith("Digit") and code[5].isdigit():
+            return code[5]
 
     if isinstance(key, str):
         if len(key) == 1:
