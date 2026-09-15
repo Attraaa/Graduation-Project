@@ -28,6 +28,7 @@ class MysqlSessionTransaction implements SessionTransaction {
 
   async aggregate(id: number, userId: number): Promise<void> {
     // Use the persisted end/result on this connection, in the same transaction as finish().
+    // Legacy daily totals belong to the session start date, including sessions crossing midnight.
     await this.connection.query(
       `INSERT INTO daily_statistics (user_id, record_date, mode, total_monitoring_seconds, average_score, session_count)
        SELECT user_id, DATE(started_at), mode,
@@ -92,9 +93,9 @@ export class MysqlSessionRepository implements SessionRepository {
     if (!sessions[0]) return null;
     // Legacy response name: measured_value has no agreed unit and must not be used as a new posture score.
     const [graph] = await this.pool.query<RowDataPacket[]>(
-      `SELECT DATE_FORMAT(recorded_at, '%H:%i') AS time, AVG(measured_value) AS score
+      `SELECT DATE_FORMAT(MIN(recorded_at), '%H:%i') AS time, AVG(measured_value) AS score
        FROM posture_logs WHERE session_id = ? AND user_id = ?
-       GROUP BY DATE_FORMAT(recorded_at, '%H:%i') ORDER BY MIN(recorded_at)`, [id, userId],
+       GROUP BY DATE_FORMAT(recorded_at, '%Y-%m-%d %H:%i') ORDER BY MIN(recorded_at)`, [id, userId],
     );
     return { ...sessions[0], graph };
   }

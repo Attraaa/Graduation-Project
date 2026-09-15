@@ -2,25 +2,22 @@ import { useCallback, useEffect, useRef } from 'react';
 import { AlertCircle, CameraOff } from 'lucide-react';
 import { useWebcam } from '../hooks/useWebcam';
 import { useMediaPipe } from '../hooks/useMediaPipe';
-import { advanceCalibration, createCalibration, extractFrontalMeasurement } from '../features/posture/calibration';
-import type { CalibrationReason, FrontalMetrics } from '../features/posture/calibration';
-
-export interface MonitorSnapshot {
-  phase: 'loading' | 'calibrating' | 'observing' | 'unavailable' | 'error';
-  progress: number;
-  reason: CalibrationReason | null;
-  observedSeconds: number;
-  delta: FrontalMetrics | null;
-}
+import { advanceCalibration, createCalibration } from '../features/posture/calibration';
+import { advanceObservation, createObservation, interruptObservation } from '../features/posture/observation';
+import { advanceEvaluation, createEvaluation, interruptEvaluation } from '../features/posture/evaluation';
+import { createMonitorSnapshot } from '../features/posture/monitorTypes';
+import type { MonitorSnapshot } from '../features/posture/monitorTypes';
+import type { ScorePolicy } from '../features/posture/scoring';
 
 interface PostureMonitorProps {
   isRunning: boolean;
   deviceId: string;
+  policy: ScorePolicy;
   onUpdate: (snapshot: MonitorSnapshot) => void;
 }
 
-const PostureMonitor = ({ isRunning, deviceId, onUpdate }: PostureMonitorProps) => {
-  const latest = useRef<MonitorSnapshot>({ phase: 'loading', progress: 0, reason: null, observedSeconds: 0, delta: null });
+const PostureMonitor = ({ isRunning, deviceId, policy, onUpdate }: PostureMonitorProps) => {
+  const latest = useRef<MonitorSnapshot>(createMonitorSnapshot(policy));
   const publish = useCallback((snapshot: MonitorSnapshot) => {
     latest.current = snapshot;
     onUpdate(snapshot);
@@ -33,8 +30,8 @@ const PostureMonitor = ({ isRunning, deviceId, onUpdate }: PostureMonitorProps) 
     const abort = new AbortController();
     let calibration = createCalibration();
     let lastUiAt = -Infinity;
-    let lastValidAt: number | null = null;
-    let observedSeconds = 0;
+    let observation = createObservation();
+    let evaluation = createEvaluation(policy);
     let removeTrackListener = () => {};
     let watchdog: ReturnType<typeof setInterval> | undefined;
     let lastFrameAt: number | null = null;
@@ -42,13 +39,15 @@ const PostureMonitor = ({ isRunning, deviceId, onUpdate }: PostureMonitorProps) 
       const stream = await startWebcam(deviceId || undefined);
       if (abort.signal.aborted) return;
       if (!stream) {
-        publish({ phase: 'error', progress: 0, reason: null, observedSeconds: 0, delta: null });
+        publish({ ...createMonitorSnapshot(policy), phase: 'error' });
         return;
       }
       const track = stream.getVideoTracks()[0];
       const ended = () => {
         if (abort.signal.aborted) return;
-        publish({ ...latest.current, phase: 'error', reason: 'interrupted', delta: null });
+        observation = interruptObservation(observation);
+        evaluation = interruptEvaluation(evaluation);
+        publish({ ...latest.current, phase: 'error', reason: 'interrupted', delta: null, evaluation });
         stopWebcam();
         void stopProcessing();
       };
@@ -58,7 +57,8 @@ const PostureMonitor = ({ isRunning, deviceId, onUpdate }: PostureMonitorProps) 
         const video = videoRef.current;
         const canvas = canvasRef.current;
         if (abort.signal.aborted || !video || !canvas) return;
-        lastFrameAt = performance.now();
+        const receivedAtMs = performance.now();
+        lastFrameAt = receivedAtMs;
         if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
           canvas.width = video.videoWidth;
           canvas.height = video.videoHeight;
@@ -93,37 +93,27 @@ const PostureMonitor = ({ isRunning, deviceId, onUpdate }: PostureMonitorProps) 
           sourceId: track.id, timestampMs: capturedAtMs,
         };
         calibration = advanceCalibration(calibration, frame);
-        const current = extractFrontalMeasurement(frame);
-        let delta: FrontalMetrics | null = null;
-        if (calibration.reference && current.valid) {
-          // Only consecutive valid observations count; a missing camera image is not a break.
-          if (lastValidAt !== null && capturedAtMs - lastValidAt <= 500) {
-            observedSeconds += (capturedAtMs - lastValidAt) / 1000;
-          }
-          lastValidAt = capturedAtMs;
-          const baseline = calibration.reference.metrics;
-          delta = {
-            noseOffsetShoulderWidths: current.measurement.noseOffsetShoulderWidths - baseline.noseOffsetShoulderWidths,
-            noseHeightShoulderWidths: current.measurement.noseHeightShoulderWidths - baseline.noseHeightShoulderWidths,
-            shoulderHeightDifferenceShoulderWidths: current.measurement.shoulderHeightDifferenceShoulderWidths - baseline.shoulderHeightDifferenceShoulderWidths,
-          };
+        observation = advanceObservation(observation, calibration.reference, frame);
+        evaluation = advanceEvaluation(evaluation, observation, policy);
+        const snapshot: MonitorSnapshot = {
+          phase: calibration.reference ? (observation.delta ? 'observing' : 'unavailable') : 'calibrating',
+          progress: calibration.progress,
+          reason: observation.reason ?? calibration.reason,
+          observedSeconds: observation.observedSeconds,
+          delta: observation.delta,
+          evaluation,
+        };
+        if (receivedAtMs - lastUiAt >= 200 || (observation.delta === null && latest.current.delta !== null)) {
+          lastUiAt = receivedAtMs;
+          publish(snapshot);
         } else {
-          lastValidAt = null;
-        }
-        if (capturedAtMs - lastUiAt >= 200) {
-          lastUiAt = capturedAtMs;
-          publish({
-            phase: calibration.reference ? (current.valid ? 'observing' : 'unavailable') : 'calibrating',
-            progress: calibration.progress,
-            reason: current.valid ? calibration.reason : current.reason,
-            observedSeconds,
-            delta,
-          });
+          latest.current = snapshot;
         }
       }, abort.signal);
       if (abort.signal.aborted) return;
       if (!pose) {
-        publish({ phase: 'error', progress: 0, reason: null, observedSeconds, delta: null });
+        evaluation = interruptEvaluation(evaluation);
+        publish({ phase: 'error', progress: 0, reason: null, observedSeconds: observation.observedSeconds, delta: null, evaluation });
         stopWebcam();
         return;
       }
@@ -135,8 +125,9 @@ const PostureMonitor = ({ isRunning, deviceId, onUpdate }: PostureMonitorProps) 
           startProcessing(video);
           watchdog = setInterval(() => {
             if (!abort.signal.aborted && lastFrameAt !== null && performance.now() - lastFrameAt > 1500 && latest.current.phase !== 'error') {
-              lastValidAt = null;
-              publish({ ...latest.current, phase: 'unavailable', reason: 'interrupted', delta: null });
+              observation = interruptObservation(observation);
+              evaluation = interruptEvaluation(evaluation);
+              publish({ ...latest.current, phase: 'unavailable', reason: 'interrupted', delta: null, evaluation });
             }
           }, 500);
         }
@@ -144,7 +135,8 @@ const PostureMonitor = ({ isRunning, deviceId, onUpdate }: PostureMonitorProps) 
     };
     void setup().catch(() => {
       if (!abort.signal.aborted) {
-        publish({ phase: 'error', progress: 0, reason: null, observedSeconds, delta: null });
+        evaluation = interruptEvaluation(evaluation);
+        publish({ phase: 'error', progress: 0, reason: null, observedSeconds: observation.observedSeconds, delta: null, evaluation });
         stopWebcam();
         void stopProcessing();
       }
@@ -156,11 +148,20 @@ const PostureMonitor = ({ isRunning, deviceId, onUpdate }: PostureMonitorProps) 
       stopWebcam();
       void stopProcessing();
     };
-  }, [isRunning, deviceId, publish, videoRef, canvasRef, startWebcam, stopWebcam, initMediaPipe, startProcessing, stopProcessing]);
+  }, [isRunning, deviceId, policy, publish, videoRef, canvasRef, startWebcam, stopWebcam, initMediaPipe, startProcessing, stopProcessing]);
+
+  useEffect(() => {
+    // Flush the last computed interval on stop, but never publish from an old keyed session's cleanup.
+    if (!isRunning && latest.current.phase !== 'loading') {
+      publish({ ...latest.current, delta: null,
+        evaluation: { ...latest.current.evaluation, currentScore: null, currentDeviation: null, continuousMs: 0, deviationState: 'unknown' } });
+    }
+  }, [isRunning, publish]);
 
   useEffect(() => {
     if (isRunning && (aiError || webcamError)) {
-      publish({ ...latest.current, phase: 'error', delta: null });
+      publish({ ...latest.current, phase: 'error', delta: null,
+        evaluation: { ...latest.current.evaluation, currentScore: null, currentDeviation: null, continuousMs: 0, deviationState: 'unknown' } });
       stopWebcam();
       void stopProcessing();
     }

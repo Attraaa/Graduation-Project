@@ -155,3 +155,46 @@ test('advancing state does not mutate the previous samples or caller landmarks',
   assert.equal(initial.samples.length, 0);
   assert.equal(next.samples.length, 1);
 });
+
+test('visibility limits include 0.7 and 1, while values immediately outside are unavailable', () => {
+  for (const visibility of [0.7 - 1e-9, 0.7, 0.7 + 1e-9, 1, 1 + 1e-9]) {
+    const input = frame(0);
+    input.landmarks[0].visibility = visibility;
+    assert.equal(extractFrontalMeasurement(input).valid, visibility >= 0.7 && visibility <= 1);
+  }
+});
+
+test('horizontal shoulder width includes the minimum and rejects narrower projections', () => {
+  for (const width of [0.1 - 1e-9, 0.1, 0.1 + 1e-9]) {
+    const input = frame(0);
+    input.landmarks[11].x = width;
+    input.landmarks[12].x = 0;
+    assert.equal(extractFrontalMeasurement(input).valid, width >= 0.1);
+  }
+});
+
+test('sample interval and permitted observation gap include their exact boundaries', () => {
+  const initial = advanceCalibration(createCalibration(), frame(0));
+  assert.equal(advanceCalibration(initial, frame(99)).samples.length, 1);
+  assert.equal(advanceCalibration(initial, frame(100)).samples.length, 2);
+  assert.equal(advanceCalibration(initial, frame(500)).samples.length, 2);
+  const interrupted = advanceCalibration(initial, frame(501));
+  assert.equal(interrupted.samples.length, 1);
+  assert.equal(interrupted.reason, 'interrupted');
+});
+
+test('stability includes the configured metric range and restarts immediately above it', () => {
+  // Binary-exact coordinates isolate comparison semantics from decimal rounding.
+  const input = frame(0, { widthPx: 1000, heightPx: 1000 });
+  input.landmarks[11].x = 0.75;
+  input.landmarks[12].x = 0.25;
+  const options = { ...DEFAULT_CALIBRATION_OPTIONS, maxMetricRangeShoulderWidths: 0.125 };
+  const initial = advanceCalibration(createCalibration(), input, options);
+  for (const shift of [0.0625 - 1e-9, 0.0625, 0.0625 + 1e-9]) {
+    const changed = structuredClone(input);
+    changed.timestampMs = 100;
+    changed.landmarks[0].x += shift;
+    const next = advanceCalibration(initial, changed, options);
+    assert.equal(next.reason, shift <= 0.0625 ? null : 'moving');
+  }
+});

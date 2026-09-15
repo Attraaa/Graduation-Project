@@ -4,16 +4,15 @@ import type { Auth } from '../auth.js';
 import type { RowDataPacket } from 'mysql2';
 import { asyncHandler } from '../http.js';
 import { dateParam, numericParam } from '../validation.js';
+import { averageSessionScore, type ScoredSessions } from '../services/statistics.js';
 
-interface DailyStatRow extends RowDataPacket {
+interface DailyStatRow extends RowDataPacket, ScoredSessions {
   mode: string;
   total_monitoring_seconds: number;
-  average_score: number;
-  session_count: number;
 }
 
 interface SessionRow extends RowDataPacket {
-  score: number;
+  score: number | null;
   period: 'today' | 'yesterday';
 }
 
@@ -29,9 +28,7 @@ export function createStatisticsRouter(pool: Pool, auth: Auth) {
     );
     const totalSeconds = rows.reduce((sum, row) => sum + row.total_monitoring_seconds, 0);
     const sessionCount = rows.reduce((sum, row) => sum + row.session_count, 0);
-    const averageScore = sessionCount > 0
-      ? Math.round(rows.reduce((sum, row) => sum + row.average_score * row.session_count, 0) / sessionCount)
-      : null;
+    const averageScore = averageSessionScore(rows);
     res.json({ averageScore, sessionCount, totalSeconds, byMode: rows });
   }));
 
@@ -51,15 +48,24 @@ export function createStatisticsRouter(pool: Pool, auth: Auth) {
   router.get('/calendar', asyncHandler(async (req, res) => {
     const year = numericParam(req.query.year, 'year', 1000, 9999);
     const month = numericParam(req.query.month, 'month', 1, 12);
-    const [rows] = await pool.query<RowDataPacket[]>(
-      `SELECT DATE_FORMAT(record_date, '%Y-%m-%d') AS date,
-              SUM(session_count) AS session_count, ROUND(AVG(average_score)) AS avg_score
+    const [rows] = await pool.query<(RowDataPacket & ScoredSessions & { date: string })[]>(
+      `SELECT DATE_FORMAT(record_date, '%Y-%m-%d') AS date, session_count, average_score
        FROM daily_statistics
        WHERE user_id = ? AND YEAR(record_date) = ? AND MONTH(record_date) = ?
-       GROUP BY record_date ORDER BY record_date`,
+       ORDER BY record_date`,
       [req.user!.userId, year, month],
     );
-    res.json(rows);
+    const days = new Map<string, ScoredSessions[]>();
+    for (const row of rows) {
+      const day = days.get(row.date) ?? [];
+      day.push(row);
+      days.set(row.date, day);
+    }
+    res.json(Array.from(days, ([date, day]) => ({
+      date,
+      session_count: day.reduce((sum, row) => sum + row.session_count, 0),
+      avg_score: averageSessionScore(day),
+    })));
   }));
 
   router.get('/improvement', asyncHandler(async (req, res) => {
@@ -74,7 +80,7 @@ export function createStatisticsRouter(pool: Pool, auth: Auth) {
     );
     const average = (period: SessionRow['period']) => {
       const list = rows.filter((row) => row.period === period && row.score !== null);
-      return list.length ? list.reduce((sum, row) => sum + row.score, 0) / list.length : null;
+      return list.length ? list.reduce((sum, row) => sum + row.score!, 0) / list.length : null;
     };
     const todayAvg = average('today');
     const yesterdayAvg = average('yesterday');

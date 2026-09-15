@@ -1,6 +1,6 @@
 # 세션별 기준 자세 캘리브레이션
 
-대상 구현: [calibration.ts](../front/src/features/posture/calibration.ts). 검증: [calibration.test.mjs](../front/tests/calibration.test.mjs). 이 문서는 기준값 수집 계약을 설명합니다. 화면·API 연결 여부는 [architecture.md](architecture.md)를 함께 확인합니다.
+대상 구현: [calibration.ts](../front/src/features/posture/calibration.ts). 검증: [calibration.test.mjs](../front/tests/calibration.test.mjs). 기준 확보 후 비교와 시간 계산은 [observation.ts](../front/src/features/posture/observation.ts), 검증 결과는 [evaluation.md](evaluation.md)를 따릅니다. 이 문서는 기준값 수집 계약을 설명합니다. 화면·API 연결 여부는 [architecture.md](architecture.md)를 함께 확인합니다.
 
 ## 무엇을 수집하는가
 
@@ -44,6 +44,8 @@ MediaPipe는 신체 랜드마크의 이미지 좌표와 모델이 추론한 3차
 
 안정적인 관측이라는 사실만으로 사용자의 자세가 올바르다고 판정하지 않습니다. UI 완료 문구도 “기준 자세 저장 완료”로 표현합니다. 자세 점수와 작업 습관 지표는 분리하기로 했지만, 기준값을 점수로 환산하는 공식과 지속시간 조건은 이 모듈에 포함하지 않습니다.
 
+2026-09-15 별도 `scoring.ts`/`evaluation.ts`에 초기 유사도 점수와 관찰 습관 정책을 연결했습니다. 이 문서의 좌표 단위와 수집 조건은 그대로입니다. 점수의 5%/30%, 습관의 15%/10%/2초는 수집 조건과 별개이며 [evaluation.md](evaluation.md)를 따릅니다.
+
 ## 연결 계약
 
 ```ts
@@ -73,5 +75,7 @@ const current = extractFrontalMeasurement(frame);
 ## 검증 범위와 다음 작업
 
 Node 24에서 `node --test front/tests/calibration.test.mjs`로 순수 계산·상태 전이를 검증합니다. 영상 비율 보정, 시간과 표본 수, 중앙값, 누락·불확실 좌표, 갑작스러운 이동과 느린 이동, 표본 사이의 이동, 카메라 변경·시간 역행, 기준값 고정, 입력 불변성을 포함합니다.
+
+2026-09-12 가시성·어깨 수평 폭·표본 간격·허용 공백·안정 범위의 경계 검사를 추가해 수집 테스트 14개가 통과했습니다. `observation.test.mjs` 8개는 동일 입력 재현성, 누락·시간 역행·중복·500ms 경계, 기준과 카메라 교체, 자정을 지나는 단조 시간을 검증합니다. 관측 누락은 `null`이며 기준과 같은 값 0 및 정상/오사용/휴식 판정과 구분합니다.
 
 이 테스트는 실제 웹캠 인식률을 검증하지 않습니다. 다음 단계는 팀의 Windows 노트북/웹캠에서 착석 거리·해상도·조명·고개 회전·카메라 이동·일시 가림을 재현하고, 기준 자세 수집 완료율과 재시작 이유를 확인하는 것입니다. 이후 자세 변화 지표와 별도의 작업 습관 지표를 정의하고, 그 검증 자료를 바탕으로 점수·알림 규칙을 추가합니다.

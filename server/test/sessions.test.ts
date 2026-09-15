@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { appendSessionLog, endSession, type Session, type SessionEnd, type SessionLog, type SessionRepository, type SessionTransaction } from '../src/services/sessions.js';
+import { appendSessionLog, endSession, parseSessionEnd, parseSessionLog, type Session, type SessionEnd, type SessionLog, type SessionRepository, type SessionTransaction } from '../src/services/sessions.js';
 
 // An isolated transaction store exercises service behavior without choosing/provisioning a team DB.
 class MemorySessions implements SessionRepository {
@@ -35,6 +35,35 @@ class MemorySessions implements SessionRepository {
 }
 
 const finalResult = { score: 75, alertCount: 3 };
+
+test('legacy score and alert count bounds are inclusive and do not coerce missing or invalid inputs', () => {
+  for (const score of [0, 1, 99, 100]) {
+    const input = Object.freeze({ score, alertCount: 0 });
+    assert.deepEqual(parseSessionEnd(input), input);
+    assert.deepEqual(parseSessionEnd(input), input);
+  }
+  assert.deepEqual(parseSessionEnd({ score: 0, alertCount: 2147483647 }), { score: 0, alertCount: 2147483647 });
+  for (const score of [undefined, null, -1, 101, 0.5, '80', true, NaN, Infinity]) {
+    assert.throws(() => parseSessionEnd({ score, alertCount: 0 }), { status: 400 });
+  }
+  for (const alertCount of [undefined, null, -1, 2147483648, 0.5, '0', false, NaN, Infinity]) {
+    assert.throws(() => parseSessionEnd({ score: 80, alertCount }), { status: 400 });
+  }
+});
+
+test('legacy logs retain missing measurements separately from a measured zero', () => {
+  for (const status of ['GOOD', 'WARNING', 'DANGER']) {
+    assert.deepEqual(parseSessionLog({ status }), { status, measuredValue: null });
+    assert.deepEqual(parseSessionLog({ status, measuredValue: null }), { status, measuredValue: null });
+    assert.deepEqual(parseSessionLog({ status, measuredValue: 0 }), { status, measuredValue: 0 });
+  }
+  for (const measuredValue of [-3.402823466e38, 3.402823466e38]) {
+    assert.equal(parseSessionLog({ status: 'WARNING', measuredValue }).measuredValue, measuredValue);
+  }
+  for (const measuredValue of [-3.402824e38, 3.402824e38, NaN, Infinity, '0']) {
+    assert.throws(() => parseSessionLog({ status: 'GOOD', measuredValue }), { status: 400 });
+  }
+});
 
 test('another user cannot finish or write logs to a session', async () => {
   const repository = new MemorySessions();

@@ -14,6 +14,7 @@ flowchart TD
   M --> W[웹캠 생명주기]
   W --> P[앱에 포함된 MediaPipe Pose]
   P --> C[매 세션 기준 자세 수집 · 화면상 변화]
+  C --> V1[모드별 유사도 점수 · 시간 평균 · 관찰 습관]
   R --> D[데모 계정 / 예시 통계]
   A[독립 Express API] --> V[검증 · 인증 · 세션 서비스]
   V --> DB[MySQL 저장소 어댑터]
@@ -40,13 +41,21 @@ Electron 개발 앱의 키보드 모드는 로컬 Python 프로세스를 자동 
 | `front/src/components/Button.tsx`, `Sidebar.tsx`, `ModeSelector.tsx` | 공유 UI. 새 화면은 공통 토큰/컴포넌트부터 사용 |
 | `front/src/components/AppDialog.tsx` | 대화상자 Provider와 표시 |
 | `front/src/components/dialog/dialogContext.ts`, `useDialog.ts` | 대화상자 타입/상태 계약과 호출 훅 |
-| `front/src/pages/LearningSession.tsx` | 모드별 화면, 실제 장치 선택, 시작/중지/기준 재수집, 관측 상태 표시 |
+| `front/src/pages/LearningSession.tsx` | 모드별 세션 화면 선택. 모드 변경 시 이전 상태 폐기 |
+| `front/src/features/session/` | 공통 화면 틀·장치 선택·시작/중지 타이머·지표 카드 |
+| `front/src/features/posture/PostureSession.tsx` | 상체 모드 정책 선택, 시작/중지/기준 재수집과 결과 상태 |
+| `front/src/features/posture/PostureMetrics.tsx` | 점수와 관찰 습관 카드 표시. 점수 산식·임계값을 소유하지 않음 |
+| `front/src/features/posture/monitorTypes.ts` | 카메라와 독립된 상태·점수·습관 표시 계약 |
 | `front/src/components/PostureMonitor.tsx` | 웹캠·모델·기준 수집 연결, 오버레이, 누락/오류 상태 전달 |
 | `front/src/components/KeyboardMonitor.tsx` | 손캠 프레임 전송, 현재 화면 keydown 연결, 키 맵·손끝 오버레이와 최근 판정 전달 |
-| `front/src/features/keyboard/` | Python 인식 결과 어댑터, 버전된 권장 손가락표, 신뢰도·모호성 기반 순수 판정 |
+| `front/src/features/keyboard/` | 독립 KeyboardSession 화면, Python 인식 결과 어댑터, 버전된 권장 손가락표, 신뢰도·모호성 기반 순수 판정 |
 | `front/src/hooks/useWebcam.ts` | 장치 요청과 트랙 해제. 늦게 완료된 이전 요청도 폐기 |
 | `front/src/hooks/useMediaPipe.ts` | 로컬 Pose 파일 로드, 프레임 처리, 비동기 초기화/종료 제어 |
 | `front/src/features/posture/calibration.ts` | DOM 없는 기준 자세 수집/관측 계산. 단위·품질·샘플 정책 |
+| `front/src/features/posture/observation.ts` | DOM 없는 기준 대비 변화·유효 관찰 시간 계산. 누락·중복·역행 시각과 관측 연속성 처리 |
+| `front/src/features/posture/modes/turtle.ts`, `modes/shoulder.ts` | 모드별 선택 지표·유사도 점수 임계값·정책 버전 |
+| `front/src/features/posture/scoring.ts` | 선택된 지표를 0–100 유사도로 환산하는 순수 함수 |
+| `front/src/features/posture/evaluation.ts` | 유효 시간 가중 평균·연속 관찰·기준 이탈 구간의 순수 집계 |
 | `front/src/utils/authStore.ts` | 아직 사용하는 로컬 데모 인증. 서버 연결 때 교체할 경계 |
 | `front/src/data/mockLearningHistory.ts`, `pages/Statistics.tsx` | 아직 예시 데이터. 실 API 연동 대상으로 구분 |
 | `server/src/server.ts`, `config.ts` | 환경 검증 후 서버 시작. JWT 비밀값 자동 기본값 없음 |
@@ -54,6 +63,7 @@ Electron 개발 앱의 키보드 모드는 로컬 Python 프로세스를 자동 
 | `server/src/validation.ts` | HTTP 입력을 런타임에서 검사 |
 | `server/src/routes/` | HTTP 계약/인증/응답 변환 |
 | `server/src/services/sessions.ts` | 세션 소유권, 종료 정책, 트랜잭션 작업 경계 |
+| `server/src/services/statistics.ts` | 오늘·달력의 세션 수 가중 평균. 누락 평균과 실제 0점 구분 |
 | `server/src/repositories/sessions.ts` | MySQL SQL, 행 잠금, 트랜잭션, 통계 집계 |
 | `server/test/` | 입력·인증·HTTP 오류·세션 재시도/소유권 회귀 검사 |
 | `keyboard-detect/pyproject.toml`, `uv.lock` | Python 의존성의 입력 선언과 정확한 해결 결과 |
@@ -63,20 +73,22 @@ Electron 개발 앱의 키보드 모드는 로컬 Python 프로세스를 자동 
 
 ## 측정 화면의 계약
 
-상체는 `LearningSession → PostureMonitor → useWebcam/useMediaPipe → calibration` 순서입니다. 모드 변경과 기준 다시 잡기는 이전 스트림·모델 세션을 정리하고 새 기준을 수집합니다. 중지하면 카메라도 해제합니다. 기준 수집은 현재 `turtle`, `shoulder`에 연결되어 있으며 안구 모드는 아직 비활성입니다.
+상체 화면은 `LearningSession → PostureSession → PostureMonitor`로 연결합니다. 프레임 계산은 `useWebcam/useMediaPipe → calibration → observation → scoring/evaluation → MonitorSnapshot → PostureMetrics` 순서입니다. 모드 변경과 기준 다시 잡기는 이전 스트림·모델·점수·습관 상태를 정리하고 새 기준을 수집합니다. 중지하면 카메라를 해제하고 마지막 계산까지 화면에 반영합니다. 기준 수집은 현재 `turtle`, `shoulder`에 연결되어 있으며 안구 모드는 아직 비활성입니다.
 
-키보드는 `LearningSession → KeyboardMonitor → loopback Python service → runtime adapter → finger policy` 순서입니다. Electron main은 빈 로컬 포트와 세션 토큰을 만들고 개발 환경의 `.venv` Python을 자식 프로세스로 실행합니다. 렌더러는 실행 중인 화면의 `keydown`만 전송하며 전역 키로거를 켜지 않습니다. Python은 키 영역·손끝 후보·프레임 시간차를 반환하고, 권장/허용/다름/판정 보류 결정은 앱의 버전된 정책이 담당합니다. 손 가림, 낮은 키보드 신뢰도, 프레임 시간차, 가까운 복수 후보는 오답으로 강제하지 않고 판정 보류합니다. 카메라 영상과 결과는 아직 저장하거나 원격 서버로 보내지 않습니다.
+키보드는 `LearningSession → KeyboardSession → KeyboardMonitor → loopback Python service → runtime adapter → finger policy` 순서입니다. Electron main은 빈 로컬 포트와 세션 토큰을 만들고 개발 환경의 `.venv` Python을 자식 프로세스로 실행합니다. 렌더러는 실행 중인 화면의 `keydown`만 전송하며 전역 키로거를 켜지 않습니다. Python은 키 영역·손끝 후보·프레임 시간차를 반환하고, 권장/허용/다름/판정 보류 결정은 앱의 버전된 정책이 담당합니다. 손 가림, 낮은 키보드 신뢰도, 프레임 시간차, 가까운 복수 후보는 오답으로 강제하지 않고 판정 보류합니다. 카메라 영상과 결과는 아직 저장하거나 원격 서버로 보내지 않습니다.
 
-`MonitorSnapshot`은 준비/수집/관찰/관찰 불가/오류 상태와 수집 진행률, 유효 관찰 시간, 기준 대비 변화량을 전달합니다. 사용자의 자세가 의학적으로 올바른지 판단하는 타입이 아닙니다.
+`MonitorSnapshot`은 준비/수집/관찰/관찰 불가/오류 상태와 수집 진행률, 기준 대비 변화량, 유효 관찰 시간, 모드별 현재/평균 유사도와 습관 집계·정책 버전을 전달합니다. 사용자의 자세가 의학적으로 올바른지 판단하는 타입이 아닙니다.
 
 - 2D 좌표는 이미지 가로/세로 픽셀로 환산한 뒤 어깨 너비 대비 비율을 계산합니다.
 - 약 3초의 연속 안정 관측으로 중앙값 기준을 수집합니다. 이는 잠정 수집 설정이며 점수/건강 임계값이 아닙니다.
 - 얼굴·어깨가 안 보이거나 신뢰도가 낮으면 수집을 다시 시작합니다.
 - 기준 확보 후 관측이 사라지면 값과 유효 관찰 시간의 증가를 중단합니다. 이를 휴식이나 정상으로 바꾸지 않습니다.
-- 화면의 “기준 대비 변화”는 세 지표 변화량의 절댓값 중 최대값을 어깨 너비 대비 %로 표현한 것입니다. 최종 자세 점수는 아직 없습니다.
+- 관찰 시간은 단조 캡처 시각의 양수 간격 중 500ms 이하만 더합니다. 중복·역행 시각과 누락은 연속성을 끊고 같은 구간을 다시 더하지 않습니다.
+- 화면의 “기준 대비 변화”는 모드에서 선택한 지표의 최대 절댓값입니다. 목은 코 위치·높이, 어깨는 양어깨 높이 차이를 사용합니다. 초기 v1 점수는 5% 이하 100, 30% 이상 0, 중간 선형 환산입니다. 평균은 유효 관찰 시간으로 가중합니다.
+- 점수와 별도로 관측률·연속 관찰·지속된 기준 이탈을 표시합니다. 기준 이탈과 오사용·휴식·질환 판정을 구분합니다. 산식·초기 설정·검증 한계는 [evaluation.md](evaluation.md)를 따릅니다.
 - 카메라 위치를 물리적으로 옮기면 다시 수집해야 합니다. 장치 ID/해상도 변경은 자동 감지하지만 모든 물리적 이동을 자동 판별하지는 못합니다.
 
-구체적 타입과 검증 한계는 [calibration.md](calibration.md)에 있습니다.
+좌표와 기준 수집 계약은 [calibration.md](calibration.md), 모드별 개발 책임과 통합 규칙은 [collaboration.md](collaboration.md)에 있습니다.
 
 ## 서버의 유지 계약과 변경
 
@@ -87,8 +99,11 @@ Electron 개발 앱의 키보드 모드는 로컬 Python 프로세스를 자동 
 - 로그 기록에서도 세션 소유자와 종료 여부를 검사합니다. 잘못된 입력은 400, 타인의 세션은 404, 종료 후 기록은 409로 처리합니다.
 - 비동기 DB 오류를 공통 오류 응답으로 전달합니다. `/health`는 DB 준비 여부를 검사하지 않습니다.
 - MySQL 트랜잭션/행 잠금은 실제 배포 DB의 엔진·시간대·SQL mode에서 추가 검증해야 합니다. 이번 단위 테스트의 대역 저장소가 실제 DB를 대체해 검증해 주는 것은 아닙니다.
+- 일별 집계는 자정을 넘어도 기존처럼 세션 시작일에 전체 시간을 귀속합니다. 오늘·달력 점수는 세션 수 가중 평균이며 평균이 누락된 행은 점수 분모에서 제외합니다. 다일 세션의 로그는 날짜와 분으로 그룹화합니다.
 
 통계 그래프에 남아 있는 `AVG(measured_value) AS score`는 기존 계약입니다. 이를 새 자세 점수로 쓰면 안 됩니다. 현재 DB 구조에는 새 기준 자세/손가락 오사용/휴식/점수 버전을 모두 저장할 계약이 없으므로 DB 선정 후 마이그레이션을 설계합니다.
+
+결정성·누락·임계값·자정의 자동 검증 결과와 실제 DB 검증 한계는 [evaluation.md](evaluation.md)에 정리했습니다. 키보드 평가는 이번 검증에서 제외했습니다.
 
 ## 재사용과 교체 범위
 
