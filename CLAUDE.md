@@ -1,4 +1,4 @@
-# Repository Agent Instructions
+# Project Instructions for Claude Code
 
 ## Instruction priority
 
@@ -102,51 +102,49 @@ approval boundary, an unsafe operation, or an unresolved conflict.
 
 ## Automated AI work-item workflow
 
-This repository uses the workflow under `docs/ai-workflow/` and the repository
-skill at `.agents/skills/ai-workflow-orchestrator/SKILL.md`.
+This repository uses the shared workflow under `docs/ai-workflow/` and the
+project skill at `.claude/skills/ai-workflow-orchestrator/SKILL.md`.
 
 ### Activation
 
-Use the `ai-workflow-orchestrator` skill whenever the user:
+Invoke the `ai-workflow-orchestrator` skill whenever the user:
 
 - identifies a directory under `docs/ai-workflow/work-items/` as the current work folder;
 - asks to start, continue, resume, review, understand, or finish a tracked work item; or
-- replies that a requested human-owned workflow file has been written or updated.
+- says that a requested human-owned workflow file has been written or updated.
 
-Once a work-item directory is identified in a thread, keep it as the active work
-item until the user identifies a different one. Do not ask the user to repeat the
-path on every turn.
+Once a work-item directory is identified, keep it active for the session until the
+user identifies another. Do not ask the user to repeat the path on every turn.
 
 ### Bootstrap
 
-The user may create only `01_TASK_INPUT.md` in a new work-item directory. If the
-directory has a meaningful `01_TASK_INPUT.md` but no `STATUS.md`, initialize the
-remaining work-item structure automatically using:
+The user may create only `01_TASK_INPUT.md`. If it is meaningful and `STATUS.md`
+does not exist, initialize the remaining work-item structure using:
 
 - `docs/ai-workflow/ai/00_INITIALIZE_WORK_ITEM.md`
 - `docs/ai-workflow/templates/WORK_ITEM_STATUS_TEMPLATE.md`
 
-Preserve the user's input file. Never replace it with the source template.
+Preserve the user's input and never fill in the source templates directly.
 
 ### Continuous progression
 
-At the start of every work-item turn:
+At the start of each work-item turn:
 
 1. Read `docs/ai-workflow/AUTOMATION_POLICY.md`.
 2. Read the active work item's `STATUS.md` and `01_TASK_INPUT.md`.
-3. Claim or verify the Codex executor lock according to
+3. Claim or verify the Claude executor lock according to
    `docs/ai-workflow/CROSS_AGENT_HANDOFF.md`.
 4. Reconcile the recorded branch, HEAD, working tree, artifacts, and test revision
    with the actual repository.
-5. Select the next workflow stage and load only its relevant instruction and
+5. Select the next workflow state and load only the relevant instruction and
    template files.
-6. Continue through all safe automated stages in the same turn.
-7. Update `STATUS.md` after each material stage, checkpoint, block, or handoff.
-8. Stop only at a configured human gate, a material unknown, an approval boundary,
-   or an unsafe/inconsistent repository state.
+6. Continue through safe automated stages in the same turn.
+7. Update `STATUS.md` after every material stage, checkpoint, block, or handoff.
+8. Stop only at a configured human gate, material unknown, approval boundary, or
+   unsafe/inconsistent repository state.
 
-Do not ask the user which workflow document should be used. Select it from the
-state machine. Do not ask for repository facts that can be safely inspected.
+Do not ask the user which workflow document to use. Do not ask for facts that can
+be safely established from the repository.
 
 ### Human-owned files
 
@@ -154,45 +152,38 @@ The default human-owned files are:
 
 - `01_TASK_INPUT.md`
 - `04_PLAN_REVIEW.md`
-- an ADR's approval section when an ADR is required
+- an ADR approval section when required
 - `13_UNDERSTANDING.md`
 - `16_FINAL_APPROVAL.md`
 
-When one is required, stop with one concise instruction containing:
+At a human gate, state the exact file and section, explain the decision in plain
+language, and end with the short reply that resumes work, normally `작성했어`.
 
-- the exact file path;
-- the section that must be completed;
-- a plain-language explanation of the decision;
-- the recommended choice and material tradeoff when appropriate; and
-- the exact short reply the user can send after saving it, such as `작성했어`.
-
-When the user replies that the file is complete, re-read the file, verify that the
-required decision is present, and resume automatically. Do not require the user to
-repeat the work-item path in the same thread.
-
-### Git and external actions
-
-Follow `docs/ai-workflow/AUTOMATION_POLICY.md` for local checkpoint commits.
-Never include unrelated user changes in a workflow commit. Do not push, create or
-merge a pull request, deploy, delete data, or mutate external systems unless the
-policy and the user's explicit authorization allow that exact action.
+When the user replies, re-read the file, verify that the required decision exists,
+and resume automatically. If incomplete, ask only for the missing decision.
 
 ### Cross-agent safety
 
-Codex and Claude Code share the same work-item files and Git branch but must not edit
-the same work item concurrently. If `STATUS.md` records Claude as the active
-executor, do not take over until a handoff checkpoint exists or the user explicitly
-requests and approves reconciliation. Before handing off, update STATUS, record
-uncommitted changes and test validity, and release or transfer the executor lock.
+Codex and Claude share the same work-item files and Git branch but must not edit the
+same work item concurrently. If `STATUS.md` records Codex as the active executor,
+do not take over until a handoff checkpoint exists or the user explicitly requests
+and approves reconciliation. Before handing back, update STATUS, record uncommitted
+changes and test validity, and release or transfer the executor lock.
+
+### Git and external actions
+
+Follow `docs/ai-workflow/AUTOMATION_POLICY.md`. Never commit unrelated user changes. Do not push,
+create or merge a pull request, deploy, delete data, or mutate external systems
+without the exact authorization required by policy and the user.
 
 ### Evidence
 
-`STATUS.md` is a navigation index, not the source of truth. Actual Git state,
-files, test output, and review evidence take precedence. If they conflict, stop
-automation, record the mismatch, and request only the decision needed to proceed.
+`STATUS.md` is a navigation index, not the source of truth. Git state, files, tests,
+and review evidence take precedence. On conflict, stop automation, record the
+mismatch, and request only the decision needed to proceed.
 
-### Existing repository instructions
+### Existing project instructions
 
-More specific nested `AGENTS.md` files continue to apply to their directories.
-Repository build, test, security, and ownership rules take precedence over generic
-workflow defaults.
+Preserve other project instructions, build commands, coding conventions, security
+rules, and more specific nested `CLAUDE.md` files. More specific rules governing
+changed code take precedence over generic workflow defaults.

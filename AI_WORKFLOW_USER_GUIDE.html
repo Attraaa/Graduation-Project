@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Codex · Claude Code AI 개발 워크플로 사용 가이드</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f4f7fb; --surface: #fff; --surface-soft: #f8fafc;
+      --text: #182230; --muted: #5f6c7b; --line: #dce3eb;
+      --brand: #2457d6; --brand-dark: #183f9f; --brand-soft: #eaf0ff;
+      --green: #16794b; --green-soft: #e8f7ef;
+      --orange: #9b5500; --orange-soft: #fff3df;
+      --red-soft: #fff0f0; --radius: 18px;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body { margin: 0; color: var(--text); background: var(--bg); font-family: Pretendard, "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif; line-height: 1.68; word-break: keep-all; }
+    a { color: var(--brand); }
+    .hero { padding: 64px 24px 76px; color: #fff; background: radial-gradient(circle at 80% 15%, rgba(126,164,255,.55), transparent 34%), linear-gradient(135deg,#122c6d 0%,#2457d6 55%,#4e78df 100%); }
+    .hero-inner, .layout { width: min(1180px, 100%); margin: 0 auto; }
+    .eyebrow { margin: 0 0 12px; font-size: 14px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; opacity: .86; }
+    h1 { max-width: 880px; margin: 0; font-size: clamp(34px,5vw,58px); line-height: 1.16; letter-spacing: -.045em; }
+    .hero p { max-width: 820px; margin: 22px 0 0; font-size: clamp(17px,2vw,21px); color: rgba(255,255,255,.88); }
+    .hero-tags { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 28px; }
+    .hero-tag { padding: 8px 13px; border: 1px solid rgba(255,255,255,.28); border-radius: 999px; background: rgba(255,255,255,.10); font-size: 14px; font-weight: 700; }
+    .layout { display: grid; grid-template-columns: 250px minmax(0,1fr); gap: 32px; padding: 34px 24px 80px; }
+    nav { position: sticky; top: 22px; align-self: start; padding: 18px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); box-shadow: 0 8px 30px rgba(30,48,76,.06); }
+    nav strong { display: block; margin: 0 0 10px; font-size: 14px; color: var(--muted); }
+    nav a { display: block; padding: 8px 10px; border-radius: 9px; color: #344154; text-decoration: none; font-size: 14px; font-weight: 650; }
+    nav a:hover, nav a:focus-visible { color: var(--brand-dark); background: var(--brand-soft); outline: none; }
+    main { min-width: 0; }
+    section { margin: 0 0 28px; padding: 30px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); box-shadow: 0 8px 30px rgba(30,48,76,.055); scroll-margin-top: 20px; }
+    h2 { margin: 0 0 10px; font-size: clamp(25px,3vw,34px); line-height: 1.3; letter-spacing: -.035em; }
+    h3 { margin: 28px 0 8px; font-size: 20px; line-height: 1.4; }
+    p { margin: 10px 0; }
+    .lead { margin-top: 0; color: var(--muted); font-size: 17px; }
+    .summary-grid, .tool-grid, .gate-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; margin-top: 20px; }
+    .summary-card, .tool-card, .gate-card { padding: 18px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface-soft); }
+    .summary-card b, .tool-card b, .gate-card b { display: block; margin-bottom: 6px; font-size: 16px; }
+    .number { display: inline-grid; width: 30px; height: 30px; margin-right: 7px; place-items: center; border-radius: 50%; color: #fff; background: var(--brand); font-size: 14px; font-weight: 800; }
+    .flow { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 10px; margin-top: 20px; }
+    .flow div { position: relative; min-height: 108px; padding: 17px 15px; border: 1px solid #cfd9e9; border-radius: 14px; background: linear-gradient(180deg,#fff,#f4f7fd); font-size: 14px; }
+    .flow div:not(:last-child)::after { content: "→"; position: absolute; z-index: 2; top: 35px; right: -19px; width: 28px; height: 28px; color: var(--brand); background: var(--bg); text-align: center; font-size: 21px; font-weight: 900; }
+    .flow b { display: block; margin-bottom: 4px; }
+    .step { display: grid; grid-template-columns: 46px minmax(0,1fr); gap: 14px; margin-top: 22px; }
+    .step-index { display: grid; width: 42px; height: 42px; place-items: center; border-radius: 13px; color: #fff; background: var(--brand); font-size: 17px; font-weight: 900; }
+    .step h3 { margin: 3px 0 6px; }
+    pre { position: relative; overflow-x: auto; margin: 14px 0; padding: 18px 54px 18px 18px; border: 1px solid #25344c; border-radius: 13px; color: #ecf2ff; background: #172133; font: 14px/1.65 Consolas,"SFMono-Regular",Menlo,monospace; white-space: pre-wrap; word-break: break-word; }
+    code { padding: 2px 6px; border-radius: 6px; color: #183f9f; background: #edf2ff; font-family: Consolas,"SFMono-Regular",Menlo,monospace; font-size: .92em; }
+    pre code { padding: 0; color: inherit; background: transparent; }
+    .copy { position: absolute; top: 10px; right: 10px; padding: 6px 9px; border: 1px solid #56657a; border-radius: 8px; color: #fff; background: #293850; cursor: pointer; font: 700 12px/1 system-ui,sans-serif; }
+    .copy:hover { background: #3b4c67; }
+    .note, .warning, .success { margin: 18px 0 0; padding: 15px 17px; border-radius: 12px; border-left: 5px solid; }
+    .note { border-color: var(--brand); background: var(--brand-soft); }
+    .warning { border-color: var(--orange); background: var(--orange-soft); }
+    .success { border-color: var(--green); background: var(--green-soft); }
+    table { width: 100%; margin-top: 16px; border-collapse: collapse; font-size: 14px; }
+    th, td { padding: 12px; border: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { background: #eef3fb; }
+    ul, ol { padding-left: 23px; }
+    li + li { margin-top: 6px; }
+    .do-not { border-color: #efcccc; background: var(--red-soft); }
+    .mini { color: var(--muted); font-size: 14px; }
+    .checklist { display: grid; gap: 9px; margin-top: 16px; }
+    .checklist div { padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-soft); }
+    footer { padding: 30px 24px 48px; color: var(--muted); text-align: center; font-size: 13px; }
+    @media (max-width:900px) { .layout { grid-template-columns: 1fr; } nav { position: static; } nav .links { display: grid; grid-template-columns: repeat(2,1fr); } .flow { grid-template-columns: repeat(2,minmax(0,1fr)); } .flow div::after { display: none; } }
+    @media (max-width:620px) { .hero { padding: 46px 18px 56px; } .layout { padding: 22px 14px 60px; } section { padding: 22px 18px; } nav .links, .summary-grid, .tool-grid, .gate-grid, .flow { grid-template-columns: 1fr; } .step { grid-template-columns: 1fr; } table { display: block; overflow-x: auto; white-space: nowrap; } }
+    @media print { body { background: #fff; } .hero { padding: 28px; background: #234da9 !important; print-color-adjust: exact; } .layout { display: block; padding: 20px 0; } nav, .copy { display: none; } section { break-inside: avoid; box-shadow: none; } }
+  </style>
+</head>
+<body>
+  <header class="hero">
+    <div class="hero-inner">
+      <p class="eyebrow">AI-assisted development workflow</p>
+      <h1>Codex · Claude Code<br>사용자 가이드</h1>
+      <p>개발을 잘 몰라도 작업 입력, 계획 승인, 모르는 부분 질문, 최종 판단만 하면 되도록 만든 저장소 기반 워크플로입니다.</p>
+      <div class="hero-tags"><span class="hero-tag">Codex 호환</span><span class="hero-tag">Claude Code 호환</span><span class="hero-tag">비개발자용</span><span class="hero-tag">상태 자동 기록</span></div>
+    </div>
+  </header>
+
+  <div class="layout">
+    <nav aria-label="문서 목차">
+      <strong>빠른 이동</strong>
+      <div class="links">
+        <a href="#summary">한눈에 보기</a><a href="#install">최초 1회 설치</a><a href="#start">새 작업 시작</a><a href="#conversation">AI와 대화</a><a href="#gates">사람 승인 단계</a><a href="#understand">모를 때 질문</a><a href="#switch">Codex ↔ Claude 인계</a><a href="#new-chat">새 대화에서 재개</a><a href="#permissions">AI가 자동으로 안 하는 일</a><a href="#quick">가장 짧은 사용법</a>
+      </div>
+    </nav>
+
+    <main>
+      <section id="summary">
+        <h2>사용자가 기억할 것은 네 가지입니다</h2>
+        <p class="lead">계획 파일 선택, 코드 조사, 구현, 테스트, 리뷰, 상태 갱신은 AI가 담당합니다.</p>
+        <div class="summary-grid">
+          <div class="summary-card"><b><span class="number">1</span>문제를 작성</b><code>01_TASK_INPUT.md</code>에 현재 문제와 원하는 결과를 씁니다.</div>
+          <div class="summary-card"><b><span class="number">2</span>작업 폴더 전달</b>Codex 또는 Claude Code에 폴더 경로를 한 번 알려줍니다.</div>
+          <div class="summary-card"><b><span class="number">3</span>요청받은 파일만 작성</b>계획 검토·이해 확인·최종 승인 파일만 확인합니다.</div>
+          <div class="summary-card"><b><span class="number">4</span>저장 후 한마디</b>같은 대화에서 <code>작성했어</code>라고 보내면 자동 재개합니다.</div>
+        </div>
+        <div class="flow"><div><b>① 사용자 입력</b>문제와 원하는 결과 작성</div><div><b>② AI 계획</b>코드 조사와 위험 분석</div><div><b>③ AI 실행</b>승인 범위 구현·검증</div><div><b>④ 사람 판단</b>이해 확인과 최종 승인</div></div>
+      </section>
+
+      <section id="install">
+        <h2>최초 1회: 프로젝트에 설치</h2>
+        <p class="lead">프로젝트 관리자 한 명이 패키지 내용을 저장소 최상위에 넣습니다. 일반 사용자는 매번 설치하지 않습니다.</p>
+        <pre><button class="copy" type="button">복사</button><code>your-project/
+├─ AGENTS.md                  # Codex 프로젝트 지침
+├─ CLAUDE.md                  # Claude Code 프로젝트 지침
+├─ .agents/skills/            # Codex 자동 워크플로
+├─ .claude/skills/            # Claude Code 자동 워크플로
+└─ docs/ai-workflow/          # 공통 양식과 작업 기록</code></pre>
+        <div class="warning"><strong>Moti용 사전 병합본입니다.</strong> 이 패키지의 <code>AGENTS.md</code>와 <code>CLAUDE.md</code>에는 제공된 Moti 규칙이 이미 포함되어 있습니다. 대상 파일이 그 이후 수정되었다면 덮어쓰지 말고 diff를 확인해 새 규칙만 합치세요.</div>
+        <p class="mini">설치 후 Codex 또는 Claude Code를 새 작업/세션으로 다시 열면 지침과 스킬을 처음부터 인식할 수 있습니다.</p>
+      </section>
+
+      <section id="start">
+        <h2>새 작업 시작하기</h2>
+        <div class="step"><div class="step-index">1</div><div><h3>작업 폴더를 만듭니다</h3><pre><button class="copy" type="button">복사</button><code>docs/ai-workflow/work-items/YYYY-MM-DD/담당자/작업이름/</code></pre><p>예:</p><pre><button class="copy" type="button">복사</button><code>docs/ai-workflow/work-items/2026-09-16/minsu/payment-timeout/</code></pre></div></div>
+        <div class="step"><div class="step-index">2</div><div><h3>작업 입력 파일을 복사합니다</h3><p><code>docs/ai-workflow/user/01_TASK_INPUT.md</code>를 작업 폴더로 복사합니다.</p><pre><code>docs/ai-workflow/work-items/2026-09-16/minsu/payment-timeout/
+└─ 01_TASK_INPUT.md</code></pre></div></div>
+        <div class="step"><div class="step-index">3</div><div><h3>주석 예시를 보며 작성합니다</h3><pre><code>## 한 문장 목표
+
+&lt;!-- 예: 결제 응답이 늦어도 같은 주문이 두 번 결제되지 않게 한다. --&gt;
+
+회원 가입 인증번호가 늦게 도착해도 중복 발송되지 않게 한다.</code></pre><div class="note"><code>&lt;!-- 예: ... --&gt;</code> 주석은 편집 화면에서는 보이지만 Markdown 미리보기에서는 숨겨집니다. 지우지 않아도 됩니다.</div></div></div>
+        <div class="step"><div class="step-index">4</div><div><h3>기술 내용을 모르면 그대로 표시합니다</h3><pre><code>- 관련 디렉터리: AI 조사 필요
+- 관련 파일: AI 조사 필요
+- 관련 화면/API/작업: 회원 가입 화면의 인증번호 발송 버튼
+- 관련 이슈/PR/문서: 고객 문의 #328</code></pre><p>추측보다 <code>AI 조사 필요</code>, <code>모름</code>, <code>담당자 확인 필요</code>라고 쓰는 편이 안전합니다.</p></div></div>
+      </section>
+
+      <section id="conversation">
+        <h2>Codex 또는 Claude Code에 시작 요청하기</h2>
+        <p class="lead">두 도구 모두 같은 시작 문장을 사용합니다.</p>
+        <pre><button class="copy" type="button">복사</button><code>현재 작업 폴더는 다음입니다.
+
+`docs/ai-workflow/work-items/2026-09-16/minsu/payment-timeout/`
+
+이 폴더의 `01_TASK_INPUT.md`를 읽고 자동 워크플로를 시작하세요.
+`STATUS.md`가 없다면 자동으로 생성하세요.
+
+프로젝트의 기존 지침과 실제 Git 상태를 확인하고,
+사람의 승인이 필요한 단계 전까지 자동으로 진행하세요.</code></pre>
+        <div class="tool-grid"><div class="tool-card"><b>Codex가 읽는 것</b><code>AGENTS.md</code><br><code>.agents/skills/</code><br><code>docs/ai-workflow/</code></div><div class="tool-card"><b>Claude Code가 읽는 것</b><code>CLAUDE.md</code><br><code>.claude/skills/</code><br><code>docs/ai-workflow/</code></div></div>
+        <h3>AI가 자동으로 하는 일</h3>
+        <ol><li><code>STATUS.md</code> 생성 또는 Git 상태와 대조</li><li>관련 코드·테스트·기존 계약 조사</li><li>계획과 위험·롤백 방법 작성</li><li>사람 승인이 필요하면 작성할 파일을 지정하고 정지</li><li>승인된 단계만 구현하고 테스트·리뷰·문서 갱신</li></ol>
+        <h3>파일을 작성한 뒤</h3>
+        <pre><button class="copy" type="button">복사</button><code>작성했어</code></pre>
+        <p>같은 대화에서는 이 한마디만으로 충분합니다. AI가 파일을 다시 읽고 다음 단계부터 이어갑니다.</p>
+      </section>
+
+      <section id="gates">
+        <h2>사람이 확인하는 네 가지 관문</h2>
+        <p class="lead">AI는 사람 판단이 필요한 시점에만 멈춥니다.</p>
+        <div class="gate-grid">
+          <div class="gate-card"><b>계획 검토</b><code>04_PLAN_REVIEW.md</code><br>목표·범위·위험·첫 구현 단계를 승인하거나 수정 요청합니다.</div>
+          <div class="gate-card"><b>중요 설계 결정</b><code>adr/ADR-....md</code><br>API·DB·권한·재시도처럼 장기 영향이 있는 선택을 검토합니다.</div>
+          <div class="gate-card"><b>변경 이해</b><code>13_UNDERSTANDING.md</code><br>변경 전후, 실행 흐름, 상태 변경, 위험과 테스트를 확인합니다.</div>
+          <div class="gate-card"><b>최종 판단</b><code>16_FINAL_APPROVAL.md</code><br>승인, 조건부 승인, 재검토 또는 보류를 선택합니다.</div>
+        </div>
+        <h3>AI의 요청 예시</h3>
+        <pre><code>현재 위치: 계획 검토
+완료한 내용: 코드 조사와 계획 초안 작성
+멈춘 이유: 구현 전에 사람의 범위 승인이 필요함
+작성할 파일: docs/ai-workflow/work-items/.../04_PLAN_REVIEW.md
+저장 후 보낼 답변: 작성했어</code></pre>
+        <div class="success">사용자는 AI가 지정한 파일만 작성하면 됩니다. 단계별 AI 지침이나 템플릿을 직접 고를 필요가 없습니다.</div>
+      </section>
+
+      <section id="understand">
+        <h2>이해되지 않을 때는 승인하지 말고 질문합니다</h2>
+        <p class="lead">코드를 전부 이해하는 것이 아니라 중요한 동작과 위험을 설명할 수 있으면 됩니다.</p>
+        <pre><button class="copy" type="button">복사</button><code>계획에 DB 스키마 변경이 필요하다고 적혀 있는데 이해하지 못했어.
+
+1. 왜 필요한지
+2. DB를 바꾸지 않는 방법이 있는지
+3. 기존 데이터에 어떤 영향을 주는지
+4. 문제가 생기면 되돌릴 수 있는지
+
+개발을 모르는 사람 기준으로 설명해 줘.
+아직 DB 변경은 승인하지 않을게.</code></pre>
+        <h3>변경사항 이해를 요청하는 문장</h3>
+        <pre><button class="copy" type="button">복사</button><code>13_UNDERSTANDING.md를 작성했어.
+
+`모름`이라고 작성한 항목만 실제 코드와 테스트를 근거로 설명해 줘.
+전문 용어를 줄이고 실행 흐름은 최대 5단계로 설명해 줘.
+내가 잘못 이해한 부분이 있다면 무조건 동의하지 말고 교정해 줘.</code></pre>
+        <div class="note">안전한 표현: <code>이해하지 못했습니다</code>, <code>AI 조사 필요</code>, <code>담당자 확인 필요</code>, <code>아직 승인하지 않습니다</code>.</div>
+      </section>
+
+      <section id="switch">
+        <h2>Codex와 Claude Code 사이에서 인계하기</h2>
+        <p class="lead">두 도구는 같은 문서를 공유할 수 있지만 같은 작업·브랜치를 동시에 수정하면 안 됩니다.</p>
+        <h3>1. 현재 도구에 인계 준비 요청</h3>
+        <pre><button class="copy" type="button">복사</button><code>이 작업을 다른 AI 도구로 인계하려고 해.
+
+현재 작업 폴더의 상태를 실제 Git 상태와 대조하고,
+`CROSS_AGENT_HANDOFF.md` 규칙에 따라 인계를 준비해 줘.
+
+마지막 완료 단계, 미완료 작업, 체크포인트 커밋,
+미커밋 변경, 마지막 테스트, 다음에 읽을 파일을 정리하고
+인계가 가능하면 현재 실행 도구 잠금을 해제해 줘.</code></pre>
+        <h3>2. 새 도구에서 재개</h3>
+        <pre><button class="copy" type="button">복사</button><code>이 작업을 다른 AI 도구에서 이어받습니다.
+
+현재 작업 폴더는 다음입니다.
+`docs/ai-workflow/work-items/2026-09-16/minsu/payment-timeout/`
+
+`STATUS.md`, 인계 문서, 현재 Git 브랜치, HEAD,
+staged/unstaged/untracked 변경을 대조하세요.
+
+불일치가 있으면 코드를 수정하지 말고 먼저 보고하세요.
+일치하면 현재 실행 도구를 기록하고 자동 워크플로를 재개하세요.</code></pre>
+        <div class="warning do-not"><strong>금지:</strong> Codex와 Claude Code가 같은 작업 폴더와 같은 브랜치를 동시에 수정하게 하지 마세요. 서로 다른 작업은 별도 브랜치 또는 worktree에서 진행할 수 있습니다.</div>
+      </section>
+
+      <section id="new-chat">
+        <h2>새 대화에서 작업 재개하기</h2>
+        <p>새 대화는 이전 대화의 활성 경로를 모를 수 있으므로 작업 폴더를 다시 알려줍니다.</p>
+        <pre><button class="copy" type="button">복사</button><code>현재 작업 폴더는 다음입니다.
+
+`docs/ai-workflow/work-items/2026-09-16/minsu/payment-timeout/`
+
+이 폴더의 `STATUS.md`와 실제 Git 상태를 대조하세요.
+완료된 문서와 테스트가 현재 코드에서도 유효한지 확인한 뒤
+자동 워크플로를 재개하세요.</code></pre>
+        <p>AI는 현재 브랜치, HEAD, staged·unstaged·untracked 변경과 테스트 유효성을 비교해야 합니다.</p>
+      </section>
+
+      <section id="permissions">
+        <h2>AI가 자동으로 하지 않는 일</h2>
+        <p class="lead">외부 또는 복구하기 어려운 작업은 별도 허가가 필요합니다.</p>
+        <table><thead><tr><th>자동 진행 가능</th><th>별도 명시적 요청 필요</th></tr></thead><tbody>
+          <tr><td>코드와 테스트 조사</td><td>원격 저장소로 push</td></tr>
+          <tr><td>계획·ADR·PR 본문 초안</td><td>실제 PR 생성과 병합</td></tr>
+          <tr><td>승인 범위 내 코드 수정과 테스트</td><td>배포와 프로덕션 데이터 변경</td></tr>
+          <tr><td><code>STATUS.md</code>와 인계 문서 갱신</td><td>외부 메시지, 권한·비밀 정보 변경</td></tr>
+          <tr><td>정책이 허용한 로컬 체크포인트</td><td>삭제 또는 복구하기 어려운 작업</td></tr>
+        </tbody></table>
+      </section>
+
+      <section id="quick">
+        <h2>가장 짧은 사용법</h2>
+        <div class="checklist"><div>☐ 작업 폴더를 만들었다.</div><div>☐ <code>01_TASK_INPUT.md</code>를 복사하고 작성했다.</div><div>☐ AI에 작업 폴더 경로를 보냈다.</div><div>☐ AI가 지정한 사람용 파일만 작성했다.</div><div>☐ 저장 후 <code>작성했어</code>라고 보냈다.</div><div>☐ 모르는 내용은 <code>모름</code>으로 표시하고 질문했다.</div><div>☐ 다른 AI로 바꾸기 전 인계를 완료했다.</div></div>
+        <h3>복사해서 바로 쓰는 시작 문장</h3>
+        <pre><button class="copy" type="button">복사</button><code>현재 작업 폴더는 다음입니다.
+
+`docs/ai-workflow/work-items/날짜/담당자/작업이름/`
+
+이 작업을 자동 워크플로로 진행하세요.</code></pre>
+        <p class="success"><strong>사용자의 역할:</strong> 문제를 설명하고, 범위를 승인하고, 모르는 부분을 질문하고, 최종 결과를 승인하거나 보류합니다.</p>
+      </section>
+    </main>
+  </div>
+
+  <footer>Codex와 Claude Code가 공유하는 저장소 기반 AI 개발 워크플로 사용자용 안내서</footer>
+  <script>
+    document.querySelectorAll('.copy').forEach((button) => {
+      button.addEventListener('click', async () => {
+        const code = button.parentElement.querySelector('code');
+        try {
+          await navigator.clipboard.writeText(code ? code.innerText : '');
+          const original = button.textContent;
+          button.textContent = '복사됨';
+          setTimeout(() => { button.textContent = original; }, 1400);
+        } catch (_) { button.textContent = '선택해서 복사'; }
+      });
+    });
+  </script>
+</body>
+</html>
