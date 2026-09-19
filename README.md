@@ -53,6 +53,6 @@ AGENTS.md와 README.md를 먼저 읽고, docs/architecture.md, docs/product-deci
 - UI: 공통 색상/테마, 화면 틀, 대화상자 호출 구조를 정리했습니다. 모든 화면의 시각 디자인을 전면 교체한 것은 아닙니다.
 - 서버: 인증·입력 검증·오류 처리와 세션 종료/집계 경계를 정리했습니다. DB 제품은 미정이며 현재 MySQL 어댑터를 유지합니다.
 - 키보드: Electron 개발 앱에서 로컬 Python 분석기를 자동 실행해 손캠 프레임과 현재 화면 키 입력을 연결합니다. Python은 키/손가락 후보를 반환하고 앱이 버전된 임시 표로 권장 여부를 판정합니다. 저장과 설치 파일용 Python exe 동봉은 후속 작업입니다.
-- 화면의 로그인·통계·이력은 아직 데모 저장소/예시 데이터입니다. AI 요약, BYOK, SQLite 동기화는 설계 제안 단계입니다.
+- 로그인은 로컬 데모입니다. 목·어깨 통계와 학습이력은 Electron의 로컬 SQLite 기록을 조회합니다. AI·의학 정보는 예시로 구분하며 원격 서버 전송, AI 요약, BYOK, SQLite 동기화는 후속 작업입니다. 저장 계약과 복구·삭제 정책은 [database/README.md](database/README.md)를 확인합니다.
 
 **기존 DB 주의:** `server/schema.sql`은 테이블을 삭제하는 초기화 SQL입니다. 보존할 데이터가 있는 DB에 실행하지 않습니다. `front/database_schema.sql`도 현재 서버와 구조가 다릅니다.

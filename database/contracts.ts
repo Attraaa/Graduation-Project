@@ -42,6 +42,7 @@ export interface RecordQuery {
   offset?: number;
 }
 export interface RecordPage {
+  counts: Record<string, number>;
   records: PostureRecord[];
   hasMore: boolean;
 }
@@ -57,9 +58,11 @@ export interface StatisticsRow extends Totals {
   habitPolicyVersion: string;
   longestContinuousMs: number;
   sessionCount: number;
+  recordIds: string[];
 }
 export type RecordsResult<T> = { ok: true; value: T } | { ok: false; error: string };
 export interface RecordsApi {
+  onClosing(listener: () => Promise<boolean>): () => void;
   generation(owner: string): Promise<RecordsResult<number>>;
   write(batch: RecordBatch): Promise<RecordsResult<void>>;
   list(query: RecordQuery): Promise<RecordsResult<RecordPage>>;

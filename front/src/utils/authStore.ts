@@ -105,6 +105,11 @@ export const changePassword = (currentPassword: string, nextPassword: string) =>
   return { ok: true, message: '비밀번호가 변경되었습니다.' };
 };
 
-export const clearStatistics = () => {
-  localStorage.removeItem('postureAI.history');
+export const clearStatistics = async () => {
+  const owner = getCurrentUser()?.id;
+  if (!owner) throw new Error('로그인이 필요합니다.');
+  const { recordsApi, recordValue } = await import('../features/records/api');
+  const { discardDeletedRecordings } = await import('../features/records/recording');
+  await recordValue(recordsApi().clear(owner));
+  discardDeletedRecordings(owner);
 };

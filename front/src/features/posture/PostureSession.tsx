@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Play, RotateCcw, Square } from 'lucide-react';
 import Button from '../../components/Button';
 import PostureMonitor from '../../components/PostureMonitor';
@@ -10,6 +10,8 @@ import { shoulderScorePolicy } from './modes/shoulder';
 import { turtleScorePolicy } from './modes/turtle';
 import PostureMetrics from './PostureMetrics';
 import type { PostureMode } from './scoring';
+import { beginPostureRecording } from '../records/recording';
+import RecordingStatus from '../records/RecordingStatus';
 
 const reasonText: Record<CalibrationReason, string> = {
   'invalid-frame': '카메라 화면을 준비하고 있습니다.',
@@ -28,6 +30,11 @@ export default function PostureSession({ modeId }: { modeId: PostureMode }) {
   const policy = modeId === 'turtle' ? turtleScorePolicy : shoulderScorePolicy;
   const [snapshot, setSnapshot] = useState(() => createMonitorSnapshot(policy));
   const { isRunning, elapsedSeconds, run, deviceId } = controls;
+  const stop = controls.stop;
+  useEffect(() => {
+    window.addEventListener('moti-stop-measurement', stop);
+    return () => window.removeEventListener('moti-stop-measurement', stop);
+  }, [stop]);
   const start = () => {
     setSnapshot(createMonitorSnapshot(policy));
     controls.start();
@@ -63,9 +70,10 @@ export default function PostureSession({ modeId }: { modeId: PostureMode }) {
           </div>
         )}
         <div className="flex h-[min(48vh,440px)] min-h-[260px]">
-          <PostureMonitor key={run} isRunning={isRunning} deviceId={deviceId} policy={policy} onUpdate={setSnapshot} />
+          <PostureMonitor key={run} isRunning={isRunning} deviceId={deviceId} policy={policy} onUpdate={setSnapshot} recordCapture={beginPostureRecording} />
         </div>
         <PostureMetrics snapshot={snapshot} elapsedSeconds={elapsedSeconds} isRunning={isRunning} />
+        <RecordingStatus />
       </section>
     </SessionFrame>
   );

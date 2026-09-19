@@ -6,6 +6,7 @@ import { useDialog } from '../components/dialog/useDialog';
 
 const Settings = () => {
   const { notify, confirm } = useDialog();
+  const [clearing, setClearing] = useState(false);
   const currentUser = getCurrentUser();
   const [notificationsEnabled, setNotificationsEnabled] = useState(localStorage.getItem('postureAI.notifications') !== 'off');
   const [darkMode, setDarkMode] = useState(localStorage.getItem('postureAI.theme') === 'dark');
@@ -56,16 +57,22 @@ const Settings = () => {
   };
 
   const handleClearStatistics = async () => {
+    if (clearing) return;
     const confirmed = await confirm({
       title: '데이터 삭제',
-      message: '통계와 학습이력 데이터를 삭제하시겠습니까?\n삭제한 데이터는 되돌릴 수 없습니다.',
+      message: '현재 계정의 이 PC에 저장된 통계와 학습이력을 삭제하시겠습니까?\n삭제한 데이터는 되돌릴 수 없습니다.',
       tone: 'danger',
       confirmLabel: '삭제하기',
       cancelLabel: '유지하기',
     });
     if (!confirmed) return;
-    clearStatistics();
-    await notify({ title: '삭제 완료', message: '통계 삭제 요청이 처리되었습니다.', tone: 'success' });
+    setClearing(true);
+    try {
+      await clearStatistics();
+      await notify({ title: '삭제 완료', message: '현재 계정의 로컬 통계와 학습이력을 삭제했습니다.', tone: 'success' });
+    } catch (error) {
+      await notify({ title: '삭제 실패', message: error instanceof Error ? error.message : '기록 삭제에 실패했습니다.', tone: 'warning' });
+    } finally { setClearing(false); }
   };
 
   return (
@@ -192,7 +199,7 @@ const Settings = () => {
           <h2 className="text-xl font-black text-gray-700 mb-4 flex items-center">
             <Trash2 className="mr-2 text-[#ff4b4b]" /> 데이터 관리
           </h2>
-          <Button type="button" variant="danger" onClick={handleClearStatistics}>
+          <Button type="button" variant="danger" disabled={clearing} onClick={handleClearStatistics}>
             통계 삭제
           </Button>
         </div>

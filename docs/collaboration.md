@@ -55,3 +55,7 @@ README와 docs/collaboration.md, docs/evaluation.md를 읽어.
 ```
 
 점수 수치의 의미와 현재 검증 범위는 [evaluation.md](evaluation.md)가 기준입니다. 파일을 나눴다는 사실이 측정 정확도나 의료적 타당성을 보장하지는 않습니다.
+
+## 로컬 기록 담당 경계 (2026-09-19)
+
+목/어깨의 표시 차이는 `front/src/features/records/modes/turtle.ts`, `shoulder.ts`에 둡니다. `database/contracts.ts`(버전·직렬화), `recorder.ts`(시간 분할), `aggregation.ts`(순수 합산), `sqlite/repository.ts`(DB), Electron main/preload(IPC)는 공통 연결 담당자가 조정합니다. 기록 기능이 점수/관측/카메라 정책을 소유하지 않습니다. 저장 경로와 복구·삭제 계약 변경은 [database/README.md](../database/README.md)와 해당 테스트를 함께 갱신합니다.

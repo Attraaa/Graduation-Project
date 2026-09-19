@@ -1,158 +1,80 @@
 # 작업 상태: SQLite 실제 자세 통계와 학습이력
 
-> 실제 Git, 입력, 계획과 검증 결과가 기준이다. 아직 프로덕션 구현은 없다.
-
 ## 빠른 상태
-
-- 작업 ID: `2026-09-19/jangwon/statistics`
-- 작업 상태: `IMPLEMENTING`
-- 현재 단계: `07 단계 1 저장 계약과 모드별 기록 모델`
-- 마지막 완료 단계: `05 계획 확정 및 06 ADR 초안`
-- 다음 행동: 사용자가 `adr/0001-local-posture-storage.md`의 승인 절에 결정/승인자/승인일을 작성한다.
-- 현재 담당자: `jangwon` (경로 기준, 계획 검토 담당)
-- 작업 잠금: `codex`
-- 마지막 갱신: `2026-09-19 12:29 KST`
+- 작업 ID: 2026-09-19/jangwon/statistics
+- 작업 상태: UNDERSTANDING_REVIEW
+- 현재 단계: 13 사용자 이해 확인
+- 마지막 완료 단계: 1~7 구현/검증, 독립 리뷰, PR 초안과 인수인계
+- 다음 행동: 사용자가 13_UNDERSTANDING.md 작성 후 작성했어로 응답. AI는 다시 읽고 14/15 지침으로 확인한 뒤 16 최종 승인 단계.
+- 현재 담당자: codex
+- 작업 잠금: codex (사람 게이트 대기; 다른 도구의 동시 수정 금지)
+- 마지막 갱신: 2026-09-19 17:53 KST
 
 ## 실행 도구와 인계
-
-- 현재 실행 도구: `codex`
-- 실행 도구 상태: `작업 중`
-- 실행 도구가 작업을 시작한 시각: 2026-09-19 11:24 KST
-- 마지막 실행 도구: `codex`
-- 마지막 체크포인트 커밋: 없음. 시작 HEAD는 아래 기록. 초기 문서/미승인 계획은 커밋하지 않음.
-- 다른 도구로 인계 가능: `아니오` (구현 진행 중)
-- 인계 전 미커밋 변경: 이 작업 폴더의 untracked 8개 문서만 존재. 아래 목록 참조.
-- 인계 전 테스트 유효성: 시작 HEAD의 기존 프론트 72개 테스트 통과. 신규 SQLite/구현 검증 없음.
+- 현재 실행 도구: codex
+- 실행 도구 상태: 사람 게이트 대기
+- 다른 도구로 인계 가능: 아니오. 전환 요청 시 CROSS_AGENT_HANDOFF로 별도 잠금 해제.
+- 마지막 실행 도구: codex
+- 마지막 확인 체크포인트: fff451ff5ed264deda17b75e26a247a014f674e1 (단계 1)
+- 최종 로컬 체크포인트: 문서·코드·검증을 함께 커밋 예정. 성공 후 아래 기록 갱신.
+- 테스트 유효성: 현재 구현 소스에 전체 check/최종 front94/실제 Electron 두 프로세스/활성 종료 실패 검사 통과. 이후 문서/테스트 도구만 정리.
 
 ## 연결 정보
+- 작업 폴더: F:/graduation_pr/docs/ai-workflow/work-items/2026-09-19/jangwon/statistics
+- 브랜치: score
+- worktree: F:/graduation_pr
+- 시작 HEAD: 08207145474724baf32f5df2010e36652dfea858. 기존 score 유지.
+- 실제 PR/push/병합/배포: 없음.
+- ADR: adr/0001-local-posture-storage.md Accepted (서장원, 2026-09-19). 승인 원문 보존.
 
-- 이슈: 없음
-- 브랜치: `score`
-- worktree/작업 경로: `F:\graduation_pr`
-- 활성 작업 폴더: `F:\graduation_pr\docs\ai-workflow\work-items\2026-09-19\jangwon\statistics`
-- base branch: 기존 `score`를 유지. 비교 참조 `origin/main`; 별도 PR base는 미확정.
-- PR: 없음
-- 관련 ADR: `adr/0001-local-posture-storage.md` Proposed, 승인 대기.
-- 작업 요청자: 현재 사용자
-- 기술 담당자: codex
+## 구현 단계
+| 단계 | 상태 | 증거 |
+|---|---|---|
+| 입력/계획/전체 계획 승인/ADR | 완료 | 01,03,04,Accepted ADR |
+| 1 계약/모드별 모델 | 완료 | step-reports/01.md, fff451f |
+| 2 SQLite 파일/복구 | 완료 | step-reports/02.md |
+| 3 Electron IPC | 완료 | step-reports/03.md |
+| 4 캡처 기록/주기 배치/종료 | 완료 | step-reports/04.md |
+| 5 실제 시간 가중 집계 | 완료 | step-reports/05.md |
+| 6 통계/달력/상세/삭제 | 완료 | step-reports/06.md |
+| 7 통합/문서 | 완료 | step-reports/07.md, 09_VERIFICATION.md |
+| 독립 리뷰 | 완료 | 10_REVIEW.md; 미해결 P0/P1 없음 |
+| PR 초안/인수인계 | 완료 | 11_PR_DRAFT.md, 12_HANDOFF.md |
+| 사용자 이해/최종 승인 | 대기 | 13_UNDERSTANDING.md / 16_FINAL_APPROVAL.md |
 
-## 상태 값 설명
+## 마지막 저장소 확인과 미커밋 범위
+최종 체크포인트 전 HEAD fff451f. 이 작업 외 변경 없음.
+- AGENTS.md, CLAUDE.md, README.md, docs/{architecture,collaboration,dependencies,development,evaluation,product-decisions,roadmap}.md의 현행 동작 안내.
+- database/{README.md,contracts.ts,recorder.ts,aggregation.ts,sqlite/repository.ts}.
+- front/electron/{main.ts,preload.ts,recordHandlers.ts}, front/tsconfig.electron.json.
+- front/src/components/PostureMonitor.tsx, features/posture/PostureSession.tsx, features/records의 API/서비스/조회/표시 파일.
+- front/src/pages/{Statistics,LearningHistory,Settings}.tsx, utils/authStore.ts.
+- front/src/data/mockLearningHistory.ts 삭제.
+- front/tests/record-*.test.mjs, fixtures/record-batch.mjs, electron-record-smoke.mjs, scripts/check-records-electron.mjs.
+- 이 작업 폴더 STATUS/09/10/11/12/step-reports/02~07.
+- 01/04/13/16과 ADR 승인 원문은 구현 중 무변경. 원격/사용자 실제 DB에 작업하지 않음.
+- 최종 커밋 후 위 목록은 해당 체크포인트의 변경 목록으로 해석한다. 테스트 PNG/테스트 DB는 ignored .moti-cache에만 존재.
 
-현재 ADR_REVIEW는 확정 계획을 바탕으로 작성한 저장 설계의 사용자 승인을 기다리는 상태다. 전체 계획 및 1~7 단계는 승인되었다. ADR 승인 후 단계 1부터 자동 진행한다.
-
-## 진행 체크포인트
-
-| 단계 | 상태 | 결과 파일 | 승인자/확인자 | 완료일 |
-|---|---|---|---|---|
-| 01 작업 입력 | 완료 | `01_TASK_INPUT.md` (원문 보존) | 사용자 입력 / codex 확인 | 2026-09-19 |
-| 02~03 계획 초안 | 완료 | `03_PLAN.md` | codex | 2026-09-19 |
-| 04 계획 검토 | 완료 | `04_PLAN_REVIEW.md` | 사용자 | 2026-09-19 |
-| 05 계획 확정 | 완료 | `03_PLAN.md` (루트 database 반영) | codex | 2026-09-19 |
-| 06 ADR 판단/승인 | 진행 중 | `adr/0001-local-posture-storage.md` Proposed | 사용자 승인 대기 | |
-| 07 구현 단계 | 대기 | 코드 + `step-reports/` | | |
-| 09 검증 | 대기 | `09_VERIFICATION.md`는 기존 코드 기준 검사만 기록 | | |
-| 10 독립 리뷰 | 대기 | 해당 단계에서 생성 | | |
-| 11 PR 초안 | 대기 | 해당 단계에서 생성 | | |
-| 12 인수인계 | 대기 | substantial 작업이므로 구현 후 생성 | | |
-| 13~15 이해 확인 | 대기 | `13_UNDERSTANDING.md` | | |
-| 16 최종 승인 | 대기 | `16_FINAL_APPROVAL.md` | | |
-| 17 회고 | 선택 | 해당 단계에서 생성 | | |
-
-## 구현 단계 진행
-
-| 계획 단계 | 상태 | 관련 커밋 | 단계 보고 | 검증 결과 |
-|---|---|---|---|---|
-| 1 저장 계약과 모드별 기록 모델 | 대기 | 없음 | 없음 | 미구현 |
-| 2 SQLite 저장·마이그레이션·복구 | 대기 | 없음 | 없음 | 미구현 |
-| 3 Electron 저장·조회 IPC | 대기 | 없음 | 없음 | 미구현 |
-| 4 기존 측정 결과 기록 연결 | 대기 | 없음 | 없음 | 미구현 |
-| 5 순수 통계와 SQLite 조회 | 대기 | 없음 | 없음 | 미구현 |
-| 6 통계·학습이력·삭제 UI | 대기 | 없음 | 없음 | 미구현 |
-| 7 통합 검증·문서 | 대기 | 없음 | 없음 | 미구현 |
-
-## 마지막으로 확인된 저장소 상태
-
-- 확인 시각: 2026-09-19 12:29 KST
-- 브랜치: `score`
-- HEAD 커밋: `08207145474724baf32f5df2010e36652dfea858`
-- base와 비교한 범위: 로컬 refs 기준 `origin/main...HEAD`는 0 behind / 2 ahead. `origin/score...HEAD`는 0/0. fetch는 실행하지 않음.
-- staged 변경: 없음
-- unstaged tracked 변경: 없음
-- 시작 시 untracked: 사용자 `01_TASK_INPUT.md` 1개만 존재.
-- 현재 untracked 파일 (모두 활성 작업 폴더 내부):
-  - `01_TASK_INPUT.md` — 사용자 원문, 변경하지 않음.
-  - `03_PLAN.md` — 코드 조사와 제안 계획.
-  - `04_PLAN_REVIEW.md` — 사용자 전체 계획/단계 승인, 루트 database 요청.
-  - `09_VERIFICATION.md` — 기존 72개 테스트 결과.
-  - `13_UNDERSTANDING.md` — 사용자 템플릿.
-  - `16_FINAL_APPROVAL.md` — 사용자 템플릿.
-  - `STATUS.md` — 상태/잠금/다음 행동.
-- 위 현재 목록은 총 **8개**이며 01 원문 1개 + 생성 7개다. 추가 파일은 `adr/0001-local-posture-storage.md`이다. `step-reports/`는 비어 있다.
-- 테스트 결과가 유효한 커밋: 위 HEAD (프로덕션 코드 무변경). `09_VERIFICATION.md` 참조.
-- `git diff --check`: tracked 변경 없음, 통과. 생성 문서는 별도로 구조/파일 존재를 확인한다.
-- 저장소/STATUS 충돌: 없음. 새 작업으로 초기화했으며 Claude 잠금 없음.
-
-## 현재 결정과 미해결 질문
-
-### 확정된 결정
-
-- 최신 사용자 입력에 따라 이번 작업에서 SQLite를 사용한다. 목·어깨 대상, 키보드·안구 제외.
-- 통계/학습이력을 실제 결과와 연결한다. AI 맞춤 피드백과 의학 정보는 구현 제외, 예시 열람 유지.
-- 학습 모드의 기존 사용자 동작·점수 산식 유지. 새 dependency/DB schema/API 변경은 입력에서 일반 허용했으나 계획/ADR 게이트는 그대로 적용.
-- 계획 전체 단계 승인 완료, ADR 승인 전 프로덕션 구현/사용자 DB 실행 없음.
-- 현재 `score`에서 조사/계획만 수행. 사용자 변경은 보존하고 커밋/브랜치 전환/외부 변경하지 않음.
-
-### 미해결 질문
-
-- 전체 계획 승인으로 Q1~Q5 권장안을 적용하며 유일한 수정 요청인 루트 `database/` 코드 경로를 반영했다. 검토 원문을 변경하지 않았다.
-- 다음 결정은 Proposed ADR의 설계 승인이다. 실제 Electron main/설치 번들 검증은 구현 단계에 남는다.
-
-### 현재 차단 사유
-
-- 기술 장애 없음. 설정된 ADR 승인 게이트.
-- 해결 담당자: 사용자
-- 해결 조건: `adr/0001-local-posture-storage.md`의 승인 절에 결정과 승인자 기록. 승인 후 계획 1~7 자동 진행.
+## 검증 및 남은 제한
+- setup 복원, moti.cmd check exit0; front 최종94, server26, Python2.
+- UI/Electron build runner exit0; 실제 Electron seed/verify exit0, 최종 캡처 WT3syV 확인.
+- 실제 평가 reducer의 합계 일치, SQLite 비파괴/잠금/롤백/복구/계정 삭제, 표시/페이지/종료 실패 재시도 확인.
+- 남은 P2: 매우 긴 기록의 전체 상세 버킷 반환 및 초당 digest 누적의 장기 용량/성능 미측정.
+- 실제 카메라·깨끗한 PC 설치·장시간 운영 미검증. AI/의학 예시, 데모 인증, 서버/동기화 미구현.
+- 추가 제품 결정 필요 없음. 13은 사용자 이해를 확인하는 설정된 사람 게이트.
 
 ## 다음 사람이 시작할 위치
-
-- 먼저 읽을 파일: `AUTOMATION_POLICY.md`, 이 STATUS, 원본 입력, `03_PLAN.md`, `04_PLAN_REVIEW.md`.
-- 다음으로 실행할 명령: `git status --short --untracked-files=all`, `git branch --show-current`, `git rev-parse HEAD`로 대조. review 실제 내용을 다시 읽는다.
-- 적용할 AI 지침: `.agents/skills/ai-workflow-orchestrator/SKILL.md`, `CROSS_AGENT_HANDOFF.md`, 승인 후 `ai/05_PLAN_FINALIZE.md`, `ai/06_ADR_DECISION_GATE.md`.
-- 수정 가능한 범위: 현재는 활성 작업 문서만. ADR 승인 전 프로덕션 코드 수정 금지.
-- 주의할 위험: 학습 파일 무수정 요구 해석, 데모 계정의 보안 한계, 200ms UI 콜백 샘플링으로 통계 왜곡, 종료 마지막 구간, 기존 삭제 버튼의 미연동.
-- 진행 전 필요한 승인: 계획 검토 완료 → ADR 승인 → 이후 구현. 외부 동작은 정확한 대상과 별도 권한 확인.
-
-## 작업 인계 기록
-
-| 날짜 | 이전 담당자 | 새 담당자 | 현재 상태 | 인계 내용 |
-|---|---|---|---|---|
-| 2026-09-19 11:30 KST | codex | 사용자 검토 | PLAN_REVIEW | 코드 무변경, 문서 미커밋, 기준 테스트 72개 통과, 잠금 해제 |
+1. AUTOMATION_POLICY, STATUS, 01, Accepted ADR, 09/10/12와 실제 Git 상태를 대조.
+2. 사용자가 작성한 13의 목적·진입점·상태 변화·주요 실패·검증·모르는 점을 확인.
+3. ai/14_CODE_UNDERSTANDING_INSTRUCTIONS.md 및 15_UNDERSTANDING_FOLLOWUP.md 적용.
+4. 이해 확인 뒤 16_FINAL_APPROVAL.md 요청. 외부 push/PR/배포/실제 데이터 삭제는 자동 실행하지 않음.
 
 ## 상태 변경 기록
-
-| 날짜/시간 | 이전 상태 | 새 상태 | 변경자 | 근거/결과 파일 |
-|---|---|---|---|---|
-| 2026-09-19 11:24 KST | STATUS 없음 | PLANNING | codex | 의미 있는 입력/실제 Git 확인, 구조 생성, codex 잠금 |
-| 2026-09-19 11:30 KST | PLANNING | PLAN_REVIEW | codex | 계획 작성·기준 테스트 결과·사람 검토 안내, 잠금 해제 |
+- 초기화→계획/ADR 사람 승인→단계1 체크포인트→단계2~7 구현/검증→독립 리뷰/PR 초안/인수인계→13 게이트.
+- setup은 기존 개발 앱의 파일 잠금 해결 후 성공.
+- 단계2 로컬 커밋의 자동 승인 검토가 한도 문제로 거절되어 우회 없이 보류. 이후 허용된 수정/검증을 계속.
+- 실제 Electron은 샌드박스 GPU 제한 후 승인된 정상 Windows 환경에서 격리 프로필로 성공.
+- 최종 로컬 체크포인트 결과는 후속 상태 기록으로 남긴다.
 
 ## 완료 후 기록
-
-- 병합 커밋: 없음
-- 병합일: 해당 없음
-- 배포 버전/일시: 해당 없음
-- 후속 모니터링 결과: 해당 없음
-- 남은 후속 작업: ADR 승인, 구현/검증/리뷰/사용자 이해/최종 승인
-- 회고 문서: 아직 없음
-
-## 이번 재개 기록 (2026-09-19 12:29 KST)
-
-- 04_PLAN_REVIEW.md의 [x] 승인 및 전체 단계 승인을 확인. 단계 번호 빈칸은 자유문 승인으로 충족. 1.x/2.x/3.x는 구체적인 제한으로 해석하지 않음.
-- 루트 database/로 계획 수정, Proposed ADR 작성. 프로덕션 코드·HEAD 변경 없음.
-- 실제 Node/Electron RUN_AS_NODE에서 메모리 SQLite 개방/버전 조회 성공. 파일 DB/설치 앱 테스트는 미실행.
-- 상태 전환: PLAN_REVIEW → ADR_REVIEW. codex 작업 잠금 획득 후 위 문서 작업을 마치고 해제.
-
-## 구현 시작
-- 2026-09-19: 서장원의 ADR 대안 A 승인, 승인 조건 x(추가 조건 없음) 확인. HEAD/working tree 일치. 계획 1~7 순차 구현 시작.
-
-- 구현 체크포인트: 단계 1 계약 테스트 3개 및 타입/린트 통과. 단계 2 SQLite 구현으로 진행. setup 완료.
-
+작업은 병합/배포 완료 상태가 아니다. 사용자 이해 확인과 최종 승인, 별도 외부 작업 권한이 남아 있다.

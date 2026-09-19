@@ -15,7 +15,11 @@ flowchart TD
   W --> P[앱에 포함된 MediaPipe Pose]
   P --> C[매 세션 기준 자세 수집 · 화면상 변화]
   C --> V1[모드별 유사도 점수 · 시간 평균 · 관찰 습관]
-  R --> D[데모 계정 / 예시 통계]
+  R --> D[로컬 데모 계정]
+  V1 --> REC[모든 관측의 분 버킷 · 배치 기록]
+  REC -->|검증된 records IPC| E
+  E --> SQLITE[루트 database 코드 · userData SQLite]
+  SQLITE -->|날짜 · 모드 · 정책별 조회| R
   A[독립 Express API] --> V[검증 · 인증 · 세션 서비스]
   V --> DB[MySQL 저장소 어댑터]
   M --> KM[키보드 카메라 · 실시간 결과 UI]
@@ -32,8 +36,8 @@ Electron 개발 앱의 키보드 모드는 로컬 Python 프로세스를 자동 
 | --- | --- |
 | `toolchain.json`, `scripts/setup.ps1`, `scripts/toolchain.ps1` | 정확한 도구 버전, 검증된 다운로드, 프로젝트 전용 환경 설치 |
 | `scripts/moti.ps1` | 앱/API/Python 실행과 검사 명령 묶음 |
-| `front/electron/main.ts` | 창·스플래시 생성, 개발 URL/설치 파일 로드, 로컬 Python 키보드 프로세스 시작·종료 |
-| `front/electron/preload.ts` | 키보드 분석 프로세스의 좁은 시작·중지 IPC 경계 |
+| `front/electron/main.ts` | 창·스플래시, Python 키보드 프로세스, SQLite 단일 연결·신뢰 창 IPC·종료 flush |
+| `front/electron/preload.ts` | 키보드 시작·중지 및 motiRecords 저장·조회·삭제·종료 IPC 경계 |
 | `front/vite.config.ts` | UI와 Electron 빌드, CommonJS preload 출력, 브라우저 검증 모드 |
 | `front/src/App.tsx` | 라우트 정의. 인증 보호 라우트는 아직 없음 |
 | `front/src/components/layout/AppLayout.tsx` | 사이드바와 공통 화면 틀/Outlet |
@@ -57,7 +61,9 @@ Electron 개발 앱의 키보드 모드는 로컬 Python 프로세스를 자동 
 | `front/src/features/posture/scoring.ts` | 선택된 지표를 0–100 유사도로 환산하는 순수 함수 |
 | `front/src/features/posture/evaluation.ts` | 유효 시간 가중 평균·연속 관찰·기준 이탈 구간의 순수 집계 |
 | `front/src/utils/authStore.ts` | 아직 사용하는 로컬 데모 인증. 서버 연결 때 교체할 경계 |
-| `front/src/data/mockLearningHistory.ts`, `pages/Statistics.tsx` | 아직 예시 데이터. 실 API 연동 대상으로 구분 |
+| `database/contracts.ts`, `recorder.ts`, `aggregation.ts`, `sqlite/repository.ts` | 직렬화 계약·관측 시간 분할·순수 집계·SQLite 단일 쓰기 주체 |
+| `front/src/features/records/` | 저장 배치/실패 재시도·조회 상태·목/어깨 표시 어댑터. AI/의학 예시는 별도 컴포넌트 |
+| `front/src/pages/Statistics.tsx`, `LearningHistory.tsx` | 로컬 실제 통계와 시작일별 달력·페이지 목록·분 그래프 |
 | `server/src/server.ts`, `config.ts` | 환경 검증 후 서버 시작. JWT 비밀값 자동 기본값 없음 |
 | `server/src/app.ts`, `http.ts` | API 조립과 공통 비동기 오류 응답 |
 | `server/src/validation.ts` | HTTP 입력을 런타임에서 검사 |

@@ -87,9 +87,11 @@ approval boundary, an unsafe operation, or an unresolved conflict.
 - Read `docs/collaboration.md` for file ownership. Keep mode policies, pure
   observation/scoring/aggregation, camera lifecycle, and presentation separate.
   Coordinate shared contract changes and preserve other tasks' changes.
-- Frontend authentication and history/statistics remain demos. Express and Python
-  are independent; no production API/IPC connection, AI summary, or SQLite sync is
-  implemented. Do not present demo values as measurements.
+- Frontend authentication remains a local demo. Turtle/shoulder history and statistics
+  use Electron-owned local SQLite; read `database/README.md` for its contract.
+  AI/medical sections remain labeled examples. Express stays independent; production
+  server authentication, AI summary, and SQLite server sync are not implemented.
+  Do not present demo values as measurements.
 - Reuse `src/styles/tokens.css`, `components/layout`, and the shared UI components.
   Keep camera lifecycle, pure measurement rules, HTTP routes, and database
   operations in their documented boundaries.

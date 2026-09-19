@@ -8,15 +8,17 @@ import { advanceEvaluation, createEvaluation, interruptEvaluation } from '../fea
 import { createMonitorSnapshot } from '../features/posture/monitorTypes';
 import type { MonitorSnapshot } from '../features/posture/monitorTypes';
 import type { ScorePolicy } from '../features/posture/scoring';
+import type { CaptureSink, CaptureStart } from '../features/records/recording';
 
 interface PostureMonitorProps {
   isRunning: boolean;
   deviceId: string;
   policy: ScorePolicy;
   onUpdate: (snapshot: MonitorSnapshot) => void;
+  recordCapture?: (start: CaptureStart) => CaptureSink;
 }
 
-const PostureMonitor = ({ isRunning, deviceId, policy, onUpdate }: PostureMonitorProps) => {
+const PostureMonitor = ({ isRunning, deviceId, policy, onUpdate, recordCapture }: PostureMonitorProps) => {
   const latest = useRef<MonitorSnapshot>(createMonitorSnapshot(policy));
   const publish = useCallback((snapshot: MonitorSnapshot) => {
     latest.current = snapshot;
@@ -32,6 +34,12 @@ const PostureMonitor = ({ isRunning, deviceId, policy, onUpdate }: PostureMonito
     let lastUiAt = -Infinity;
     let observation = createObservation();
     let evaluation = createEvaluation(policy);
+    const startMono = performance.now();
+    const startEpoch = Date.now();
+    const beginRecord = (at: number) => recordCapture?.({ mode: policy.mode, scorePolicyVersion: policy.version,
+      habitPolicyVersion: evaluation.habitPolicyVersion, at, epoch: startEpoch + at - startMono });
+    let recording = beginRecord(startMono);
+    let recordedReference: string | null = null;
     let removeTrackListener = () => {};
     let watchdog: ReturnType<typeof setInterval> | undefined;
     let lastFrameAt: number | null = null;
@@ -95,6 +103,14 @@ const PostureMonitor = ({ isRunning, deviceId, policy, onUpdate }: PostureMonito
         calibration = advanceCalibration(calibration, frame);
         observation = advanceObservation(observation, calibration.reference, frame);
         evaluation = advanceEvaluation(evaluation, observation, policy);
+        const reference = calibration.reference;
+        const referenceKey = reference ? `${reference.completedAtMs}:${reference.widthPx}:${reference.heightPx}` : null;
+        if (recordedReference && recordedReference !== referenceKey) {
+          recording?.finish(receivedAtMs);
+          recording = beginRecord(receivedAtMs);
+        }
+        recordedReference = referenceKey;
+        recording?.sample(capturedAtMs, evaluation);
         const snapshot: MonitorSnapshot = {
           phase: calibration.reference ? (observation.delta ? 'observing' : 'unavailable') : 'calibrating',
           progress: calibration.progress,
@@ -143,12 +159,13 @@ const PostureMonitor = ({ isRunning, deviceId, policy, onUpdate }: PostureMonito
     });
     return () => {
       abort.abort();
+      recording?.finish(performance.now());
       clearInterval(watchdog);
       removeTrackListener();
       stopWebcam();
       void stopProcessing();
     };
-  }, [isRunning, deviceId, policy, publish, videoRef, canvasRef, startWebcam, stopWebcam, initMediaPipe, startProcessing, stopProcessing]);
+  }, [isRunning, deviceId, policy, publish, videoRef, canvasRef, startWebcam, stopWebcam, initMediaPipe, startProcessing, stopProcessing, recordCapture]);
 
   useEffect(() => {
     // Flush the last computed interval on stop, but never publish from an old keyed session's cleanup.

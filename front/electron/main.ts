@@ -1,10 +1,12 @@
-import { app, BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog } from 'electron'
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
-import { existsSync } from 'node:fs'
+import { existsSync, mkdirSync } from 'node:fs'
 import net from 'node:net'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
+import { RecordRepository } from '../../database/sqlite/repository'
+import { recordCall, requireRecords, trustedRecordUrl } from './recordHandlers'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -23,6 +25,29 @@ const publicDirectory = app.isPackaged ? distDirectory : path.join(__dirname, '.
 process.env.VITE_PUBLIC = publicDirectory
 
 app.setName('Moti')
+const ownsInstance = app.requestSingleInstanceLock()
+if (!ownsInstance) app.quit()
+
+let records: RecordRepository | null = null
+let recordsError = ''
+let allowClose = false
+let closingTimer: ReturnType<typeof setTimeout> | undefined
+const recordsPageUrl = process.env.VITE_DEV_SERVER_URL || pathToFileURL(path.join(distDirectory, 'index.html')).href
+for (const command of ['generation', 'write', 'list', 'detail', 'statistics', 'clear'] as const) {
+  ipcMain.handle(`records:${command}`, (event, ...args: unknown[]) => recordCall(
+    Boolean(win && event.sender === win.webContents && event.senderFrame === win.webContents.mainFrame
+      && trustedRecordUrl(event.senderFrame.url, recordsPageUrl)),
+    () => {
+      const db = requireRecords(records, recordsError)
+      if (command === 'generation') return db.generation(args[0] as string)
+      if (command === 'write') return db.write(args[0])
+      if (command === 'list') return db.list(args[0])
+      if (command === 'statistics') return db.statistics(args[0])
+      if (command === 'detail') return db.detail(args[0] as string, args[1] as string)
+      return db.clear(args[0] as string)
+    },
+  ))
+}
 
 let win: BrowserWindow | null
 let splash: BrowserWindow | null
@@ -30,6 +55,22 @@ let keyboardProcess: ChildProcessWithoutNullStreams | null = null
 let keyboardService: { origin: string; token: string } | null = null
 let keyboardStarting: Promise<{ origin: string; token: string }> | null = null
 let keyboardGeneration = 0
+
+const completeClose = async (saved: boolean) => {
+  if (!win || !closingTimer) return
+  clearTimeout(closingTimer); closingTimer = undefined
+  if (!saved) {
+    const result = await dialog.showMessageBox(win, { type: 'warning', title: '기록 저장 확인',
+      message: '일부 기록을 저장하지 못했습니다. 돌아가서 저장을 재시도할 수 있습니다.',
+      buttons: ['돌아가기', '미저장 기록을 버리고 닫기'], defaultId: 0, cancelId: 0 })
+    if (result.response !== 1) return
+  }
+  allowClose = true; win.close()
+}
+ipcMain.on('records:close-ready', (event, saved: unknown) => {
+  if (win && event.sender === win.webContents && event.senderFrame === win.webContents.mainFrame
+    && trustedRecordUrl(event.senderFrame.url, recordsPageUrl)) void completeClose(saved === true)
+})
 
 const getFreeLocalPort = () => new Promise<number>((resolve, reject) => {
   const server = net.createServer()
@@ -163,6 +204,16 @@ function createWindow() {
   })
 
   // Test active push message to Renderer-process.
+  win.webContents.on('will-navigate', (event, url) => { if (!trustedRecordUrl(url, recordsPageUrl)) event.preventDefault() })
+  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+  win.on('close', event => {
+    if (allowClose) return
+    event.preventDefault()
+    if (!closingTimer) {
+      closingTimer = setTimeout(() => { void completeClose(false) }, 5000)
+      win?.webContents.send('records:closing')
+    }
+  })
   win.webContents.on('did-finish-load', () => {
     win?.webContents.send('main-process-message', (new Date).toLocaleString())
   })
@@ -205,5 +256,14 @@ app.on('activate', () => {
   }
 })
 
-app.whenReady().then(createWindow)
+if (ownsInstance) app.whenReady().then(() => {
+  try {
+    const directory = path.join(app.getPath('userData'), 'database')
+    mkdirSync(directory, { recursive: true })
+    records = new RecordRepository(path.join(directory, 'posture.sqlite'))
+  } catch (error) { recordsError = error instanceof Error ? error.message : '기록 저장소를 열 수 없습니다.' }
+  createWindow()
+})
+app.on('second-instance', () => { win?.restore(); win?.focus() })
+app.on('will-quit', () => { records?.close() })
 app.on('before-quit', stopKeyboardService)

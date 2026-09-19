@@ -1,10 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseBatch, parseQuery, averageScore, emptyTotals, AGGREGATION_VERSION } from '../../database/contracts.ts';
+import { parseBatch, parseQuery, averageScore } from '../../database/contracts.ts';
 
-export const sampleBatch = () => ({ schemaVersion: 1, aggregationPolicyVersion: AGGREGATION_VERSION, generation: 0, sequence: 0,
-  record: { ...emptyTotals(), id: 'one', owner: 'demo', mode: 'turtle', startedAt: 1800000000000, updatedAt: 1800000000000, offsetMinutes: -540,
-    scorePolicyVersion: 'turtle-v1', habitPolicyVersion: 'habit-v1', longestContinuousMs: 0, status: 'running' }, buckets: [] });
+import { sampleBatch } from './fixtures/record-batch.mjs';
 
 test('portable record roundtrip preserves unavailable and real zero averages', () => {
   assert.deepEqual(parseBatch(JSON.parse(JSON.stringify(sampleBatch()))), sampleBatch());

@@ -132,4 +132,8 @@ MySQL 드라이버와 기존 저장소 구현은 남아 있지만 최종 서버 
 
 Windows 설치 파일 생성 경로는 `moti.cmd package`입니다. Electron 개발 앱은 프로젝트 `.venv`의 Python 키보드 분석기를 자동 실행하지만, 현재 설치 패키지에는 `dist`와 `dist-electron`, 로컬 브라우저 MediaPipe 자원만 들어갑니다. **Python 실행 파일·키보드 분석 코드·YOLO 모델, 원격 서버·DB는 아직 포함되지 않습니다.** 설치 파일만으로 키보드 분석과 서버 저장이 동작한다고 안내하면 안 됩니다. 다음 배포 작업에서 Python을 Windows exe로 고정하고 모델/맵과 함께 `extraResources`에 넣은 뒤 깨끗한 PC에서 검사해야 합니다.
 
-기존 `front/Dockerfile`은 현재 Windows 데스크톱 팀의 표준 설치 경로가 아닙니다. 원격 서버 배포 환경, Python 동봉 방식, 향후 SQLite 오프라인 기능은 [제품 결정](product-decisions.md)과 [로드맵](roadmap.md)에 따라 구체화합니다.
+기존 `front/Dockerfile`은 현재 Windows 데스크톱 팀의 표준 설치 경로가 아닙니다. 원격 서버 배포 환경, Python 동봉 방식, SQLite 서버 동기화는 [제품 결정](product-decisions.md)과 [로드맵](roadmap.md)에 따라 구체화합니다.
+
+## 목·어깨 SQLite 기록 (2026-09-19)
+
+새 npm/native driver 의존성 없이 잠긴 Electron의 `node:sqlite`를 main에서 사용합니다. 설치된 Electron 41.10.7의 Node 24.18.0/SQLite 3.53.1, 프로젝트 Node 24.20.0의 SQLite 3.53.4에서 확인했습니다. 코드가 Electron main 번들에 포함되며 DB 소스 때문에 별도 패키지 관리자나 배포 디렉터리를 추가하지 않습니다. 런타임을 바꾸면 아래 [Electron 통합 검사](../database/README.md)를 다시 실행해야 합니다. 설치 패키지의 깨끗한 PC 검증은 남아 있습니다.
