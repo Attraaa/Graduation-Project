@@ -2,7 +2,7 @@ import { Router } from 'express';
 import type { Pool } from 'mysql2/promise';
 import { hashPassword, comparePassword, type Auth } from '../auth.js';
 import { asyncHandler, HttpError } from '../http.js';
-import { bodyObject, text, password } from '../validation.js';
+import { bodyObject, text, password, settingsObject } from '../validation.js';
 import type { RowDataPacket, ResultSetHeader } from 'mysql2';
 
 interface UserRow extends RowDataPacket {
@@ -11,7 +11,23 @@ interface UserRow extends RowDataPacket {
   nickname: string;
   email: string | null;
   password_hash: string;
+  settings: unknown;
 }
+
+/** mysql2는 JSON 컬럼을 파싱해 돌려주지만 드라이버 설정에 따라 문자열이 올 수 있습니다. */
+const readSettings = (value: unknown): Record<string, unknown> => {
+  if (typeof value === 'string') {
+    try {
+      const parsed: unknown = JSON.parse(value);
+      return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)
+        ? parsed as Record<string, unknown> : {};
+    } catch {
+      return {};
+    }
+  }
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? value as Record<string, unknown> : {};
+};
 
 export function createAuthRouter(pool: Pool, auth: Auth) {
   const router = Router();
@@ -87,6 +103,24 @@ export function createAuthRouter(pool: Pool, auth: Auth) {
     const hash = await hashPassword(newPassword);
     await pool.query('UPDATE users SET password_hash = ? WHERE id = ?', [hash, req.user!.userId]);
     res.json({ message: '비밀번호가 변경되었습니다.' });
+  }));
+
+  router.get('/me/settings', auth.requireAuth, asyncHandler(async (req, res) => {
+    const [rows] = await pool.query<UserRow[]>(
+      'SELECT settings FROM users WHERE id = ?', [req.user!.userId],
+    );
+    if (!rows[0]) throw new HttpError(404, '사용자를 찾을 수 없습니다.');
+    res.json(readSettings(rows[0].settings));
+  }));
+
+  // 보낸 객체가 저장된 설정을 통째로 대신합니다. 부분 갱신은 화면이 읽은 값을 합쳐서 보냅니다.
+  router.put('/me/settings', auth.requireAuth, asyncHandler(async (req, res) => {
+    const settings = settingsObject(req.body);
+    const [result] = await pool.query<ResultSetHeader>(
+      'UPDATE users SET settings = ? WHERE id = ?', [JSON.stringify(settings), req.user!.userId],
+    );
+    if (!result.affectedRows) throw new HttpError(404, '사용자를 찾을 수 없습니다.');
+    res.json(settings);
   }));
 
   router.get('/check/:username', asyncHandler(async (req, res) => {

@@ -10,6 +10,8 @@
 
 설정 스크립트가 프로젝트 안에 Node/npm, uv 관리 Python, JS/Python 의존성을 설치합니다. PC 전체의 PATH나 기존 Python을 바꾸지 않습니다. 현재 자동 설치 대상은 **Windows x64**이며 ARM64는 AI wheel 검증이 별도로 필요합니다.
 
+macOS arm64에서는 같은 역할의 `setup.command`, `moti.command`를 씁니다(`moti.command check` 형태로 같은 작업 이름을 받습니다). 프론트와 서버는 동작하지만 **`keyboard-detect`의 Python 환경은 아직 설치되지 않습니다.** `keyboard-detect/uv.lock`이 `sys_platform == 'win32' and platform_machine == 'AMD64'`로만 잠겨 있어 `moti.command keyboard`, `keyboard-web`과 `check`의 Python 단계가 실패합니다. `package`(Windows 설치 파일)도 macOS 경로에서 검증하지 않았습니다.
+
 | 명령 | 역할 |
 | --- | --- |
 | `moti.cmd setup` | 터미널에서 공통 환경 설치/복원 |

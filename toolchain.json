@@ -2,7 +2,9 @@
   "node": "24.20.0",
   "npm": "11.19.0",
   "nodeWindowsX64Sha256": "6cac9ffbca8f6a47091e4b5c772e0606049c3871cb67d900c0cedde630e545ba",
+  "nodeDarwinArm64Sha256": "40e5607e5ecb3db9192723776da2d75d966260fc74a7a9e731c1bd67dda96bc8",
   "python": "3.12.14",
   "uv": "0.12.10",
-  "uvWindowsX64Sha256": "f65744f94072152b1f86ba2aace4d01f1124d9a8ecb235805039e3718c36cac2"
+  "uvWindowsX64Sha256": "f65744f94072152b1f86ba2aace4d01f1124d9a8ecb235805039e3718c36cac2",
+  "uvDarwinArm64Sha256": "51c6170e8e3a01cef9f33b94f582b7b81ac65046f55d40afb35f9cff5a68c179"
 }

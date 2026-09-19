@@ -22,7 +22,9 @@ class MemorySessions implements SessionRepository {
           if (this.failAggregation) throw new Error('Storage unavailable');
           statistics.push({ score: session.score!, alertCount: session.alertCount! });
         },
-        appendLog: async (_id, _userId, log) => { logs.push(log); },
+        appendLogs: async (_id, _userId, entries) => { logs.push(...entries); },
+        saveCalibration: async () => true,
+        appendKeystrokes: async () => undefined,
       });
       this.session = session;
       this.logs = logs;
@@ -39,7 +41,7 @@ const finalResult = { score: 75, alertCount: 3 };
 test('another user cannot finish or write logs to a session', async () => {
   const repository = new MemorySessions();
   await assert.rejects(endSession(repository, 2, 10, finalResult), { status: 404 });
-  await assert.rejects(appendSessionLog(repository, 2, 10, { status: 'GOOD', measuredValue: null }), { status: 404 });
+  await assert.rejects(appendSessionLog(repository, 2, 10, { status: 'GOOD', metric: null, measuredValue: null, elapsedMs: null }), { status: 404 });
   assert.equal(repository.session.ended_at, null);
   assert.deepEqual(repository.statistics, []);
   assert.deepEqual(repository.logs, []);
@@ -70,7 +72,7 @@ test('failed aggregation leaves the session open and can be retried safely', asy
 
 test('logs accepted before completion remain; logs after completion are rejected', async () => {
   const repository = new MemorySessions();
-  const log = { status: 'WARNING' as const, measuredValue: 12.5 };
+  const log = { status: 'WARNING' as const, metric: 'nose_offset' as const, measuredValue: 12.5, elapsedMs: null };
   await appendSessionLog(repository, 1, 10, log);
   await endSession(repository, 1, 10, finalResult);
   await assert.rejects(appendSessionLog(repository, 1, 10, log), { status: 409 });

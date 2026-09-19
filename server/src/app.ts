@@ -7,6 +7,7 @@ import { handleError } from './http.js';
 import { createAuthRouter } from './routes/auth.js';
 import { createSessionsRouter } from './routes/sessions.js';
 import { createStatisticsRouter } from './routes/statistics.js';
+import { createFeedbackRouter } from './routes/feedback.js';
 
 export function createApp(config: ServerConfig, pool: Pool) {
   const app = express();
@@ -16,6 +17,7 @@ export function createApp(config: ServerConfig, pool: Pool) {
   app.use('/api/auth', createAuthRouter(pool, auth));
   app.use('/api/sessions', createSessionsRouter(pool, auth));
   app.use('/api/statistics', createStatisticsRouter(pool, auth));
+  app.use('/api/feedback', createFeedbackRouter(pool, auth));
   // Liveness only: this intentionally does not imply that a DB has been provisioned.
   app.get('/health', (_req, res) => res.json({ status: 'ok' }));
   app.use(handleError);
