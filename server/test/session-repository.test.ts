@@ -48,7 +48,7 @@ test('adapter rolls back and releases its connection when daily aggregation fail
   assert.deepEqual(calls, ['begin', 'rollback', 'release']);
 });
 
-test('a multi-day session graph groups full dates instead of merging repeated clock minutes', async () => {
+test('a multi-day session graph separates metrics and full dates without merging repeated clock minutes', async () => {
   const queries: { sql: string; values: unknown[] }[] = [];
   const pool = {
     query: async (sql: string, values: unknown[]) => {
@@ -57,7 +57,11 @@ test('a multi-day session graph groups full dates instead of merging repeated cl
     },
   } as unknown as Pool;
   await new MysqlSessionRepository(pool).detail(1, 10);
-  assert.match(queries[1].sql, /GROUP BY DATE_FORMAT\(recorded_at, '%Y-%m-%d %H:%i'\)/);
-  assert.match(queries[1].sql, /ORDER BY MIN\(recorded_at\)/);
+  assert.match(queries[1].sql, /GROUP BY metric, DATE_FORMAT\(recorded_at, '%Y-%m-%d %H:%i'\)/);
+  assert.match(queries[1].sql, /ORDER BY metric, MIN\(recorded_at\)/);
+  assert.match(queries[1].sql, /SELECT metric, DATE_FORMAT\(MIN\(recorded_at\)/);
+  assert.match(queries[1].sql, /metric IS NOT NULL/);
   assert.deepEqual(queries[1].values, [10, 1]);
+  assert.match(queries[2].sql, /FROM calibration_references WHERE session_id = \? AND user_id = \?/);
+  assert.deepEqual(queries[2].values, [10, 1]);
 });

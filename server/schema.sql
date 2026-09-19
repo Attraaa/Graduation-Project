@@ -10,6 +10,8 @@ DROP TABLE IF EXISTS `Session`;
 DROP TABLE IF EXISTS `user`;
 
 -- 기존 서버 테이블도 초기화 (재생성 위해)
+DROP TABLE IF EXISTS keystroke_events;
+DROP TABLE IF EXISTS calibration_references;
 DROP TABLE IF EXISTS feedback;
 DROP TABLE IF EXISTS posture_logs;
 DROP TABLE IF EXISTS daily_statistics;
@@ -42,10 +44,13 @@ CREATE TABLE sessions (
 
 -- 3. 자세 로그 — 실시간 측정값 (추세 그래프용, UML에 없던 테이블 추가)
 CREATE TABLE posture_logs (
-  id             INT      NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  id             BIGINT   NOT NULL AUTO_INCREMENT PRIMARY KEY,
   session_id     INT      NOT NULL,
   user_id        INT      NOT NULL,
-  status         ENUM('GOOD','WARNING','DANGER') NOT NULL,
+  -- UNAVAILABLE은 관찰이 끊긴 구간입니다. 좋은 자세도 나쁜 자세도 아닙니다.
+  status         ENUM('GOOD','WARNING','DANGER','UNAVAILABLE') NOT NULL,
+  -- 어느 지표의 값인지. 값이 있으면 지표도 있어야 합니다.
+  metric         ENUM('nose_offset','nose_height','shoulder_diff'),
   measured_value FLOAT,
   recorded_at    DATETIME NOT NULL DEFAULT NOW(),
   FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE,
@@ -79,3 +84,43 @@ CREATE TABLE feedback (
   created_at    DATETIME NOT NULL DEFAULT NOW(),
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
+
+-- 6. 매 세션 기준 자세 (UML에 없던 테이블 추가)
+-- 기준 자세 없이는 posture_logs.measured_value를 나중에 해석할 수 없습니다.
+CREATE TABLE calibration_references (
+  session_id     INT          NOT NULL PRIMARY KEY,
+  user_id        INT          NOT NULL,
+  schema_version SMALLINT     NOT NULL,
+  source_id      VARCHAR(128) NOT NULL,              -- 비디오 트랙 ID
+  width_px       SMALLINT UNSIGNED NOT NULL,
+  height_px      SMALLINT UNSIGNED NOT NULL,
+  sample_count   SMALLINT UNSIGNED NOT NULL,
+  collected_ms   INT          NOT NULL,              -- 수집 구간 길이. 단조 시계라 시각이 아님
+  nose_offset    FLOAT        NOT NULL,              -- 세 지표 모두 어깨 너비 대비 비율
+  nose_height    FLOAT        NOT NULL,
+  shoulder_diff  FLOAT        NOT NULL,
+  created_at     DATETIME     NOT NULL DEFAULT NOW(),
+  FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id)    REFERENCES users(id)    ON DELETE CASCADE
+);
+
+-- 7. 키 입력별 손가락 판정 (UML에 없던 테이블 추가)
+CREATE TABLE keystroke_events (
+  id              BIGINT      NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  session_id      INT         NOT NULL,
+  user_id         INT         NOT NULL,
+  key_code        VARCHAR(24) NOT NULL,              -- KeyboardEvent.code
+  observed_finger VARCHAR(16),                       -- 'left:index'. 판정 보류면 NULL
+  verdict         ENUM('preferred','acceptable','mismatch','unknown') NOT NULL,
+  reason          VARCHAR(32) NOT NULL,
+  confidence      FLOAT,
+  frame_delta_ms  SMALLINT,
+  policy_id       VARCHAR(32) NOT NULL,
+  policy_version  VARCHAR(16) NOT NULL,              -- 정책이 바뀌면 옛 판정과 섞지 않기 위해 저장
+  recorded_at     DATETIME    NOT NULL DEFAULT NOW(),
+  FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id)    REFERENCES users(id)    ON DELETE CASCADE
+);
+
+CREATE INDEX idx_keystroke_session ON keystroke_events(session_id, recorded_at);
+CREATE INDEX idx_keystroke_verdict ON keystroke_events(user_id, verdict);

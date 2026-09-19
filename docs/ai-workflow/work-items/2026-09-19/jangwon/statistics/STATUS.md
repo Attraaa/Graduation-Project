@@ -2,17 +2,17 @@
 
 ## 빠른 상태
 - 작업 ID: 2026-09-19/jangwon/statistics
-- 작업 상태: DONE
-- 현재 단계: 사용자 요청에 따른 로컬 main 병합 완료
+- 작업 상태: VERIFYING
+- 현재 단계: pull 충돌 해결·통합 검증 완료, 병합 커밋/pull/push 진행
 - 마지막 완료 단계: score → main fast-forward 병합
-- 다음 행동: 이번 로컬 개발·승인·main 병합 요청 완료. 원격 push/배포는 별도 요청 시 진행. 이해 학습은 사용자가 원할 때 12/13으로 재개.
-- 현재 담당자: 없음 (로컬 작업 및 승인 완료)
-- 작업 잠금: 없음 (병합 및 완료 문서 체크포인트 후 해제)
-- 마지막 갱신: 2026-09-19 18:17 KST
+- 다음 행동: 기존 pull의 병합 커밋 → git pull --no-rebase origin main → 새 변경 확인 → git push origin main. 사용자가 이 동작을 명시적으로 요청함.
+- 현재 담당자: codex
+- 작업 잠금: codex (원격 병합 통합 검증 중)
+- 마지막 갱신: 2026-09-19 18:22 KST
 
 ## 실행 도구와 인계
-- 현재 실행 도구: 없음
-- 실행 도구 상태: 완료 / 대기
+- 현재 실행 도구: codex
+- 실행 도구 상태: 작업 중
 - 다른 도구로 인계 가능: 예. STATUS·실제 Git·미검증 한계 대조 후 잠금을 새로 획득한다.
 - 마지막 실행 도구: codex
 - 마지막 구현 체크포인트: 429db9edd24ccfbe9af1ec4072c4183848b59e5f (단계 2~7 코드·테스트·검증 문서)
@@ -99,3 +99,10 @@
 - 병합 직후 git diff --exit-code score HEAD 결과 0으로 승인된 원본과 전체 트리 동일 확인. 코드 변경/충돌 해결이 없어 기존 테스트 유효성 유지, 테스트 반복 실행 안 함.
 - main에 이번 완료 STATUS만 문서 커밋으로 추가. score 브랜치는 삭제하지 않고 보존. 문서 커밋의 정확한 HEAD는 git log -1로 확인.
 - 원격 조회/fetch/push, PR 생성/병합, 배포는 이번 요청에서 실행하지 않음. 현재 체크아웃은 main.
+## 원격 main pull/push 요청과 충돌 해결
+- 사용자 요청: “지금 충돌나는데 pull push 하면서. pull 먼저 해주고 push해줘 main에서”. 이번 origin/main pull 및 push의 명시적 권한으로 적용한다.
+- 시작 Git: main=eb26bd9, MERGE_HEAD=a232a076cf174b4d857ac84516dade19dcf97226. 기존 사용자 pull에서 docs/architecture.md 및 server/src/repositories/sessions.ts 두 파일 충돌. 병합을 abort하거나 다른 변경을 버리지 않고 이어서 해결.
+- 서버 조회는 metric별 분리, 전체 날짜/분별 집계, calibration 조회를 함께 보존. 문서는 양쪽 책임과 로컬/서버 미연결 경계를 반영.
+- 회귀 검사 보완: SQL의 지표/날짜/소유자/기준 조회 및 새 로그 계약의 null/0/수치 경계 보존.
+- 검증: 프론트 타입/린트와 94개, 서버 build 및 수정 후34개, Python2개/import/모델/키 맵 통과. 세부 초기 실패와 수정은 09_VERIFICATION.md.
+- DB schema/migration 실행 없음. macOS 실행 환경 미검증. 원격에서 들어온 변경은 병합 범위로 보존.

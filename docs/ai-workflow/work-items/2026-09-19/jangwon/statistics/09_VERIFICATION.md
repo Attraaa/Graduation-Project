@@ -55,3 +55,12 @@
 
 ## 사용자 최종 확인 보고
 사용자가 “다 확인했어. 최종승인할게”라고 전반 확인과 최종 승인을 직접 보고했다. 구체적인 기기·측정/설치 시나리오·검사 로그는 전달되지 않았다. 이는 위 AI 자동 검증과 별도의 사용자 확인이며, 미실행 기술 검사를 소급하여 통과로 표시하지 않는다. 코드 변경 없음.
+## 원격 main 통합 중 추가 검증
+- 사용자 요청: main에서 pull 후 push. 기존 pull이 eb26bd9 + 원격 a232a07 병합 중 두 충돌로 멈춘 상태에서 재개했다.
+- docs/architecture.md: 로컬 통계/점수 안내와 원격 서버 측정/설정/피드백 안내를 함께 보존하고, 서버 필드에 프론트 점수 계약이 아직 연결되지 않았음을 명시.
+- server/src/repositories/sessions.ts: 원격 metric별 분리/calibration 조회와 로컬 전체 날짜·분 단위 집계를 함께 유지. SELECT에는 MIN(recorded_at), GROUP BY에는 metric과 날짜/분을 사용.
+- 충돌 회귀 테스트: metric과 전체 날짜 그룹화, 순서, 소유자 인수, calibration 조회 검증 보강.
+- moti.cmd check에서 프론트 타입/린트 및 94개 테스트, 서버 build 통과. 서버 테스트 한 건은 자동 병합된 기존 fixture가 원격의 metric/elapsedMs 필드를 반영하지 않아 실패했다.
+- 새 입력 계약에 맞춰 해당 fixture만 보정했다. 누락/실제 0점, 수치 경계, 잘못된 값 거부 assertion을 유지하고 지표 없는 0점 요청 거부를 추가했다.
+- 수정 후 서버 npm test 34/34 통과, Python unittest 2/2 통과. Python import/OpenCV·NumPy·MediaPipe·Torch/모델·키 맵 검사도 exit 0. 카메라/키 수집은 수행하지 않음.
+- 실제 MySQL schema/migration과 사용자 DB는 실행하지 않았다. 원격에 추가된 macOS 스크립트는 보존하되 Windows 환경에서 실행 검증하지 않았다.

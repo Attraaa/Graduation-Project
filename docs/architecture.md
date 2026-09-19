@@ -28,7 +28,7 @@ flowchart TD
   KM --> FP[버전된 권장 손가락 정책 · 보수적 판정]
 ```
 
-Electron 개발 앱의 키보드 모드는 로컬 Python 프로세스를 자동 실행하고 현재 화면의 카메라 프레임·키 입력을 연결합니다. 결과 저장과 Express API 연결은 아직 없습니다. MySQL은 현재 코드와 호환되는 어댑터이며 최종 DB 제품을 승인받았다는 의미가 아닙니다.
+Electron 개발 앱의 키보드 모드는 로컬 Python 프로세스를 자동 실행하고 현재 화면의 카메라 프레임·키 입력을 연결합니다. 서버에는 측정 결과를 저장할 경로를 만들었지만 프론트가 아직 그 API를 호출하지 않습니다. MySQL은 현재 코드와 호환되는 어댑터이며 최종 DB 제품을 승인받았다는 의미가 아닙니다.
 
 ## 파일별 책임
 
@@ -68,9 +68,11 @@ Electron 개발 앱의 키보드 모드는 로컬 Python 프로세스를 자동 
 | `server/src/app.ts`, `http.ts` | API 조립과 공통 비동기 오류 응답 |
 | `server/src/validation.ts` | HTTP 입력을 런타임에서 검사 |
 | `server/src/routes/` | HTTP 계약/인증/응답 변환 |
-| `server/src/services/sessions.ts` | 세션 소유권, 종료 정책, 트랜잭션 작업 경계 |
+| `server/src/services/sessions.ts` | 세션 소유권, 종료 정책, 측정 입력 파서, 트랜잭션 작업 경계 |
 | `server/src/services/statistics.ts` | 오늘·달력의 세션 수 가중 평균. 누락 평균과 실제 0점 구분 |
-| `server/src/repositories/sessions.ts` | MySQL SQL, 행 잠금, 트랜잭션, 통계 집계 |
+| `server/src/repositories/sessions.ts` | MySQL SQL, 행 잠금, 트랜잭션, 통계 집계, 지표·날짜별 측정 데이터 기록/조회 |
+| `server/src/routes/feedback.ts` | 날짜·모드 단위 피드백 기록/조회. 서버가 요약을 만들지는 않음 |
+| `server/migrations/` | 기존 DB에 적용하는 변경. `schema.sql`은 새 DB용 전체 정의 |
 | `server/test/` | 입력·인증·HTTP 오류·세션 재시도/소유권 회귀 검사 |
 | `keyboard-detect/pyproject.toml`, `uv.lock` | Python 의존성의 입력 선언과 정확한 해결 결과 |
 | `keyboard-detect/src/` | 키보드 검출·원근 변환·키 영역 판정 |
@@ -98,7 +100,7 @@ Electron 개발 앱의 키보드 모드는 로컬 Python 프로세스를 자동 
 
 ## 서버의 유지 계약과 변경
 
-기존 `/api/auth`, `/api/sessions`, `/api/statistics`, `/health` 경로를 유지합니다. 상세 경로는 최초 감사 기록의 API 표와 현재 routes 파일을 함께 확인합니다.
+기존 `/api/auth`, `/api/sessions`, `/api/statistics`, `/health` 경로를 유지하고 `/api/feedback`을 추가했습니다. 상세 경로는 최초 감사 기록의 API 표와 현재 routes 파일을 함께 확인합니다.
 
 - 세션 종료는 동일 DB 트랜잭션에서 행 잠금 후 한 번만 집계합니다. 이미 끝난 세션의 재요청은 통계를 더하지 않습니다.
 - 종료 입력 `score`(0–100 정수), `alertCount`(0 이상 정수)는 필수입니다. 누락한 점수를 100점으로 저장하던 동작을 제거했습니다. 이 점수 필드는 기존 API 호환 계약이며 새 자세 점수 산식이 아닙니다.
@@ -107,7 +109,25 @@ Electron 개발 앱의 키보드 모드는 로컬 Python 프로세스를 자동 
 - MySQL 트랜잭션/행 잠금은 실제 배포 DB의 엔진·시간대·SQL mode에서 추가 검증해야 합니다. 이번 단위 테스트의 대역 저장소가 실제 DB를 대체해 검증해 주는 것은 아닙니다.
 - 일별 집계는 자정을 넘어도 기존처럼 세션 시작일에 전체 시간을 귀속합니다. 오늘·달력 점수는 세션 수 가중 평균이며 평균이 누락된 행은 점수 분모에서 제외합니다. 다일 세션의 로그는 날짜와 분으로 그룹화합니다.
 
-통계 그래프에 남아 있는 `AVG(measured_value) AS score`는 기존 계약입니다. 이를 새 자세 점수로 쓰면 안 됩니다. 현재 DB 구조에는 새 기준 자세/손가락 오사용/휴식/점수 버전을 모두 저장할 계약이 없으므로 DB 선정 후 마이그레이션을 설계합니다.
+통계 그래프에 남아 있는 `AVG(measured_value) AS score`는 기존 계약입니다. 이를 새 자세 점수로 쓰면 안 됩니다.
+
+## 측정 데이터 저장 계약
+
+기준 자세, 지표별 관측, 키 입력 판정을 저장할 자리를 만들었습니다. 스키마 변경은 `server/migrations/001_measurement_tables.sql`이며 `server/schema.sql`에도 같은 정의가 들어 있습니다. 실제 MySQL 9.6에서 신규 설치와 기존 DB 적용 두 경로, 그리고 아래 경로를 모두 실행해 확인했습니다.
+
+- `POST /api/sessions/:id/calibration` — 세션당 한 벌. 이미 있으면 409이며 덮어쓰지 않습니다. 기준을 다시 잡는 것은 새 세션입니다. 프론트의 `startedAtMs`/`completedAtMs`는 `performance.now()` 단조 시계이므로 시각이 아니라 수집 구간 길이(`collected_ms`)로 저장합니다.
+- `POST /api/sessions/:id/logs/batch` — 최대 200건. `metric`과 `measuredValue`는 함께 보내야 하고, `UNAVAILABLE`에는 측정값을 보낼 수 없습니다. 관찰이 끊긴 구간을 GOOD/WARNING/DANGER로 바꾸지 않기 위한 경계입니다.
+- `POST /api/sessions/:id/keystrokes` — 최대 200건. `unknown` 판정에는 `observedFinger`와 `confidence`가 없어야 하고 나머지 판정에는 있어야 합니다. 판별 가능한 입력만 통계의 분모로 쓰기 위해 `policy_version`과 함께 저장합니다.
+- 세 경로 모두 소유자가 아니면 404, 종료된 세션이면 409입니다.
+- `elapsedMs`는 세션 시작 이후 경과 시간이며 클라이언트 시계 값이 아닙니다. 서버는 DB가 찍은 `started_at`에 더해 기록 시각을 만듭니다. 보내지 않으면 DB의 `NOW()`를 씁니다.
+- `GET /api/sessions/:id`는 저장된 기준 자세를 `calibration`으로 함께 돌려줍니다. 없으면 `null`이며, 그 세션의 `measured_value`는 해석할 수 없다는 뜻입니다. 그래프는 지표별로 나누어 돌려줍니다.
+
+`sessions.score`는 여전히 필수 입력입니다. 프론트의 버전된 기준 자세 유사도·로컬 SQLite와 이 서버 필드는 아직 연결하지 않았습니다. 서버 연동 시 점수 정책 매핑과 NULL 허용 여부를 별도 계약·마이그레이션으로 결정합니다. `bad_posture_seconds`와 휴식 기록은 아직 저장 계약이 없습니다.
+
+## 사용자 설정과 피드백
+
+- `GET`/`PUT /api/auth/me/settings` — `users.settings` JSON을 통째로 읽고 씁니다. 서버는 항목 이름을 해석하지 않고 개수(50개)·값 종류·전체 크기(4KB)만 제한합니다. 화면이 설정을 늘려도 서버를 고치지 않습니다.
+- `POST`/`GET /api/feedback` — (사용자, 날짜, 모드) 단위 기록입니다. 서버는 요약을 생성하지 않으며 저장된 문장은 저장한 쪽이 쓴 것입니다.
 
 결정성·누락·임계값·자정의 자동 검증 결과와 실제 DB 검증 한계는 [evaluation.md](evaluation.md)에 정리했습니다. 키보드 평가는 이번 검증에서 제외했습니다.
 
