@@ -3,7 +3,7 @@
 ## 기준과 범위
 - 2026-09-19, Windows x64, branch score.
 - 시작 HEAD: 08207145474724baf32f5df2010e36652dfea858, 최초 계약 체크포인트: fff451ff5ed264deda17b75e26a247a014f674e1.
-- 아래 최종 검증은 fff451f 이후 단계 2~7의 현재 작업 트리에 적용한다. 이후 프로덕션 코드 변경 없음. 최종 코드 커밋은 STATUS/로컬 Git 로그에서 확인.
+- 아래 최종 검증은 fff451f 이후 단계 2~7의 현재 작업 트리에 적용한다. 이후 프로덕션 코드 변경 없음. 최종 코드 커밋: 429db9edd24ccfbe9af1ec4072c4183848b59e5f. 이후 문서 전용 변경은 코드 검증을 무효화하지 않는다.
 - 01/04/13/16 사람 소유 파일과 ADR 승인 원문 보존 확인. calibration/observation/scoring/evaluation, 점수 정책, hooks, server, keyboard-detect 무변경을 git diff로 확인.
 
 ## 실행 증거

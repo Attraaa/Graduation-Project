@@ -8,15 +8,15 @@
 - 다음 행동: 사용자가 13_UNDERSTANDING.md 작성 후 작성했어로 응답. AI는 다시 읽고 14/15 지침으로 확인한 뒤 16 최종 승인 단계.
 - 현재 담당자: codex
 - 작업 잠금: codex (사람 게이트 대기; 다른 도구의 동시 수정 금지)
-- 마지막 갱신: 2026-09-19 17:53 KST
+- 마지막 갱신: 2026-09-19 18:01 KST
 
 ## 실행 도구와 인계
 - 현재 실행 도구: codex
 - 실행 도구 상태: 사람 게이트 대기
 - 다른 도구로 인계 가능: 아니오. 전환 요청 시 CROSS_AGENT_HANDOFF로 별도 잠금 해제.
 - 마지막 실행 도구: codex
-- 마지막 확인 체크포인트: fff451ff5ed264deda17b75e26a247a014f674e1 (단계 1)
-- 최종 로컬 체크포인트: 문서·코드·검증을 함께 커밋 예정. 성공 후 아래 기록 갱신.
+- 마지막 구현 체크포인트: 429db9edd24ccfbe9af1ec4072c4183848b59e5f (단계 2~7 코드·테스트·검증 문서)
+- 최종 로컬 체크포인트: 완료. 이 상태 갱신은 구현 이후 문서 전용 체크포인트로 남기며 구현 테스트 유효성은 유지된다.
 - 테스트 유효성: 현재 구현 소스에 전체 check/최종 front94/실제 Electron 두 프로세스/활성 종료 실패 검사 통과. 이후 문서/테스트 도구만 정리.
 
 ## 연결 정보
@@ -42,8 +42,8 @@
 | PR 초안/인수인계 | 완료 | 11_PR_DRAFT.md, 12_HANDOFF.md |
 | 사용자 이해/최종 승인 | 대기 | 13_UNDERSTANDING.md / 16_FINAL_APPROVAL.md |
 
-## 마지막 저장소 확인과 미커밋 범위
-최종 체크포인트 전 HEAD fff451f. 이 작업 외 변경 없음.
+## 마지막 저장소 확인과 구현 체크포인트 범위
+구현 체크포인트 HEAD 429db9edd24ccfbe9af1ec4072c4183848b59e5f 생성 후 작업 트리가 깨끗함을 확인했다. 아래는 해당 커밋의 변경 범위이며 현재 진행 중인 문서 갱신 외 미커밋 코드 없음.
 - AGENTS.md, CLAUDE.md, README.md, docs/{architecture,collaboration,dependencies,development,evaluation,product-decisions,roadmap}.md의 현행 동작 안내.
 - database/{README.md,contracts.ts,recorder.ts,aggregation.ts,sqlite/repository.ts}.
 - front/electron/{main.ts,preload.ts,recordHandlers.ts}, front/tsconfig.electron.json.
@@ -53,7 +53,7 @@
 - front/tests/record-*.test.mjs, fixtures/record-batch.mjs, electron-record-smoke.mjs, scripts/check-records-electron.mjs.
 - 이 작업 폴더 STATUS/09/10/11/12/step-reports/02~07.
 - 01/04/13/16과 ADR 승인 원문은 구현 중 무변경. 원격/사용자 실제 DB에 작업하지 않음.
-- 최종 커밋 후 위 목록은 해당 체크포인트의 변경 목록으로 해석한다. 테스트 PNG/테스트 DB는 ignored .moti-cache에만 존재.
+- 위 목록은 구현 체크포인트의 변경 목록이다. 테스트 PNG/테스트 DB는 ignored .moti-cache에만 존재.
 
 ## 검증 및 남은 제한
 - setup 복원, moti.cmd check exit0; front 최종94, server26, Python2.
@@ -74,7 +74,7 @@
 - setup은 기존 개발 앱의 파일 잠금 해결 후 성공.
 - 단계2 로컬 커밋의 자동 승인 검토가 한도 문제로 거절되어 우회 없이 보류. 이후 허용된 수정/검증을 계속.
 - 실제 Electron은 샌드박스 GPU 제한 후 승인된 정상 Windows 환경에서 격리 프로필로 성공.
-- 최종 로컬 체크포인트 결과는 후속 상태 기록으로 남긴다.
+- 2026-09-19: 자동 승인 검토가 복구된 후 정상 경로로 구현 체크포인트 429db9edd24ccfbe9af1ec4072c4183848b59e5f 생성 성공. 원격 작업 없음. 현재 문서 갱신도 별도 로컬 커밋으로 보존.
 
 ## 완료 후 기록
 작업은 병합/배포 완료 상태가 아니다. 사용자 이해 확인과 최종 승인, 별도 외부 작업 권한이 남아 있다.
