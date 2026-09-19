@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "lint": "eslint src electron vite.config.ts",
+    "lint": "eslint src electron vite.config.ts && cd .. && node front/node_modules/eslint/bin/eslint.js --config front/eslint.config.js database",
     "preview": "vite preview",
     "prepare": "node scripts/copy-mediapipe.mjs",
     "predev": "node scripts/copy-mediapipe.mjs",
