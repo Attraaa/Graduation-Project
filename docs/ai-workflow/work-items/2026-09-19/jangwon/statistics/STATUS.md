@@ -2,17 +2,17 @@
 
 ## 빠른 상태
 - 작업 ID: 2026-09-19/jangwon/statistics
-- 작업 상태: VERIFYING
-- 현재 단계: pull 충돌 해결·통합 검증 완료, 병합 커밋/pull/push 진행
-- 마지막 완료 단계: score → main fast-forward 병합
-- 다음 행동: 기존 pull의 병합 커밋 → git pull --no-rebase origin main → 새 변경 확인 → git push origin main. 사용자가 이 동작을 명시적으로 요청함.
-- 현재 담당자: codex
-- 작업 잠금: codex (원격 병합 통합 검증 중)
-- 마지막 갱신: 2026-09-19 18:22 KST
+- 작업 상태: DONE
+- 현재 단계: 원격 main pull·충돌 해결·통합 검증·push 완료
+- 마지막 완료 단계: origin/main 통합 병합 및 push
+- 다음 행동: 이번 pull/push 요청 완료. 추가 실행 작업 없음. 이해 학습은 사용자가 원할 때 재개.
+- 현재 담당자: 없음 (요청 완료)
+- 작업 잠금: 없음
+- 마지막 갱신: 2026-09-19 18:27 KST
 
 ## 실행 도구와 인계
-- 현재 실행 도구: codex
-- 실행 도구 상태: 작업 중
+- 현재 실행 도구: 없음
+- 실행 도구 상태: 완료 / 대기
 - 다른 도구로 인계 가능: 예. STATUS·실제 Git·미검증 한계 대조 후 잠금을 새로 획득한다.
 - 마지막 실행 도구: codex
 - 마지막 구현 체크포인트: 429db9edd24ccfbe9af1ec4072c4183848b59e5f (단계 2~7 코드·테스트·검증 문서)
@@ -24,7 +24,7 @@
 - 브랜치: main (작업 원본 score 보존)
 - worktree: F:/graduation_pr
 - 시작 HEAD: 08207145474724baf32f5df2010e36652dfea858. 기존 score 유지.
-- 실제 병합: 로컬 main에 score fast-forward 완료. 이번 요청에서 원격 push/PR 생성/배포는 실행하지 않음.
+- 실제 병합: 로컬 main에 score fast-forward 완료. 후속 사용자 요청으로 원격 origin/main 통합 및 push 완료. PR 생성/배포는 실행하지 않음.
 - ADR: adr/0001-local-posture-storage.md Accepted (서장원, 2026-09-19). 승인 원문 보존.
 
 ## 구현 단계
@@ -78,7 +78,7 @@
 - 2026-09-19: 자동 승인 검토가 복구된 후 정상 경로로 구현 체크포인트 429db9edd24ccfbe9af1ec4072c4183848b59e5f 생성 성공. 원격 작업 없음. 현재 문서 갱신도 별도 로컬 커밋으로 보존.
 
 ## 완료 후 기록
-로컬 기능 구현·자동 검증·사용자 최종 승인·main 병합 완료. 사용자 요청 범위 완료로 DONE. 이해 학습은 추후로 유예하며 원격 push와 배포는 별도 요청 사항이다.
+기능 구현·검증·사용자 최종 승인·main 병합 및 후속 pull/push 완료. 요청 범위 완료로 DONE. 이해 학습은 추후 유예, 배포는 미실행.
 
 ## 이번 작업의 이해 확인 유예 — 사용자 명시 요청
 - 사용자: “지금 일단 동작 구현하는게 급해서 일단 나중에 이해하는걸로하고 일단은 넘어가도 될까? 나중에 다시 확인해볼게”.
@@ -106,3 +106,10 @@
 - 회귀 검사 보완: SQL의 지표/날짜/소유자/기준 조회 및 새 로그 계약의 null/0/수치 경계 보존.
 - 검증: 프론트 타입/린트와 94개, 서버 build 및 수정 후34개, Python2개/import/모델/키 맵 통과. 세부 초기 실패와 수정은 09_VERIFICATION.md.
 - DB schema/migration 실행 없음. macOS 실행 환경 미검증. 원격에서 들어온 변경은 병합 범위로 보존.
+## 원격 동기화 완료 확인
+- 통합 병합 커밋: d74e588edce390700a89040aaa7a8a2732315e16 (부모 eb26bd9, a232a07).
+- git pull --no-rebase origin main: Already up to date. 미반영 원격 커밋 없음.
+- git push origin main: a232a07→d74e588 성공. force push 사용 안 함.
+- push 후 HEAD...origin/main은 0/0, git ls-remote의 refs/heads/main은 d74e588과 일치. 작업 트리 clean 확인.
+- 이번 STATUS 완료 기록만 문서 커밋으로 추가하여 같은 main에 후속 push한다. 코드와 통합 검사 결과는 변경 없음. 최종 원격 HEAD는 마지막 push 후 git status/ls-remote로 확인.
+- 프론트94/서버34/Python2 및 타입·린트·서버 build·Python import/모델 검사 통과. 실제 DB 변경, PR 생성, 배포 없음. 실행 잠금 해제.
