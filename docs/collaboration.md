@@ -59,3 +59,7 @@ README와 docs/collaboration.md, docs/evaluation.md를 읽어.
 ## 로컬 기록 담당 경계 (2026-09-19)
 
 목/어깨의 표시 차이는 `front/src/features/records/modes/turtle.ts`, `shoulder.ts`에 둡니다. `database/contracts.ts`(버전·직렬화), `recorder.ts`(시간 분할), `aggregation.ts`(순수 합산), `sqlite/repository.ts`(DB), Electron main/preload(IPC)는 공통 연결 담당자가 조정합니다. 기록 기능이 점수/관측/카메라 정책을 소유하지 않습니다. 저장 경로와 복구·삭제 계약 변경은 [database/README.md](../database/README.md)와 해당 테스트를 함께 갱신합니다.
+
+## 안구 모드 담당 경계
+
+안구 계산·정책·영상 처리는 `front/src/features/eye/`가 소유합니다. `EyeSession`은 기존 SessionFrame/Metric/useSessionControls를 재사용합니다. 기존 공통 훅과 다른 모드 알고리즘·SQLite·서버 계약은 변경하지 않습니다. 안구 정책 변경은 `eyePolicy.ts`, 안구 테스트, [eye-mode.md](eye-mode.md)를 함께 갱신합니다. 아직 안구 결과의 DB 저장·조회는 구현하지 않았습니다.

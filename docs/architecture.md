@@ -81,7 +81,7 @@ Electron 개발 앱의 키보드 모드는 로컬 Python 프로세스를 자동 
 
 ## 측정 화면의 계약
 
-상체 화면은 `LearningSession → PostureSession → PostureMonitor`로 연결합니다. 프레임 계산은 `useWebcam/useMediaPipe → calibration → observation → scoring/evaluation → MonitorSnapshot → PostureMetrics` 순서입니다. 모드 변경과 기준 다시 잡기는 이전 스트림·모델·점수·습관 상태를 정리하고 새 기준을 수집합니다. 중지하면 카메라를 해제하고 마지막 계산까지 화면에 반영합니다. 기준 수집은 현재 `turtle`, `shoulder`에 연결되어 있으며 안구 모드는 아직 비활성입니다.
+상체 화면은 `LearningSession → PostureSession → PostureMonitor`로 연결합니다. 프레임 계산은 `useWebcam/useMediaPipe → calibration → observation → scoring/evaluation → MonitorSnapshot → PostureMetrics` 순서입니다. 모드 변경과 기준 다시 잡기는 이전 스트림·모델·점수·습관 상태를 정리하고 새 기준을 수집합니다. 중지하면 카메라를 해제하고 마지막 계산까지 화면에 반영합니다. 기준 수집은 현재 `turtle`, `shoulder`에 연결되어 있으며 안구 모드는 독립된 `EyeSession → EyeMonitor → Face Landmarker → measurement` 경로로 깜빡임·상대 얼굴 크기·휴식 안내를 제공합니다. 화면 내 세션만 유지하며 로컬 SQLite/API 저장은 연결하지 않습니다. [안구 모드](eye-mode.md)를 참고합니다.
 
 키보드는 `LearningSession → KeyboardSession → KeyboardMonitor → loopback Python service → runtime adapter → finger policy` 순서입니다. Electron main은 빈 로컬 포트와 세션 토큰을 만들고 개발 환경의 `.venv` Python을 자식 프로세스로 실행합니다. 렌더러는 실행 중인 화면의 `keydown`만 전송하며 전역 키로거를 켜지 않습니다. Python은 키 영역·손끝 후보·프레임 시간차를 반환하고, 권장/허용/다름/판정 보류 결정은 앱의 버전된 정책이 담당합니다. 손 가림, 낮은 키보드 신뢰도, 프레임 시간차, 가까운 복수 후보는 오답으로 강제하지 않고 판정 보류합니다. 카메라 영상과 결과는 아직 저장하거나 원격 서버로 보내지 않습니다.
 
