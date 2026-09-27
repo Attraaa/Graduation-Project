@@ -2,6 +2,9 @@
 /reports/
 .DS_Store
 
+# Runtime posture database stored beside the SQLite source by explicit project policy
+/database/sqlite/posture.sqlite*
+
 # Project-managed Windows runtimes and Python environments
 /.tools/
 **/.venv/

@@ -32,7 +32,7 @@
 
 ## 상태와 데이터
 - 읽는 데이터: 기존 관측 평가 누적값, 데모 계정 ID, 점수/습관 정책.
-- 쓰는 데이터: userData/database/posture.sqlite의 owners/records/buckets/batches. 영상·랜드마크·비밀번호 없음.
+- 쓰는 데이터: 프로젝트 상대 경로 database/sqlite/posture.sqlite의 owners/records/buckets/batches. 영상·랜드마크·비밀번호 없음. 기존 userData DB는 새 DB가 없을 때 한 번 복사하고 원본은 보존.
 - 상태: running→finished, 시작 시 잔여 running→interrupted.
 - 트랜잭션: 요약/변경 버킷/digest 또는 계정 삭제/generation 증가를 원자 처리.
 - 중복 방지: UUID·연속 순번·digest; 삭제 generation으로 늦은 배치 무효화.

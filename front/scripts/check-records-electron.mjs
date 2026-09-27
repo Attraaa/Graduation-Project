@@ -10,6 +10,7 @@ const profile = mkdtempSync(resolve(output, 'records-electron-'));
 const env = { ...process.env };
 delete env.ELECTRON_RUN_AS_NODE;
 delete env.VITE_DEV_SERVER_URL;
+env.MOTI_RECORD_DATABASE_DIRECTORY = resolve(profile, 'database');
 for (const phase of ['seed', 'verify']) {
   const result = spawnSync(electron, [resolve('tests/electron-record-smoke.mjs'), profile, phase], {
     env, stdio: 'inherit', windowsHide: true, timeout: 60_000,

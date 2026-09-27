@@ -18,7 +18,7 @@ flowchart TD
   R --> D[로컬 데모 계정]
   V1 --> REC[모든 관측의 분 버킷 · 배치 기록]
   REC -->|검증된 records IPC| E
-  E --> SQLITE[루트 database 코드 · userData SQLite]
+  E --> SQLITE[루트 database 코드 · database/sqlite/posture.sqlite]
   SQLITE -->|날짜 · 모드 · 정책별 조회| R
   A[독립 Express API] --> V[검증 · 인증 · 세션 서비스]
   V --> DB[MySQL 저장소 어댑터]

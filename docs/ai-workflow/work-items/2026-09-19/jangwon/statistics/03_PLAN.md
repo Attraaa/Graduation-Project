@@ -88,7 +88,7 @@
 ## 6. 유지해야 하는 계약과 불변 조건
 
 - 공개 API: 기존 `/api/auth`, `/api/sessions`, `/api/statistics`, `/health` 변경 없음. 기존 정수 score/alertCount 필드에 새 버전 데이터를 억지로 맞추지 않는다.
-- 데이터베이스와 데이터: 새 DB는 `app.getPath('userData')/database/posture.sqlite` 제안. 기존 DB와 localStorage 계정은 보존. `server/schema.sql`, `front/database_schema.sql` 실행/삭제 안 함. 예시 이력은 실측으로 마이그레이션하지 않는다.
+- 데이터베이스와 데이터: 승인 당시 새 DB는 `app.getPath('userData')/database/posture.sqlite`로 제안했다. 2026-09-19 후속 사용자 요청으로 실제 경로를 프로젝트 상대 `database/sqlite/posture.sqlite`로 변경하며, 기존 userData DB는 새 경로가 비어 있을 때 한 번 복사해 보존한다. `server/schema.sql`, `front/database_schema.sql` 실행/삭제 안 함. 예시 이력은 실측으로 마이그레이션하지 않는다.
 - 이벤트와 메시지: DB 경로·임의 SQL을 renderer에 제공하지 않는다. 새 `motiRecords` 전용 IPC에서 입력 크기/값/모드/소유자/호출 창을 검사한다. 기존 키보드 계약은 유지한다.
 - 설정과 환경변수: 비밀값 변경 없음. 런타임은 현 잠금 기준, 새 드라이버가 필요하면 npm만 사용한다.
 - 기존 사용자 동작: 시작/중지/기준 다시 잡기/장치 변경/모드 이동 유지. 저장 지연으로 카메라 해제나 화면 이동을 막지 않는다.

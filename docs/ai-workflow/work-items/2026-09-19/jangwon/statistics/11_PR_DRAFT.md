@@ -42,7 +42,7 @@ PostureMonitor의 매 평가 결과
 - 내부 인터페이스: RecordBatch/RecordQuery/RecordPage/RecordDetail/StatisticsRow, CaptureSink.
 - DB/마이그레이션: 새 로컬 SQLite v1. 빈 새 파일만 초기화, 다른/미지원/손상 파일 보존.
 - 이벤트/메시지: records generation/write/list/detail/statistics/clear/closing/close-ready.
-- 설정/환경변수: 사용자 설정 추가 없음, app.userData/database/posture.sqlite.
+- 설정/환경변수: 기본 경로는 프로젝트 상대 database/sqlite/posture.sqlite. Electron 통합 테스트만 MOTI_RECORD_DATABASE_DIRECTORY로 임시 경로 격리.
 - production dependency: 없음. 잠긴 Electron 내장 node:sqlite.
 - 권한/보안 경계: main 창/프레임/문서와 payload 검사. 계정 ID는 데모 데이터 분리이며 보안 인증 아님.
 

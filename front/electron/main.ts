@@ -1,12 +1,13 @@
 import { app, BrowserWindow, ipcMain, dialog } from 'electron'
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
-import { existsSync, mkdirSync } from 'node:fs'
+import { existsSync } from 'node:fs'
 import net from 'node:net'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { RecordRepository } from '../../database/sqlite/repository'
 import { recordCall, requireRecords, trustedRecordUrl } from './recordHandlers'
+import { resolveRecordDatabasePath } from './recordDatabasePath'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -258,9 +259,7 @@ app.on('activate', () => {
 
 if (ownsInstance) app.whenReady().then(() => {
   try {
-    const directory = path.join(app.getPath('userData'), 'database')
-    mkdirSync(directory, { recursive: true })
-    records = new RecordRepository(path.join(directory, 'posture.sqlite'))
+    records = new RecordRepository(resolveRecordDatabasePath(__dirname, app.getPath('userData')))
   } catch (error) { recordsError = error instanceof Error ? error.message : '기록 저장소를 열 수 없습니다.' }
   createWindow()
 })

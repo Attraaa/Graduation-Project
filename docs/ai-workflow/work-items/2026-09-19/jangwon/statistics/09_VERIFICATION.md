@@ -64,3 +64,13 @@
 - 새 입력 계약에 맞춰 해당 fixture만 보정했다. 누락/실제 0점, 수치 경계, 잘못된 값 거부 assertion을 유지하고 지표 없는 0점 요청 거부를 추가했다.
 - 수정 후 서버 npm test 34/34 통과, Python unittest 2/2 통과. Python import/OpenCV·NumPy·MediaPipe·Torch/모델·키 맵 검사도 exit 0. 카메라/키 수집은 수행하지 않음.
 - 실제 MySQL schema/migration과 사용자 DB는 실행하지 않았다. 원격에 추가된 macOS 스크립트는 보존하되 Windows 환경에서 실행 검증하지 않았다.
+
+## 프로젝트 상대 SQLite 경로 변경 검증 — 2026-09-27
+- 사용자 요청에 따라 기본 런타임 경로를 `<Electron userData>/database/posture.sqlite`에서 저장소 상대 `database/sqlite/posture.sqlite`로 변경했다.
+- `front/dist-electron/main.js`의 모듈 위치를 기준으로 저장소 루트의 `database/sqlite`를 계산한다. 새 디렉터리는 실행 시 자동 생성하며 DB/WAL은 Git에서 제외한다.
+- 기존 userData DB가 있고 새 DB가 없을 때만 DB와 WAL을 한 번 복사한다. 기존 DB는 삭제하지 않고 새 DB가 있으면 덮어쓰지 않는다.
+- 경로/이전 단위 테스트 2개와 저장소 테스트 7개: 9/9 통과.
+- `moti.cmd check`: exit 0. 프런트 타입·린트·96개, 서버 build·34개, Python 2개 및 import/모델/키 맵 검사 통과.
+- `npm run build -- --configLoader runner`: exit 0. React, Electron main, preload 생성.
+- `node scripts/check-records-electron.mjs`: 격리 경로 override를 사용한 실제 Electron seed/verify 두 프로세스, UI·IPC·정상 종료·재시작 통과. 산출물 `front/.moti-cache/records-electron-7bEbyq`.
+- 실행 중이던 앱이 변경된 main을 다시 불러오면서 실제 AppData DB/WAL을 새 프로젝트 경로로 자동 복사했다. 원본과 대상의 DB/WAL SHA-256이 각각 일치했고 두 DB 모두 `quick_check=ok`, records 8개, buckets 13개로 확인됐다. AppData 원본은 삭제하거나 수정하지 않았다.

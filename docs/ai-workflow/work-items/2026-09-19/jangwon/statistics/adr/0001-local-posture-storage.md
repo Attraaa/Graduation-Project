@@ -37,7 +37,7 @@ Accepted
 ## 제약과 불변 조건
 
 - 사용자는 전체 계획을 승인하고 DB 코드 위치를 저장소 루트 `database/`로 지정했다.
-- `database/`는 코드 위치이며 실제 파일은 `<Electron userData>/database/posture.sqlite`에 둔다. 설치/소스 디렉터리에 사용자 기록을 쓰지 않는다.
+- `database/`는 코드 위치다. 최초 승인에서는 실제 파일을 `<Electron userData>/database/posture.sqlite`에 두기로 했지만, 2026-09-19 사용자가 후속 요청으로 프로젝트 상대 경로 `database/sqlite/posture.sqlite`를 명시했다. 후속 명시 요청을 적용하며 실제 파일은 Git에서 제외한다.
 - 기존 MySQL/SQL 자료/데모 계정은 자동 이관하거나 삭제하지 않는다.
 - 기존 순수 캘리브레이션·점수·습관 정책, 카메라 동작, 0점/null 구분을 유지한다.
 

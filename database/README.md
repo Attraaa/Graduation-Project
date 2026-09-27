@@ -1,6 +1,8 @@
 # 목·어깨 로컬 기록
 
-소스는 저장소 루트 `database/`, 실제 DB는 Electron `app.getPath('userData')/database/posture.sqlite`에 둡니다. `front/database`나 기존 MySQL SQL을 사용하지 않습니다. 이번 로컬 저장 결정은 [Accepted ADR](../docs/ai-workflow/work-items/2026-09-19/jangwon/statistics/adr/0001-local-posture-storage.md)에 근거합니다.
+소스는 저장소 루트 `database/`에 두며, 실제 DB도 프로젝트 상대 경로 `database/sqlite/posture.sqlite`에 둡니다. 개발 빌드의 `front/dist-electron/main.js` 위치에서 `../../database/sqlite`를 계산하므로 현재 체크아웃을 옮겨도 같은 저장소 안의 상대 위치를 사용합니다. `front/database`나 기존 MySQL SQL을 사용하지 않습니다.
+
+이 경로는 2026-09-19 사용자의 명시적 변경 요청을 반영합니다. 기존 `<Electron userData>/database/posture.sqlite`가 있고 새 경로에 DB가 없으면 첫 실행에 DB와 WAL을 한 번 복사하며, 기존 파일은 삭제하지 않습니다. 새 경로에 DB가 이미 있으면 덮어쓰지 않습니다. 테스트는 `MOTI_RECORD_DATABASE_DIRECTORY`로 격리된 임시 폴더를 사용합니다.
 
 ## 책임과 흐름
 
@@ -21,7 +23,7 @@
 
 ## 저장·복구·삭제
 
-스키마 v1은 owners, records, buckets, batches와 인덱스를 사용합니다. application_id, user_version, quick_check, foreign_key_check를 확인하고 빈 새 파일만 초기화합니다. 손상·다른 제품·미지원 버전 파일은 덮어쓰지 않고 오류를 표시합니다. WAL과 synchronous=FULL을 사용합니다.
+스키마 v1은 owners, records, buckets, batches와 인덱스를 사용합니다. application_id, user_version, quick_check, foreign_key_check를 확인하고 빈 새 파일만 초기화합니다. 손상·다른 제품·미지원 버전 파일은 덮어쓰지 않고 오류를 표시합니다. WAL과 synchronous=FULL을 사용합니다. 실제 DB와 `-wal`/`-shm` 보조 파일은 `.gitignore`로 제외됩니다.
 
 기록 요약, 바뀐 버킷, 순번 digest는 같은 트랜잭션으로 저장합니다. DB 합계와 요약이 불일치하면 전부 롤백합니다. 같은 ID/순번/내용 재시도는 한 번 반영하고 다른 내용의 순번 재사용·누적 감소는 거절합니다.
 
@@ -29,7 +31,7 @@
 
 설정의 통계 삭제는 확인 후 현재 로컬 계정의 이력·버킷·중복 기록을 함께 삭제하고 generation을 증가시킵니다. 늦게 도착한 이전 배치가 삭제 데이터를 되살릴 수 없습니다. 이 삭제는 되돌릴 수 없습니다. 다른 계정은 보존합니다. 자동 보존기간 삭제·export·백업 UI는 없습니다.
 
-계정 ID는 기존 localStorage 데모 계정의 데이터 분리 기준입니다. 같은 PC 사용자의 악의적 접근을 막는 인증/암호화 경계가 아닙니다. 브라우저 단독 실행에는 저장 IPC가 없으며 저장 불가를 안내합니다.
+계정 ID는 기존 localStorage 데모 계정의 데이터 분리 기준입니다. 같은 PC 사용자의 악의적 접근을 막는 인증/암호화 경계가 아닙니다. 브라우저 단독 실행에는 저장 IPC가 없으며 저장 불가를 안내합니다. DB가 소스 체크아웃 안에 있으므로 저장소 폴더를 삭제하거나 새로 clone하면 로컬 기록도 함께 사라집니다. 설치 패키지의 쓰기 권한과 보존 동작은 별도로 검증해야 합니다.
 
 ## 서버 연결 경계
 
