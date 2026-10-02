@@ -41,11 +41,13 @@ export interface FingerEvaluationOptions {
   ambiguityNormalizedDistance: number;
 }
 
-export type FingerVerdict = 'preferred' | 'acceptable' | 'mismatch' | 'unknown';
+export type FingerVerdict = 'preferred' | 'acceptable' | 'nearby' | 'mismatch' | 'unknown';
 
 export type FingerEvaluationReason =
   | 'preferred-finger'
   | 'acceptable-alternative'
+  | 'neighboring-finger'
+  | 'shortcut'
   | 'different-finger'
   | 'unsupported-key'
   | 'low-keyboard-confidence'

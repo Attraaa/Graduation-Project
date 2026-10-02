@@ -69,6 +69,9 @@ export interface RecordsApi {
   detail(owner: string, id: string): Promise<RecordsResult<RecordDetail>>;
   statistics(query: RecordQuery): Promise<RecordsResult<StatisticsRow[]>>;
   clear(owner: string): Promise<RecordsResult<number>>;
+  writeKeyboard(batch: import('./keyboard').KeyboardBatch): Promise<RecordsResult<void>>;
+  keyboardStatistics(query: import('./keyboard').KeyboardQuery): Promise<RecordsResult<import('./keyboard').KeyboardStored[]>>;
+  keyboardDetail(owner: string, id: string): Promise<RecordsResult<import('./keyboard').KeyboardStored>>;
 }
 export const emptyTotals = (): Totals => ({ runMs: 0, validMs: 0, scoreTimeSum: 0, deviationMs: 0, deviationEpisodeCount: 0 });
 export const averageScore = (totals: Pick<Totals, 'validMs' | 'scoreTimeSum'>) => totals.validMs > 0 ? totals.scoreTimeSum / totals.validMs : null;

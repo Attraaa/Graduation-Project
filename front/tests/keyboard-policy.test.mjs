@@ -54,7 +54,7 @@ test('distinguishes an approved alternative from a mismatched finger', () => {
     ANSI_QWERTY_TOUCH_POLICY_V1,
     options,
   );
-  assert.equal(mismatch.verdict, 'mismatch');
+  assert.equal(mismatch.verdict, 'nearby');
 });
 
 test('allows either thumb for Space', () => {
@@ -122,5 +122,5 @@ test('adapts the Python perception payload and keeps the policy decision in the 
 
   assert.equal(result.observedFinger, 'left:pinky');
   assert.equal(result.evaluation.verdict, 'preferred');
-  assert.equal(result.evaluation.policyVersion, '1.0.0');
+  assert.equal(result.evaluation.policyVersion, '2.0.0');
 });

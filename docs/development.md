@@ -17,6 +17,8 @@ Node/npm, uv, Python을 찾아 따로 설치할 필요가 없습니다. [toolcha
 
 현재 자동 설치는 Windows **x64** 전용입니다. 최소 Windows 버전과 ARM64 지원은 별도 검증 대상입니다. 이 스크립트는 개발 환경 설치용이며 일반 사용자는 추후 Windows 앱 설치 파일을 받는 구조입니다.
 
+설치 스크립트는 .NET의 운영체제·아키텍처 정보를 직접 확인합니다. 실행 환경에서 `OS` 환경변수가 빠져 있어도 Windows x64를 정상 판별합니다.
+
 `setup.cmd`는 Windows PowerShell로 실행됩니다. 다른 PowerShell 버전의 모듈 경로를 상속받아 `Get-FileHash`를 찾지 못하는 경우를 방지하기 위해, 설치 스크립트가 실행 중인 PowerShell에 포함된 Utility/Archive 모듈을 명시적으로 불러옵니다.
 
 ## 2. 일상적인 실행
@@ -34,7 +36,7 @@ Node/npm, uv, Python을 찾아 따로 설치할 필요가 없습니다. [toolcha
 | `.\moti.cmd check` | 프론트 타입·린트·테스트, 서버 빌드·테스트, Python import/모델 검사 |
 | `.\moti.cmd package` | 프론트/Electron 빌드 후 Windows 설치 패키징 |
 
-현재 프론트 로그인은 로컬 데모이며 목·어깨 통계·이력은 Electron의 실제 SQLite 기록입니다. 런타임 DB는 프로젝트 상대 경로 `database/sqlite/posture.sqlite`에 생성되며 Git에는 포함되지 않습니다. 상체 측정은 화면에서 **기준 자세 잡고 시작**을 누를 때 카메라를 요청하고 중지 시 해제합니다. 키보드 모드는 **카메라 연결하고 시작**을 누르면 Electron이 로컬 Python 분석기를 자동 실행하고, 키보드 위치를 잡은 뒤 현재 Moti 화면의 키 입력만 실시간 판정합니다. 키보드 결과는 아직 저장/API 전송하지 않습니다. 목·어깨는 로컬 저장만 수행하며 안구 모드는 깜빡임·상대 얼굴 크기·휴식 안내를 화면에 표시하며 저장은 하지 않습니다. Windows에서 `eye.cmd`로 브라우저 안구 시연만 실행할 수도 있습니다. 설치·촬영·검증 범위는 [eye-mode.md](eye-mode.md)를 참고합니다.
+현재 프론트 로그인은 로컬 데모이며 목·어깨 통계·이력과 키보드 통계는 Electron의 실제 SQLite 기록입니다. 런타임 DB는 프로젝트 상대 경로 `database/sqlite/posture.sqlite`에 생성되며 Git에는 포함되지 않습니다. 상체 측정은 화면에서 **기준 자세 잡고 시작**을 누를 때 카메라를 요청하고 중지 시 해제합니다. 키보드 모드는 **카메라 연결하고 시작**을 누르면 Electron이 로컬 Python 분석기를 자동 실행하고, 키보드 위치를 잡은 뒤 현재 Moti 화면의 키 입력을 실시간 판정합니다. 설정에서 승인한 일반 앱은 사용자가 외부 관찰을 켠 세션에서만 관찰하며, 관리자·미승인 앱은 제외합니다. 키보드는 문자 원문 대신 날짜·키·손가락·판정별 횟수만 로컬 저장합니다. 목·어깨·키보드의 서버 전송은 연결하지 않았으며 안구 모드는 깜빡임·상대 얼굴 크기·휴식 안내를 화면에 표시하며 저장은 하지 않습니다. Windows에서 `eye.cmd`로 브라우저 안구 시연만 실행할 수도 있습니다. 설치·촬영·검증 범위는 [eye-mode.md](eye-mode.md)를 참고합니다.
 
 Python 콘솔 테스트는 OpenCV 미리보기에서 키를 입력하고 ESC로 종료합니다. 다른 앱의 키까지 수집하는 것은 기본 실행 경로가 아닙니다. 키보드 전체와 손이 보이는 손캠 구도가 필요합니다.
 
@@ -114,6 +116,36 @@ MediaPipe Pose의 스크립트·WASM·모델은 고정 npm 패키지에서 `publ
 
 현재 로그인은 데모, AI·의학 영역은 예시, 브라우저 단독 기록 저장과 원격 서버 동기화는 미지원입니다. 실제 촬영·장시간 사용·설치 패키지는 별도 검증이 필요합니다. [저장소 안내](../database/README.md), [작업 검증 기록](ai-workflow/work-items/2026-09-19/jangwon/statistics/09_VERIFICATION.md)을 확인합니다.
 
+## 2026-10-01 실행 환경 복원
+
+Windows 11 x64에서 `OS` 환경변수가 없는 실행 환경 때문에 setup의 운영체제 판별이 실패했습니다. `scripts/setup.ps1`이 환경변수 대신 .NET의 운영체제 정보를 확인하도록 수정한 뒤 `setup.cmd` 전체 설치를 완료했습니다. Node 24.20.0, npm 11.19.0, uv 0.12.10, Python 3.12.14와 Python 기본+web 68개 패키지를 준비했고, 없던 `server/.env`도 생성했습니다.
+
+`moti.cmd check`에서 프론트 타입·린트와 94개 테스트, 서버 빌드와 34개 테스트, Python 2개 테스트 및 모델·키 맵 로딩이 통과했습니다. 기본 `npm run build`로 UI·Electron main/preload 빌드가 성공했습니다. 기존 청크 크기·정적/동적 import·SSR 차트 경고는 남습니다.
+
+`check-records-electron.mjs`의 별도 프로필에서 저장·재시작·IPC·통계·이력·삭제·정상 종료 검사를 통과했습니다. Python embedded 서비스의 `/api/status`는 `ok: true`, `frames: 0`, `keylogger_running: false`였으며 검사 후 종료했습니다. 평소 명령인 `moti.cmd app`으로 제목이 Moti인 Electron 창과 Vite HTTP 200 응답을 확인했습니다. 실제 카메라 측정이나 원격 DB는 이번 검사에 포함하지 않았습니다.
+
+설치 당시 npm audit는 프론트 간접 의존성 `brace-expansion` high 1건과 `fast-uri` moderate 1건, 서버 0건을 보고했습니다. 이번 환경 복원에서는 의존성 선언·잠금을 변경하지 않았습니다.
+
+## 2026-10-01 키보드 훈련·집계·설정
+
+기본표/허용 100·같은 손 인접 70·그 외 0과 별도 일관성, 키보드 SQLite 집계/통계/히트맵/추이/세션 상세, 승인 일반 앱의 명시적 Raw Input 관찰, 중지 단축키, crop·자유 회전·밝기/대비·요청 해상도를 연결했습니다. 정책/인식 버전과 70점 가중치를 기록하고 보류·미지원·단축키를 점수 분모와 구분합니다. 기존 자세 테이블을 보존하는 v1→v2 추가 마이그레이션은 별도 SQLite 파일에서 검증했습니다. 서버 SQL·원격 DB·의존성 잠금은 변경하지 않았습니다.
+
+전체 `moti.cmd check`에서 프론트 100개, 서버 34개, Python 9개와 모델/환경 검사가 통과했습니다. frontend 타입/린트·빌드와 Electron main/preload의 별도 타입 검사도 통과했습니다. 실제 Windows Raw Input 창을 **일치할 수 없는 승인 경로**로 시작·종료해 입력을 읽지 않는 제외 상태와 스레드 해제를 확인했습니다. 서비스 대역 검사로 토큰/단일 연결, embedded의 legacy hook 차단, 원문 대신 code 사용, bounded frame buffer와 제외/연결 종료 시 메모리 정리를 검사했습니다. 실제 모델을 사용한 embedded 서비스도 입력·카메라 수집 없이 readiness와 테스트 페이지 404를 확인했습니다.
+
+실제 Electron의 별도 프로필 `front/.moti-cache/records-electron-4zkCos`에서 기존 자세와 키보드 쓰기/재시도·재시작 복구·통계/히트맵/상세·승인 설정/단축키 저장·잘못된 입력/다른 창 IPC 거절·계정별 삭제·정상 close flush가 통과했습니다. 대기/카메라 설정/관찰 설정/통계/히트맵 PNG를 확인했습니다. 새 승인 목록은 비어 있고 외부 관찰은 기본 꺼짐입니다. 실행은 기존 `moti.cmd app`, 설정은 **설정 → 키보드·승인 앱 관찰**, 통계는 **통계 → 모드: 키보드**입니다.
+
+남은 검증은 실제 손캠·빠른 입력·Shift·장시간 관찰·실제 승인 앱의 키 매칭과 권한 전환입니다. 가림의 직접 분류, 하드웨어 노출/초점 제어, 모든 게임 자동 식별, 안티치트/백신 호환 보장은 구현하지 않았습니다. 관찰은 입력을 차단·주입하지 않지만 타 프로그램의 제재 여부를 보장할 수 없습니다. 과부하/중지 전 처리되지 않은 입력과 비정상 종료 시 미커밋 집계는 유실될 수 있습니다. 큰 청크/정적·동적 import 및 DOM 없는 차트 경고는 기존과 같습니다. 저장/정책 상세는 [database](../database/README.md)와 [키보드 계약](../front/src/features/keyboard/README.md)을 따릅니다.
+
+최종 `moti.cmd app` 일반 실행으로 제목이 Moti인 Electron 창을 열었습니다. 카메라나 외부 관찰은 자동으로 켜지지 않습니다. 최종 Git diff 공백 검사도 통과했습니다. 변경은 작업 트리에 있으며 커밋/푸시는 수행하지 않았습니다.
+
+## 2026-10-02 최신 main 통합 준비
+
+원격 main의 `6712f67`까지 기존 커밋을 fast-forward로 반영한 뒤 키보드 작업을 다시 적용했습니다. `database/README.md`, `docs/roadmap.md`, `front/electron/main.ts`의 충돌을 해결하면서 안구 모드·MediaPipe 초기화 격리와 프로젝트 상대 DB 경로/기존 userData DB 복사 동작을 보존했습니다. 키보드도 같은 `database/sqlite/posture.sqlite` 연결에 집계를 추가합니다. 현재 실행 설명의 키보드 저장/관찰 범위도 통합 상태에 맞게 수정했습니다.
+
+`setup.cmd`, `moti.cmd check`가 통과했습니다. 프론트 타입·린트와 123개 테스트, 서버 빌드와 34개 테스트, Python 9개 및 모델/환경 검사가 성공했습니다. 프론트/Electron 빌드와 Electron main/preload의 별도 타입 검사도 통과했습니다. 별도 프로필 `front/.moti-cache/records-electron-DrolZL`에서 자세·키보드 저장/재시작·IPC·통계/히트맵/상세·설정·계정별 삭제·정상 종료 검사가 성공했습니다. 실제 사용자 DB·카메라·외부 키 입력은 사용하지 않았으며 기존 빌드 경고는 유지됩니다.
+
+사용자가 직접 커밋·푸시하기 위해 변경을 준비하는 작업이며 새 브랜치 커밋이나 푸시는 실행하지 않았습니다. 원래 변경의 복구용 stash `58f74545cd683ca1464f4289cd83da4e8ce63efd`는 보존했습니다.
+
 ## 2026-10-02 상체 통합 점수 v2 검증
 
 `setup.cmd`는 node_modules 권한 오류 후 권한을 확장한 재시도에서 완료했습니다. `moti.cmd check`로 프론트 타입·린트·테스트, 서버 빌드와 34개 테스트, Python 2개 테스트와 모델/import 확인을 통과했습니다. 추가 회귀 검사와 화면 배치 수정 후 프론트 타입·린트 및 **96개 테스트**와 `npm run build -- --configLoader runner`를 다시 통과했습니다.
@@ -123,3 +155,13 @@ MediaPipe Pose의 스크립트·WASM·모델은 고정 npm 패키지에서 `publ
 `node scripts/check-records-electron.mjs`는 샌드박스 GPU 제한 후 일반 실행 권한에서 통과했습니다. 두 Electron 프로세스로 저장/재시작, 실제 IPC, 두 점수/통계 병렬 배치, 이력/상세, 계정별 삭제, 정상 종료를 확인했습니다. 화면 증거는 `front/.moti-cache/records-electron-iqqfbK/`의 `verify-upper-body-scores.png`, `verify-statistics.png` 등에 남습니다. 실제 카메라 측정·가중치 정확도·설치 패키지는 검증하지 않았습니다.
 
 기존 큰 청크·정적/동적 import 경고와 DOM 없는 SSR 차트 크기 경고가 남습니다. 이번 setup의 npm audit 요약은 front 2건(moderate 1, high 1), server 0건이었으며 의존성과 잠금 파일은 변경하지 않았습니다. 조정 상수와 해석은 [평가 안내](evaluation.md), 기존 기록 보존과 부위별 저장은 [database 안내](../database/README.md)를 따릅니다.
+
+## 2026-10-02 main과 dev/score2 통합 검증
+
+원격 main `618b6fa`의 키보드 훈련·저장·설정 변경을 `dev/score2`의 `0e3f2ae`와 병합했습니다. 통계 화면, Electron 검증 스크립트와 개발/제품 결정/로드맵 문서의 충돌을 해결하며 양쪽 기능과 검증 기록을 보존했습니다. 현재 점수 가중치·임계값·보호 설정은 변경하지 않았으며 평가/구조 안내를 해당 조정값에 맞췄습니다.
+
+사용자 요청에 따라 학습 카드와 통계 선택을 `안구 / 상체 / 키보드` 순서로 통일했습니다. 상체는 목·어깨 통계를 나란히 유지하고 키보드는 히트맵·추이·상세를 제공합니다. 안구는 기존 실시간 측정 화면을 유지하며 통계에는 기록 저장 미지원 안내와 측정 화면 진입만 제공합니다. 안구 저장 계약이나 임의 점수는 추가하지 않았습니다.
+
+`setup.cmd`는 파일 권한 제한 후 일반 실행 권한 재시도에서 완료했습니다. `moti.cmd check`로 프론트 타입·린트와 123개 테스트, 서버 빌드와 34개 테스트, Python 9개 및 모델/import 확인을 통과했습니다. `npm run build -- --configLoader runner`로 UI·Electron main/preload 빌드도 통과했습니다. 기존 큰 청크·정적/동적 import·DOM 없는 차트 경고는 유지됩니다.
+
+Electron 검증은 샌드박스 GPU 제한 후 일반 실행 권한에서 통과했습니다. 별도 프로필 `front/.moti-cache/records-electron-7HfEfL/`에서 두 프로세스의 저장/재시작·IPC·정상 종료, 목/어깨 병렬 통계, 키보드 히트맵/상세와 상체 복귀, 안구 통계 안내/측정 진입, 학습 카드 순서, 계정별 삭제를 확인했습니다. PNG를 확인했으며 사용자 DB·실제 카메라·외부 키 입력은 사용하지 않았습니다. 실제 촬영 정확도·설치 패키지 검증은 후속 범위입니다.

@@ -2,31 +2,17 @@ import { ipcRenderer, contextBridge } from 'electron'
 import type { RecordsApi } from '../../database/contracts'
 
 // --------- Expose some API to the Renderer process ---------
-contextBridge.exposeInMainWorld('ipcRenderer', {
-  on(...args: Parameters<typeof ipcRenderer.on>) {
-    const [channel, listener] = args
-    return ipcRenderer.on(channel, (event, ...args) => listener(event, ...args))
-  },
-  off(...args: Parameters<typeof ipcRenderer.off>) {
-    const [channel, ...omit] = args
-    return ipcRenderer.off(channel, ...omit)
-  },
-  send(...args: Parameters<typeof ipcRenderer.send>) {
-    const [channel, ...omit] = args
-    return ipcRenderer.send(channel, ...omit)
-  },
-  invoke(...args: Parameters<typeof ipcRenderer.invoke>) {
-    const [channel, ...omit] = args
-    return ipcRenderer.invoke(channel, ...omit)
-  },
-
-  // You can expose other apts you need here.
-  // ...
-})
-
 contextBridge.exposeInMainWorld('motiKeyboard', {
-  start: () => ipcRenderer.invoke('keyboard-service:start'),
+  start: (external = false) => ipcRenderer.invoke('keyboard-service:start', external),
   stop: () => ipcRenderer.invoke('keyboard-service:stop'),
+  settings: () => ipcRenderer.invoke('keyboard-settings:read'),
+  chooseApp: () => ipcRenderer.invoke('keyboard-settings:choose'),
+  updateSettings: (input: unknown) => ipcRenderer.invoke('keyboard-settings:update', input),
+  onHalt: (listener: () => void) => {
+    const handle = () => listener()
+    ipcRenderer.on('keyboard-service:halt', handle)
+    return () => { ipcRenderer.removeListener('keyboard-service:halt', handle) }
+  },
 })
 
 contextBridge.exposeInMainWorld('motiRecords', {
@@ -40,5 +26,8 @@ contextBridge.exposeInMainWorld('motiRecords', {
   list: query => ipcRenderer.invoke('records:list', query),
   detail: (owner, id) => ipcRenderer.invoke('records:detail', owner, id),
   statistics: query => ipcRenderer.invoke('records:statistics', query),
+  writeKeyboard: batch => ipcRenderer.invoke('records:writeKeyboard', batch),
+  keyboardStatistics: query => ipcRenderer.invoke('records:keyboardStatistics', query),
+  keyboardDetail: (owner, id) => ipcRenderer.invoke('records:keyboardDetail', owner, id),
   clear: owner => ipcRenderer.invoke('records:clear', owner),
 } satisfies RecordsApi)

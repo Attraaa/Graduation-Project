@@ -17,6 +17,17 @@ export type LearningMode = {
 
 export const learningModes: LearningMode[] = [
   {
+    id: 'eye',
+    title: '안구 모드',
+    shortTitle: '안구',
+    desc: '눈 깜빡임과 화면 거리 상태를 분석합니다.',
+    color: '#ff4b4b',
+    bgClass: 'bg-[#ff4b4b]',
+    textClass: 'text-[#ff4b4b]',
+    borderClass: 'border-[#ea2b2b]',
+    icon: <Eye size={32} />,
+  },
+  {
     id: 'upper_body',
     title: '상체 자세 모니터링',
     shortTitle: '상체',
@@ -38,18 +49,7 @@ export const learningModes: LearningMode[] = [
     borderClass: 'border-[#1899d6]',
     icon: <Keyboard size={32} />,
   },
-  {
-    id: 'eye',
-    title: '안구 모드',
-    shortTitle: '안구',
-    desc: '눈 깜빡임과 화면 거리 상태를 분석합니다.',
-    color: '#ff4b4b',
-    bgClass: 'bg-[#ff4b4b]',
-    textClass: 'text-[#ff4b4b]',
-    borderClass: 'border-[#ea2b2b]',
-    icon: <Eye size={32} />,
-  },
 ];
 
 export const getLearningMode = (id?: string) =>
-  learningModes.find((mode) => mode.id === id) ?? learningModes[0];
+  learningModes.find((mode) => mode.id === id) ?? learningModes[1];

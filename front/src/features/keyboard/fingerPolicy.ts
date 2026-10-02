@@ -17,7 +17,7 @@ const keyRule = (
  */
 export const ANSI_QWERTY_TOUCH_POLICY_V1: FingerPolicy = {
   id: 'ansi-qwerty-touch',
-  version: '1.0.0',
+  version: '2.0.0',
   layout: 'ANSI QWERTY letters and space / Korean 2-set physical positions',
   keys: {
     KeyQ: keyRule('left:pinky'),

@@ -3,6 +3,8 @@ import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { parseBatch, parseQuery, parseRecord, recordText, localDateKey } from '../contracts.ts';
 import type { MinuteBucket, PostureRecord, RecordPage, RecordDetail, Totals, StatisticsRow, RecordMode } from '../contracts.ts';
+import { parseKeyboardBatch, parseKeyboardRecord, parseKeyboardQuery, keyboardCountKey } from '../keyboard.ts';
+import type { KeyboardCount, KeyboardStored } from '../keyboard.ts';
 
 const APPLICATION_ID = 0x4d4f5449;
 const fields = ['runMs', 'validMs', 'scoreTimeSum', 'deviationMs', 'deviationEpisodeCount'] as const;
@@ -18,7 +20,7 @@ export class RecordRepository {
     try {
       const version = Number(this.db.prepare('PRAGMA user_version').get()!.user_version);
       const application = Number(this.db.prepare('PRAGMA application_id').get()!.application_id);
-      if (version > 1 || (version === 1 && application !== APPLICATION_ID)) throw new Error('지원하지 않는 데이터베이스 버전입니다. 원본을 보존했습니다.');
+      if (![0, 1, 2].includes(version) || (version > 0 && application !== APPLICATION_ID)) throw new Error('지원하지 않는 데이터베이스 버전입니다. 원본을 보존했습니다.');
       if (version === 0) {
         const tables = this.db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all();
         if (tables.length || (existed && application !== 0)) throw new Error('다른 데이터베이스 파일입니다. 원본을 보존했습니다.');
@@ -40,8 +42,21 @@ export class RecordRepository {
       this.db.exec('PRAGMA foreign_keys=ON');
       if (this.integrity() !== 'ok') throw new Error('데이터베이스 무결성 검사에 실패했습니다. 원본을 보존했습니다.');
       if (!options.readOnly) {
+        // Additive v1 -> v2 migration on the same owner connection. Existing posture rows survive.
+        if (version < 2) this.transaction(() => this.db.exec(`
+          CREATE TABLE keyboard_records(id TEXT PRIMARY KEY, owner TEXT NOT NULL REFERENCES owners(owner),
+            startDate TEXT NOT NULL, sequence INTEGER NOT NULL, data TEXT NOT NULL) STRICT;
+          CREATE INDEX keyboard_owner_date ON keyboard_records(owner,startDate,id);
+          CREATE TABLE keyboard_counts(recordId TEXT NOT NULL REFERENCES keyboard_records(id) ON DELETE CASCADE,
+            key TEXT NOT NULL, date TEXT NOT NULL, data TEXT NOT NULL, PRIMARY KEY(recordId,key)) STRICT;
+          CREATE INDEX keyboard_count_date ON keyboard_counts(date,recordId);
+          CREATE TABLE keyboard_batches(recordId TEXT NOT NULL REFERENCES keyboard_records(id) ON DELETE CASCADE,
+            sequence INTEGER NOT NULL, digest TEXT NOT NULL, PRIMARY KEY(recordId,sequence)) STRICT;
+          PRAGMA user_version=2;
+        `));
         this.db.exec('PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL');
         if (options.recover !== false) this.db.exec("UPDATE records SET data=json_set(data,'$.status','interrupted') WHERE json_extract(data,'$.status')='running'");
+        if (options.recover !== false) this.db.exec("UPDATE keyboard_records SET data=json_set(data,'$.status','interrupted') WHERE json_extract(data,'$.status')='running'");
       }
     } catch (error) { this.db.close(); throw error; }
   }
@@ -152,9 +167,59 @@ export class RecordRepository {
     return this.transaction(() => {
       this.db.prepare('INSERT OR IGNORE INTO owners(owner) VALUES(?)').run(owner);
       this.db.prepare('DELETE FROM records WHERE owner=?').run(owner);
+      this.db.prepare('DELETE FROM keyboard_records WHERE owner=?').run(owner);
       this.db.prepare('UPDATE owners SET generation=generation+1 WHERE owner=?').run(owner);
       return this.generation(owner);
     });
+  }
+
+  writeKeyboard(input: unknown) {
+    const batch = parseKeyboardBatch(input), record = batch.record;
+    const digest = createHash('sha256').update(JSON.stringify(batch)).digest('hex');
+    this.transaction(() => {
+      if (batch.generation !== this.generation(record.owner)) throw new Error('삭제된 키보드 기록의 저장 요청입니다.');
+      const previous = this.db.prepare('SELECT owner,sequence,data FROM keyboard_records WHERE id=?').get(record.id);
+      if (previous && previous.owner !== record.owner) throw new Error('다른 계정의 기록입니다.');
+      const duplicate = this.db.prepare('SELECT digest FROM keyboard_batches WHERE recordId=? AND sequence=?').get(record.id, batch.sequence);
+      if (duplicate) { if (duplicate.digest !== digest) throw new Error('같은 순번에 다른 기록이 도착했습니다.'); return; }
+      if (batch.sequence !== (previous ? Number(previous.sequence) + 1 : 0)) throw new Error('키보드 기록 순서가 일치하지 않습니다.');
+      if (previous) {
+        const old = parseKeyboardRecord(JSON.parse(String(previous.data)));
+        if (old.status !== 'running') throw new Error('이미 종료된 키보드 기록입니다.');
+        for (const field of ['owner', 'startedAt', 'offsetMinutes', 'policyVersion', 'recognitionVersion', 'nearbyCredit'] as const)
+          if (old[field] !== record[field]) throw new Error('키보드 기록의 정책이 변경되었습니다.');
+        if (old.total > record.total || old.updatedAt > record.updatedAt) throw new Error('키보드 누적값이 감소했습니다.');
+      }
+      const oldCounts = this.db.prepare('SELECT key,data FROM keyboard_counts WHERE recordId=?').all(record.id);
+      const nextCounts = new Map(batch.counts.map(row => [keyboardCountKey(row), row]));
+      for (const row of oldCounts) if ((nextCounts.get(String(row.key))?.count ?? 0) < (JSON.parse(String(row.data)) as KeyboardCount).count)
+        throw new Error('키보드 집계 누적값이 감소했습니다.');
+      this.db.prepare('INSERT OR IGNORE INTO owners(owner) VALUES(?)').run(record.owner);
+      this.db.prepare(`INSERT INTO keyboard_records VALUES(?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET sequence=excluded.sequence,data=excluded.data`)
+        .run(record.id, record.owner, localDateKey(record.startedAt, record.offsetMinutes), batch.sequence, JSON.stringify(record));
+      const put = this.db.prepare('INSERT INTO keyboard_counts VALUES(?,?,?,?) ON CONFLICT(recordId,key) DO UPDATE SET data=excluded.data');
+      for (const row of batch.counts) put.run(record.id, keyboardCountKey(row), row.date, JSON.stringify(row));
+      this.db.prepare('INSERT INTO keyboard_batches VALUES(?,?,?)').run(record.id, batch.sequence, digest);
+    });
+  }
+
+  keyboardStatistics(input: unknown): KeyboardStored[] {
+    const query = parseKeyboardQuery(input);
+    const rows = this.db.prepare(`SELECT DISTINCT r.id,r.data FROM keyboard_records r LEFT JOIN keyboard_counts c ON c.recordId=r.id
+      WHERE r.owner=? AND (c.date BETWEEN ? AND ? OR r.startDate BETWEEN ? AND ?) ORDER BY r.startDate,r.id LIMIT 1001`)
+      .all(query.owner, query.from, query.to, query.from, query.to);
+    if (rows.length > 1000) throw new Error('키보드 기록이 많습니다. 조회 기간을 줄여 주세요.');
+    const get = this.db.prepare('SELECT data FROM keyboard_counts WHERE recordId=? AND date BETWEEN ? AND ? ORDER BY key');
+    return rows.map(row => ({ record: parseKeyboardRecord(JSON.parse(String(row.data))),
+      counts: get.all(row.id, query.from, query.to).map(count => JSON.parse(String(count.data)) as KeyboardCount) }));
+  }
+
+  keyboardDetail(owner: string, id: string): KeyboardStored {
+    recordText(owner); recordText(id);
+    const row = this.db.prepare('SELECT data FROM keyboard_records WHERE owner=? AND id=?').get(owner, id);
+    if (!row) throw new Error('키보드 기록을 찾을 수 없습니다.');
+    return { record: parseKeyboardRecord(JSON.parse(String(row.data))),
+      counts: this.db.prepare('SELECT data FROM keyboard_counts WHERE recordId=? ORDER BY key').all(id).map(count => JSON.parse(String(count.data)) as KeyboardCount) };
   }
 
   close() { this.db.close(); }

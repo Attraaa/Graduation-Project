@@ -22,6 +22,7 @@ class KeyEvent:
     code: Optional[str] = None
     location: Optional[int] = None
     sequence: int = 0
+    context: str = 'plain'
 
     @classmethod
     def now(
@@ -57,6 +58,7 @@ class KeyEvent:
             "code": self.code,
             "location": self.location,
             "sequence": self.sequence,
+            "context": self.context,
         }
 
 

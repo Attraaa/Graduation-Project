@@ -10,13 +10,18 @@ export interface CaptureSink { sample(at: number, evaluation: CaptureEvaluation)
 type Active = { collector: CaptureRecorder; generation: Promise<number>; saving: Promise<void> | null; timer: ReturnType<typeof setInterval>; stopped: boolean; error: string | null };
 const active = new Set<Active>();
 const listeners = new Set<() => void>();
+interface RecorderParticipant { retry(): Promise<void>; finish(): void; discard(owner: string): void; error(): string | null }
+const participants = new Set<RecorderParticipant>();
+export function registerRecorder(participant: RecorderParticipant) { participants.add(participant); return () => { participants.delete(participant); }; }
 let message = '측정한 기록은 이 PC에 저장됩니다.';
 const announce = (next: string) => {
   const failed = [...active].find(entry => entry.error);
-  const value = failed ? `저장 실패: ${failed.error} 앱을 닫기 전에 저장을 재시도해 주세요.` : next;
+  const error = failed?.error ?? [...participants].map(item => item.error()).find(Boolean);
+  const value = error ? `저장 실패: ${error} 앱을 닫기 전에 저장을 재시도해 주세요.` : next;
   if (value === message) return;
   message = value; listeners.forEach(listener => listener());
 };
+export const announceRecording = announce;
 export const subscribeRecording = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; };
 export const recordingMessage = () => message;
 
@@ -72,15 +77,17 @@ export function beginPostureRecording(start: CaptureStart): CaptureSink {
 }
 
 export async function retryRecordings() {
-  await Promise.all([...active].map(entry => save(entry)));
+  await Promise.all([...active].map(entry => save(entry)).concat([...participants].map(item => item.retry())));
 }
 export async function finishRecordings() {
+  participants.forEach(item => item.finish());
   for (const entry of active) {
     clearInterval(entry.timer); entry.stopped = true; entry.collector.finish(performance.now());
   }
   await retryRecordings();
 }
 export function discardDeletedRecordings(owner: string) {
+  participants.forEach(item => item.discard(owner));
   for (const entry of active) if (entry.collector.record.owner === owner) {
     clearInterval(entry.timer); entry.stopped = true; entry.collector.finish(performance.now()); active.delete(entry);
   }

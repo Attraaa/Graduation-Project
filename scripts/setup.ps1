@@ -4,7 +4,7 @@ Import-Module (Join-Path $PSHOME 'Modules/Microsoft.PowerShell.Utility/Microsoft
 Import-Module (Join-Path $PSHOME 'Modules/Microsoft.PowerShell.Archive/Microsoft.PowerShell.Archive.psd1') -ErrorAction Stop
 . (Join-Path $PSScriptRoot 'toolchain.ps1')
 
-if ($env:OS -ne 'Windows_NT' -or [Runtime.InteropServices.RuntimeInformation]::OSArchitecture -ne 'X64') {
+if (-not [Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([Runtime.InteropServices.OSPlatform]::Windows) -or [Runtime.InteropServices.RuntimeInformation]::OSArchitecture -ne 'X64') {
     throw 'This toolchain currently supports Windows x64. ARM64 requires separate AI wheel validation.'
 }
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12

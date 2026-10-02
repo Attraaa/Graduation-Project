@@ -11,12 +11,20 @@ import {
 import { initialKeyboardSnapshot } from '../features/keyboard/monitorTypes'
 import type { KeyboardLiveResult } from '../features/keyboard/runtime'
 import type { KeyboardMonitorSnapshot } from '../features/keyboard/monitorTypes'
+import { drawKeyboardFrame } from '../features/keyboard/camera'
+import type { KeyboardCamera } from '../features/keyboard/camera'
+import { beginKeyboardRecording } from '../features/keyboard/recording'
+import { keyboardCountKey } from '../../../database/keyboard'
+import type { KeyboardCount } from '../../../database/keyboard'
+import { localDateKey } from '../../../database/contracts'
 
 interface KeyboardMonitorProps {
   isRunning: boolean
   deviceId: string
   remapRequest: number
   onUpdate: (snapshot: KeyboardMonitorSnapshot) => void
+  camera: KeyboardCamera
+  external: boolean
 }
 
 interface FrameResponse {
@@ -87,9 +95,12 @@ const drawOverlay = (
   }
 }
 
-export default function KeyboardMonitor({ isRunning, deviceId, remapRequest, onUpdate }: KeyboardMonitorProps) {
+export default function KeyboardMonitor({ isRunning, deviceId, remapRequest, onUpdate, camera, external }: KeyboardMonitorProps) {
   const { videoRef, startWebcam, stopWebcam, webcamError } = useWebcam()
   const overlayRef = useRef<HTMLCanvasElement>(null)
+  const previewRef = useRef<HTMLCanvasElement>(null)
+  const cameraRef = useRef(camera)
+  useEffect(() => { cameraRef.current = camera }, [camera])
   const mappingRef = useRef<RuntimeKeyboardMapping | null>(null)
   const fingersRef = useRef<RuntimeFingerPoint[]>([])
   const latestRef = useRef<KeyboardLiveResult | null>(null)
@@ -109,6 +120,7 @@ export default function KeyboardMonitor({ isRunning, deviceId, remapRequest, onU
 
     const abort = new AbortController()
     const overlay = overlayRef.current
+    const preview = previewRef.current
     let socket: Socket | null = null
     let token = ''
     let frameTimer: ReturnType<typeof setInterval> | undefined
@@ -118,19 +130,29 @@ export default function KeyboardMonitor({ isRunning, deviceId, remapRequest, onU
     let bufferedFrames = 0
     let mapped = false
     let removeTrackListener = () => {}
+    let sink: ReturnType<typeof beginKeyboardRecording> | null = null
+    let revision = 0
+    let removeHaltListener = () => {}
+    const counts = new Map<string, KeyboardCount>()
+    const shifts = new Set<string>()
 
     const fail = (message: string) => {
-      if (!abort.signal.aborted) publish({ phase: 'error', message })
+      if (!abort.signal.aborted) {
+        publish({ phase: 'error', message, latest: null, recent: [] }); mapped = false
+        clearInterval(frameTimer); clearInterval(mappingTimer); socket?.disconnect()
+        sink?.finish(); stopWebcam(); void window.motiKeyboard?.stop()
+      }
     }
 
     const requestMapping = () => {
       if (!socket?.connected || mappingInFlight || bufferedFrames < 2) return
       mappingInFlight = true
+      const requestedRevision = revision
       mapped = false
       publish({ phase: 'mapping', message: '키보드 위치를 인식하고 있습니다. 손을 잠시 키보드 밖으로 빼 주세요.' })
       socket.timeout(12_000).emit('calibrate_keyboard', { token }, (timeoutError: Error | null, response?: MappingResponse) => {
         mappingInFlight = false
-        if (abort.signal.aborted) return
+        if (abort.signal.aborted || requestedRevision !== revision) return
         if (timeoutError || !response) {
           publish({ phase: 'mapping', message: '키보드 위치 인식 응답을 기다리는 중입니다.' })
           return
@@ -145,17 +167,22 @@ export default function KeyboardMonitor({ isRunning, deviceId, remapRequest, onU
         publish({ phase: 'ready', message: '키보드 위치를 잡았습니다. 이 화면에서 타이핑해 보세요.' })
       })
     }
-    remapRef.current = requestMapping
+    remapRef.current = () => {
+      if (!socket?.connected) return
+      revision += 1; mapped = false; bufferedFrames = 0; mappingInFlight = false
+      mappingRef.current = null; latestRef.current = null; fingersRef.current = []
+      drawOverlay(overlayRef.current, null, [], null)
+      publish({ phase: 'mapping', latest: null, recent: [], message: '영상 설정을 적용했습니다. 키보드 위치를 다시 찾고 있습니다.' })
+      socket?.emit('reset_analysis', { token })
+    }
 
     const sendFrame = () => {
       const video = videoRef.current
       if (!socket?.connected || frameInFlight || !video || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return
-      const canvas = document.createElement('canvas')
-      canvas.width = video.videoWidth
-      canvas.height = video.videoHeight
-      const context = canvas.getContext('2d')
-      if (!context || !canvas.width || !canvas.height) return
-      context.drawImage(video, 0, 0, canvas.width, canvas.height)
+      const canvas = preview
+      if (!canvas || !drawKeyboardFrame(canvas, video, cameraRef.current)) return
+      if (overlayRef.current && !mappingRef.current) { overlayRef.current.width = canvas.width; overlayRef.current.height = canvas.height }
+      const sentRevision = revision
       frameInFlight = true
       const release = window.setTimeout(() => { frameInFlight = false }, 1500)
       socket.emit('frame', {
@@ -165,7 +192,7 @@ export default function KeyboardMonitor({ isRunning, deviceId, remapRequest, onU
       }, (response: FrameResponse) => {
         window.clearTimeout(release)
         frameInFlight = false
-        if (abort.signal.aborted || !response?.ok) return
+        if (abort.signal.aborted || sentRevision !== revision || !response?.ok) return
         bufferedFrames = response.buffered_frames ?? bufferedFrames
         fingersRef.current = response.frame?.fingers ?? []
         if (response.frame?.size && mappingRef.current) mappingRef.current.size = response.frame.size
@@ -174,33 +201,47 @@ export default function KeyboardMonitor({ isRunning, deviceId, remapRequest, onU
     }
 
     const keyDown = (event: KeyboardEvent) => {
+      if (event.code === 'ShiftLeft' || event.code === 'ShiftRight') shifts.add(event.code)
       if (event.repeat || !mapped || !socket?.connected) return
+      if (event.target instanceof HTMLInputElement && event.target.type === 'password') return
+      const context = event.ctrlKey || event.altKey || event.metaKey ? 'shortcut'
+        : shifts.size === 2 ? 'shift-both' : shifts.has('ShiftRight') ? 'shift-right' : event.shiftKey ? 'shift-left' : 'plain'
       socket.emit('browser_key', {
         token,
-        key: event.key,
+        context,
         code: event.code,
         location: event.location,
         browser_perf_ms: performance.now(),
       })
     }
+    const keyUp = (event: KeyboardEvent) => shifts.delete(event.code)
+    const blur = () => shifts.clear()
 
     const setup = async () => {
       if (!window.motiKeyboard) throw new Error('키보드 실시간 분석은 Electron 앱에서 실행해 주세요.')
       publish({ ...initialKeyboardSnapshot, phase: 'starting', message: '카메라와 로컬 분석 모델을 준비하고 있습니다.' })
       const [service, stream] = await Promise.all([
-        window.motiKeyboard.start(),
+        window.motiKeyboard.start(external),
         startWebcam(deviceId || undefined),
       ])
       if (abort.signal.aborted) return
       if (!stream) throw new Error('카메라를 시작하지 못했습니다. 카메라 권한과 연결 상태를 확인해 주세요.')
       token = service.token
       const track = stream.getVideoTracks()[0]
+      await track.applyConstraints({ width: { ideal: cameraRef.current.resolution }, height: { ideal: Math.round(cameraRef.current.resolution * 9 / 16) } })
+      if (abort.signal.aborted) return
       const ended = () => fail('카메라 연결이 중단되었습니다.')
       track.addEventListener('ended', ended)
       removeTrackListener = () => track.removeEventListener('ended', ended)
       const video = videoRef.current
       if (!video) throw new Error('카메라 화면을 준비하지 못했습니다.')
       await video.play()
+      if (abort.signal.aborted) return
+      sink = beginKeyboardRecording()
+      removeHaltListener = window.motiKeyboard.onHalt(() => {
+        fail('관찰을 중지했습니다. 다시 시작하려면 측정 중지 후 시작 버튼을 누르세요.')
+        window.dispatchEvent(new Event('moti-stop-measurement'))
+      })
 
       socket = io(service.origin, {
         auth: { token },
@@ -214,11 +255,26 @@ export default function KeyboardMonitor({ isRunning, deviceId, remapRequest, onU
         frameTimer = setInterval(sendFrame, 150)
         mappingTimer = setInterval(() => { if (!mapped) requestMapping() }, 2500)
         sendFrame()
+        if (external) socket?.emit('start_observation', { token }, (response: { ok: boolean }) => {
+          if (!response?.ok) fail('승인 앱 관찰을 시작할 수 없습니다. 승인 앱 설정을 확인해 주세요.')
+        })
       })
       socket.on('connect_error', error => fail(`로컬 키보드 분석 연결 실패: ${error.message}`))
-      socket.on('press_result', (payload: RuntimePressPayload) => {
+      socket.on('disconnect', () => { if (!abort.signal.aborted && snapshotRef.current.phase !== 'error') fail('로컬 분석 연결이 끊어졌습니다.') })
+      socket.on('observation_status', (payload: { status: KeyboardMonitorSnapshot['observationStatus'] }) => {
         if (abort.signal.aborted) return
+        publish({ observationStatus: payload.status, ...(payload.status !== 'observing' ? { latest: null, recent: [] } : {}) })
+        if (payload.status === 'error') fail('승인 앱의 권한을 확인할 수 없어 관찰을 중지했습니다.')
+      })
+      socket.on('press_result', (payload: RuntimePressPayload) => {
+        if (abort.signal.aborted || !mapped) return
         const result = adaptRuntimePress(payload)
+        sink?.press(result)
+        const row: KeyboardCount = { date: localDateKey(Date.now(), new Date().getTimezoneOffset()), code: result.code,
+          context: result.context, finger: result.evaluation.observed, verdict: result.evaluation.verdict,
+          reason: result.evaluation.reason, count: 1 }
+        const key = keyboardCountKey(row)
+        counts.set(key, { ...row, count: (counts.get(key)?.count ?? 0) + 1 })
         latestRef.current = result
         const recent = [result, ...snapshotRef.current.recent].slice(0, 8)
         drawOverlay(overlayRef.current, payload.keyboard ?? mappingRef.current, payload.finger_keys ?? fingersRef.current, result)
@@ -228,15 +284,17 @@ export default function KeyboardMonitor({ isRunning, deviceId, remapRequest, onU
           latest: result,
           recent,
           detectedPresses: snapshotRef.current.detectedPresses + 1,
+          counts: [...counts.values()],
         })
       })
       window.addEventListener('keydown', keyDown)
+      window.addEventListener('keyup', keyUp)
+      window.addEventListener('blur', blur)
     }
 
     void setup().catch(error => {
+      if (abort.signal.aborted) return
       fail(errorMessage(error))
-      stopWebcam()
-      void window.motiKeyboard?.stop()
     })
 
     return () => {
@@ -244,21 +302,25 @@ export default function KeyboardMonitor({ isRunning, deviceId, remapRequest, onU
       clearInterval(frameTimer)
       clearInterval(mappingTimer)
       removeTrackListener()
+      removeHaltListener(); sink?.finish(); shifts.clear()
       window.removeEventListener('keydown', keyDown)
+      window.removeEventListener('keyup', keyUp)
+      window.removeEventListener('blur', blur)
       socket?.disconnect()
       remapRef.current = () => {}
       mappingRef.current = null
       fingersRef.current = []
       latestRef.current = null
+      if (preview) { preview.width = 0; preview.height = 0 }
       drawOverlay(overlay, null, [], null)
       stopWebcam()
       void window.motiKeyboard?.stop()
     }
-  }, [isRunning, deviceId, onUpdate, publish, startWebcam, stopWebcam, videoRef])
+  }, [isRunning, deviceId, external, onUpdate, publish, startWebcam, stopWebcam, videoRef])
 
   useEffect(() => {
-    if (isRunning && remapRequest > 0) remapRef.current()
-  }, [isRunning, remapRequest])
+    if (isRunning) remapRef.current()
+  }, [isRunning, remapRequest, camera])
 
   useEffect(() => {
     if (isRunning && webcamError) publish({ phase: 'error', message: webcamError })
@@ -267,7 +329,8 @@ export default function KeyboardMonitor({ isRunning, deviceId, remapRequest, onU
   const error = view.phase === 'error' ? view.message : null
   return (
     <div className="relative min-h-[260px] flex-1 overflow-hidden rounded-2xl bg-slate-950">
-      <video ref={videoRef} autoPlay playsInline muted className="absolute inset-0 h-full w-full object-contain" />
+      <video ref={videoRef} autoPlay playsInline muted className="hidden" />
+      <canvas ref={previewRef} className="absolute inset-0 h-full w-full object-contain" />
       <canvas ref={overlayRef} className="pointer-events-none absolute inset-0 h-full w-full object-contain" />
       {!isRunning && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center text-slate-300">
