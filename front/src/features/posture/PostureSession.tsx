@@ -21,7 +21,7 @@ const reasonText: Record<CalibrationReason, string> = {
   'camera-changed': '카메라 조건이 바뀌어 기준 자세를 다시 수집합니다.',
   'invalid-time': '관측 시각을 확인하고 있습니다.',
   'ears-too-close': '양쪽 귀가 보이도록 정면을 향해 주세요.',
-  'head-turned': '기준 자세를 수집하는 동안 정면을 봐 주세요.',
+  'head-turned': '정면을 봐 주세요. 고개를 돌린 동안은 목·어깨 점수 판정을 보류합니다.',
 };
 
 export default function PostureSession() {

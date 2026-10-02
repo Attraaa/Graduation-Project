@@ -66,4 +66,4 @@ README와 docs/collaboration.md, docs/evaluation.md를 읽어.
 
 ## 상체 통합 담당 경계 (2026-10-02)
 
-사용자가 선택하는 상체 화면은 `upper_body` 하나이며 목·어깨를 동시에 계산합니다. `modes/turtle.ts`와 `shoulder.ts`는 독립 부위 정책으로 유지하고, 조정값은 `scoreSettings.ts` 상단에 모읍니다. 한 카메라의 관측을 두 evaluation 상태와 두 저장 sink에 전달합니다. 가중치·보호 설정 해시가 정책 ID에 포함되며, 공식 변경 시 v2 버전도 올립니다. 기존 저장 부위 키와 데이터는 보존합니다.
+사용자가 선택하는 상체 화면은 `upper_body` 하나이며 목·어깨를 동시에 계산합니다. `modes/turtle.ts`와 `shoulder.ts`는 독립 부위 정책으로 유지하고, 조정값은 `scoreSettings.ts` 상단에 모읍니다. 한 카메라의 관측을 두 evaluation 상태와 두 저장 sink에 전달합니다. 가중치·상하 gain·보호 설정 해시가 정책 ID에 포함되며, 공식 변경 시 정책 버전도 올립니다. 현재 회전 보류·상하 양방향 감도·복귀 확인은 점수/습관 v3이고 기준 및 SQLite 스키마는 v2입니다. 기존 저장 부위 키와 데이터는 보존합니다.

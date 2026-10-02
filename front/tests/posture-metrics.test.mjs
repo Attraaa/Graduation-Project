@@ -117,3 +117,9 @@ test('upper body renders two independent scores and a visible protection state',
   for (const text of ['목 점수', '어깨 점수', '82점', '61점', '움직임 감지', '자세 변화 유예']) assert.ok(markup.includes(text));
   assert.doesNotMatch(markup, /종합 점수/);
 });
+
+test('frontal recovery displays the held score and explains the pending recovery', () => {
+  const markup = render({ currentScore: 65, rawScore: 100, currentDeviation: 0, protection: 'recovering' });
+  assert.equal(metric(markup, '현재 점수').value, '65점');
+  assert.match(markup, /기준 자세 복귀 확인 중 · 점수 유지 중/);
+});

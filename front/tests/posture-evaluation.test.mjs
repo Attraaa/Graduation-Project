@@ -16,21 +16,29 @@ function run(until, d=0, v=0, interval=100, selected=policy) {
   for(let at=0; at<=until; at+=interval) state=step(state,at,d,v,selected);
   return state;
 }
+function depart(until, d=1, interval=100, selected=policy) {
+  let state=step(createEvaluation(selected),0,0,0,selected);
+  state=step(state,100,d,0,selected);
+  for(let at=100+interval; at<=100+until; at+=interval) state=step(state,at,d,0,selected);
+  return state;
+}
 test('no observations are unknown; grace does not manufacture missing data', () => {
   const missing=step(createEvaluation(policy),0,null);
   assert.equal(missing.currentScore,null); assert.equal(missing.averageScore,null);
   const first=step(missing,0,1);
-  assert.equal(first.currentScore,100); assert.equal(first.averageScore,null); assert.equal(first.validMs,0);
+  assert.equal(first.currentScore,0); assert.equal(first.averageScore,null); assert.equal(first.validMs,0);
+  const moving=step(createEvaluation(policy),0,1,MOTION_PROTECTION.velocityPxPerSecond+1);
+  assert.equal(moving.currentScore,null); assert.equal(moving.lastScore,null); assert.equal(moving.averageScore,null);
 });
 test('grace period of static deviation is protected and subsequent penalty is gradual', () => {
-  const boundary=run(MOTION_PROTECTION.graceMs,1);
+  const boundary=depart(MOTION_PROTECTION.graceMs);
   close(boundary.currentScore,100); close(boundary.averageScore,100);
   assert.equal(boundary.protection,'grace');
-  const after=step(boundary,MOTION_PROTECTION.graceMs + 100,1);
+  const after=step(boundary,MOTION_PROTECTION.graceMs + 200,1);
   close(after.currentScore, 100 - MOTION_PROTECTION.penaltyPointsPerSecond * 0.1); assert.equal(after.protection,'none');
-  const settled=run(MOTION_PROTECTION.graceMs + 6000,1);
+  const settled=depart(MOTION_PROTECTION.graceMs + 6000);
   close(settled.currentScore,0); assert.ok(settled.averageScore > 0);
-  const zero=step({ ...createEvaluation(policy), ...settled, validMs: 0, scoreTimeSum: 0 },MOTION_PROTECTION.graceMs + 6100,1);
+  const zero=step({ ...createEvaluation(policy), ...settled, validMs: 0, scoreTimeSum: 0 },MOTION_PROTECTION.graceMs + 6200,1);
   close(zero.averageScore,0);
 });
 test('a short departure returns without contaminating the average', () => {
@@ -52,14 +60,21 @@ test('a ten second stretch freezes the previous score and restarts grace when mo
   close(state.currentScore, 100 - MOTION_PROTECTION.penaltyPointsPerSecond * 0.1);
 });
 test('motion holds an already lowered score instead of replacing it with a perfect score', () => {
-  const lowered=run(MOTION_PROTECTION.graceMs + 1000,1);
+  const lowered=depart(MOTION_PROTECTION.graceMs + 1000);
   close(lowered.currentScore, 100 - MOTION_PROTECTION.penaltyPointsPerSecond * 1);
-  const moving=step(lowered,MOTION_PROTECTION.graceMs + 1100,1,MOTION_PROTECTION.velocityPxPerSecond + 50);
+  const moving=step(lowered,MOTION_PROTECTION.graceMs + 1200,1,MOTION_PROTECTION.velocityPxPerSecond + 50);
   close(moving.currentScore, 100 - MOTION_PROTECTION.penaltyPointsPerSecond * 1);
-  const stationary=step(moving,MOTION_PROTECTION.graceMs + 1200,1);
+  const stationary=step(moving,MOTION_PROTECTION.graceMs + 1300,1);
   close(stationary.currentScore, 100 - MOTION_PROTECTION.penaltyPointsPerSecond * 1);
-  const recovered=step(stationary,MOTION_PROTECTION.graceMs + 1300,0);
-  close(recovered.currentScore,100);
+  const returnedAt=MOTION_PROTECTION.graceMs + 1400;
+  let recovered=step(stationary,returnedAt,0);
+  close(recovered.currentScore,lowered.currentScore); assert.equal(recovered.protection,'recovering');
+  for(let elapsed=100; elapsed<MOTION_PROTECTION.recoveryMs; elapsed+=100) {
+    recovered=step(recovered,returnedAt+elapsed,0);
+    close(recovered.currentScore,lowered.currentScore);
+  }
+  recovered=step(recovered,returnedAt+MOTION_PROTECTION.recoveryMs,0);
+  close(recovered.currentScore,100); assert.equal(recovered.protection,'none');
 });
 test('velocity comparison is strictly above its threshold', () => {
   const base=run(1000);
@@ -67,18 +82,20 @@ test('velocity comparison is strictly above its threshold', () => {
   assert.equal(step(base,1100,1,MOTION_PROTECTION.velocityPxPerSecond+1e-8).protection,'moving');
 });
 test('missing data resets grace and continuity but preserves completed totals', () => {
-  const before=run(6000,1);
+  const before=depart(5900);
   const missing=step(before,6000,null);
   assert.equal(missing.currentScore,null); assert.equal(missing.staticDeviationMs,0);
   close(missing.validMs,before.validMs); close(missing.scoreTimeSum,before.scoreTimeSum);
   const resumed=step(missing,6100,1);
   close(resumed.validMs,before.validMs); assert.equal(resumed.protection,'grace');
+  close(resumed.currentScore,before.currentScore); close(resumed.lastScore,before.lastScore);
   const interrupted=interruptEvaluation(before);
   assert.equal(interrupted.currentScore,null); assert.equal(interrupted.protection,'none');
   close(interrupted.averageScore,before.averageScore);
 });
 test('time weighted protected averages do not depend on frame density', () => {
-  const dense=run(3000,1,0,100), sparse=run(3000,1,0,500);
+  const dense=depart(3000,1,100), sparse=depart(3000,1,500);
+  assert.ok(dense.currentScore>0 && dense.currentScore<100);
   close(dense.currentScore,sparse.currentScore); close(dense.validMs,sparse.validMs); close(dense.averageScore,sparse.averageScore);
 });
 test('invalid intervals and policy changes cannot bridge earlier totals', () => {
@@ -99,8 +116,8 @@ test('habit hysteresis uses weighted deviations and excludes moving intervals', 
   const moving=step(continuing,2200,0.2,MOTION_PROTECTION.velocityPxPerSecond + 50); assert.equal(moving.deviationState,'unknown'); close(moving.deviationMs,100);
 });
 test('neck and shoulder have independent grace timers', () => {
-  let neck=createEvaluation(policy), shoulder=createEvaluation(shoulderScorePolicy);
-  for(let at=0; at<=MOTION_PROTECTION.graceMs + 1000; at+=100) {
+  let neck=step(createEvaluation(policy),0), shoulder=step(createEvaluation(shoulderScorePolicy),0,0,0,shoulderScorePolicy);
+  for(let at=100; at<=MOTION_PROTECTION.graceMs + 1100; at+=100) {
     const sample=observed(at,0);
     sample.delta.headForward=1;
     neck=advanceEvaluation(neck,sample,policy); shoulder=advanceEvaluation(shoulder,sample,shoulderScorePolicy);

@@ -19,7 +19,7 @@ test('capture storage conserves real evaluation totals across missing, duplicate
   const times = [3000, 3100, 3600, 3600, 3500, 3700, 3800, 4300, 4800, 5300, 5800, 6300, 6800, 7300, 7800, 7900, 8100, 8200];
   for (const at of times) {
     const landmarks = Array.from({ length: 33 }, () => ({ x: 0.5, y: 0.5, visibility: 1 }));
-    landmarks[0] = { x: at < 3700 ? 0.5 : 0.6, y: 0.25, visibility: at === 7900 ? 0 : 1 };
+    landmarks[0] = { x: 0.5, y: 0.25, visibility: at === 7900 ? 0 : 1 };
     landmarks[7] = { x: 0.6, y: at < 3700 ? 0.25 : 0.55, visibility: 1 };
     landmarks[8] = { x: 0.4, y: at < 3700 ? 0.25 : 0.55, visibility: 1 };
     landmarks[11] = { x: 0.75, y: 0.5, visibility: 1 }; landmarks[12] = { x: 0.25, y: 0.5, visibility: 1 };

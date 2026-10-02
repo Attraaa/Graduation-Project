@@ -20,7 +20,8 @@ function PartMetrics({ result, elapsedSeconds, isRunning }: {
       <div>
         <h2 className="mb-3 text-sm font-black text-heading">기준 자세 유사도</h2>
         {isRunning && result.protection !== 'none' && <p role="status" className="mb-3 text-sm text-muted">
-          {result.protection === 'moving' ? '움직임 감지 · 점수 유지 중' : '자세 변화 유예 · 점수 유지 중'}
+          {result.protection === 'moving' ? '움직임 감지 · 점수 유지 중'
+            : result.protection === 'recovering' ? '기준 자세 복귀 확인 중 · 점수 유지 중' : '자세 변화 유예 · 점수 유지 중'}
         </p>}
         <div className="grid grid-cols-2 gap-3">
           <Metric label="현재 점수" value={scoreText(currentScore)} detail="기준 자세와의 화면상 유사도" />
