@@ -62,12 +62,14 @@ export function evaluatePress(
   const candidates = observation.candidates
     .filter(candidate => Number.isFinite(candidate.confidence)
       && candidate.confidence >= options.minFingerConfidence
-      && Number.isFinite(candidate.normalizedDistanceToTarget))
+      && candidate.confidence <= 1
+      && Number.isFinite(candidate.normalizedDistanceToTarget)
+      && candidate.normalizedDistanceToTarget >= 0)
     .toSorted((left, right) => {
       if (left.insideTarget !== right.insideTarget) return left.insideTarget ? -1 : 1;
       const distance = left.normalizedDistanceToTarget - right.normalizedDistanceToTarget;
       return distance || right.confidence - left.confidence;
-    });
+    }).filter((candidate, index, sorted) => sorted.findIndex(other => fingerId(other) === fingerId(candidate)) === index);
 
   const best = candidates[0];
   if (!best) {
@@ -114,10 +116,17 @@ export function evaluatePress(
       policyVersion: policy.version,
     };
   }
+  // Thumb opposition is not an adjacent typing finger. Never forgive a hand swap.
+  const order = ['index', 'middle', 'ring', 'pinky'];
+  const nearby = [...rule.preferred, ...rule.acceptable].some(expected => {
+    const [hand, finger] = expected.split(':');
+    return hand === best.hand && order.includes(best.finger) && order.includes(finger)
+      && Math.abs(order.indexOf(finger) - order.indexOf(best.finger)) === 1;
+  });
   return {
     code: observation.code,
-    verdict: 'mismatch',
-    reason: 'different-finger',
+    verdict: nearby ? 'nearby' : 'mismatch',
+    reason: nearby ? 'neighboring-finger' : 'different-finger',
     observed,
     preferred: rule.preferred,
     acceptable: rule.acceptable,

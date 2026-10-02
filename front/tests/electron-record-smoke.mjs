@@ -49,14 +49,26 @@ async function run(window) {
       runMs: 1000, validMs: 500, scoreTimeSum: score * 500, deviationMs: 0, deviationEpisodeCount: 0 },
     buckets: [{ minute: Math.floor(start / 60_000) * 60_000, runMs: 1000, validMs: 500, scoreTimeSum: score * 500, deviationMs: 0, deviationEpisodeCount: 0 }],
   });
+  const keyboard = { schemaVersion: 1, generation: 0, sequence: 0,
+    record: { id: 'keyboard', owner: 'demo', startedAt: start, updatedAt: start + 1000, offsetMinutes: now.getTimezoneOffset(),
+      status: 'running', policyVersion: 'ansi-qwerty-touch:2.0.0', recognitionVersion: 'hands-label-distance-v2', nearbyCredit: 70, total: 10 },
+    counts: [{ date, code: 'KeyA', context: 'plain', finger: 'left:pinky', verdict: 'preferred', reason: 'preferred-finger', count: 8 },
+      { date, code: 'KeyA', context: 'plain', finger: 'left:ring', verdict: 'nearby', reason: 'neighboring-finger', count: 2 }] };
   if (phase === 'seed') {
     for (const record of [batch('turtle', 'demo', 'turtle', 50), batch('shoulder', 'demo', 'shoulder', 75, 'running'), batch('other', 'admin', 'turtle', 20)]) {
       value(await call('write', record)); value(await call('write', record));
     }
     assert.equal((await call('write', { sql: 'delete from records' })).ok, false);
+    value(await call('writeKeyboard', keyboard)); value(await call('writeKeyboard', keyboard));
+    assert.equal((await call('writeKeyboard', { ...keyboard, text: 'forbidden' })).ok, false);
+    assert.equal((await js("window.motiKeyboard.updateSettings({stopShortcut:'Control+Alt+F9'})")).stopShortcut, 'Control+Alt+F9');
+    assert.equal(await js("window.motiKeyboard.updateSettings({apps:[]}).then(()=>false,()=>true)"), true);
   } else {
     assert.equal(value(await call('detail', 'demo', 'shoulder')).record.status, 'interrupted');
+    assert.equal(value(await call('keyboardDetail', 'demo', 'keyboard')).record.status, 'interrupted');
+    assert.equal((await js('window.motiKeyboard.settings()')).stopShortcut, 'Control+Alt+F9');
   }
+  assert.equal(value(await call('keyboardStatistics', query))[0].record.total, 10);
   assert.equal(value(await call('list', query)).records.length, 2);
   assert.equal(value(await call('statistics', { ...query, mode: 'turtle' }))[0].scoreTimeSum, 25000);
   assert.equal((await call('detail', 'admin', 'turtle')).ok, false);
@@ -69,6 +81,13 @@ async function run(window) {
   await js("const select=document.querySelector('select');select.value='shoulder';select.dispatchEvent(new Event('change',{bubbles:true}))");
   await until("document.body.innerText.includes('75.0점')");
   console.log('statistics modes passed');
+  await js("{ const select=document.querySelector('select');select.value='keyboard';select.dispatchEvent(new Event('change',{bubbles:true})); }");
+  await until("document.body.innerText.includes('94.0점') && document.body.innerText.includes('80.0%') && document.body.innerText.includes('키별 히트맵')");
+  await screenshot('keyboard-statistics');
+  await js("[...document.querySelectorAll('h2')].find(h=>h.textContent.includes('키별 히트맵')).scrollIntoView()");
+  await screenshot('keyboard-heatmap');
+  await js("[...document.querySelectorAll('button')].find(b=>b.textContent.includes('상세 보기')).click()");
+  await until("document.body.innerText.includes('전체 세션')");
   await route('/history');
   await until("document.body.innerText.includes('50.0점') && document.body.innerText.includes('75.0점')");
   for (const view of ['일간', '월간', '주간']) { await click(view); await delay(250); }
@@ -78,9 +97,19 @@ async function run(window) {
   await screenshot('detail');
   console.log('history detail passed');
   if (phase === 'seed') {
+    await route('/learn/keyboard');
+    await until("document.body.innerText.includes('카메라 연결하고 시작') && document.body.innerText.includes('승인한 일반 앱도 관찰')");
+    await screenshot('keyboard-ready');
+    await js("document.querySelector('details').open=true; document.querySelector('details').scrollIntoView()");
+    await screenshot('camera-settings');
+    await route('/settings');
+    await until("document.body.innerText.includes('일반 앱 실행 파일 승인')");
+    await js("[...document.querySelectorAll('h2')].find(h=>h.textContent.includes('키보드')).scrollIntoView()");
+    await screenshot('observation-settings');
     const other = new BrowserWindow({ show: false, webPreferences: { preload: resolve('dist-electron/preload.cjs') } });
     await other.loadFile(resolve('dist/index.html'));
     assert.equal((await other.webContents.executeJavaScript("window.motiRecords.generation('demo')")).ok, false);
+    assert.equal(await other.webContents.executeJavaScript("window.motiKeyboard.settings().then(()=>false,()=>true)"), true);
     other.destroy();
   } else {
     await route('/settings'); await click('통계 삭제'); await until("document.body.innerText.includes('유지하기')");
@@ -88,6 +117,7 @@ async function run(window) {
     await click('통계 삭제'); await until("document.body.innerText.includes('삭제하기')"); await click('삭제하기');
     await until("document.body.innerText.includes('삭제 완료')");
     assert.equal(value(await call('list', query)).records.length, 0);
+    assert.equal(value(await call('keyboardStatistics', query)).length, 0);
     assert.equal(value(await call('list', { ...query, owner: 'admin' })).records.length, 1);
     assert.equal((await call('write', batch('turtle', 'demo', 'turtle', 50))).ok, false);
     await route('/statistics'); await until("document.body.innerText.includes('기록이 없습니다')");

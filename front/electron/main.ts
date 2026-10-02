@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, globalShortcut, powerMonitor } from 'electron'
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
 import { existsSync } from 'node:fs'
@@ -8,6 +8,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { RecordRepository } from '../../database/sqlite/repository'
 import { recordCall, requireRecords, trustedRecordUrl } from './recordHandlers'
 import { resolveRecordDatabasePath } from './recordDatabasePath'
+import { readKeyboardSettings, chooseKeyboardApp, updateKeyboardSettings } from './keyboardSettings'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -34,7 +35,7 @@ let recordsError = ''
 let allowClose = false
 let closingTimer: ReturnType<typeof setTimeout> | undefined
 const recordsPageUrl = process.env.VITE_DEV_SERVER_URL || pathToFileURL(path.join(distDirectory, 'index.html')).href
-for (const command of ['generation', 'write', 'list', 'detail', 'statistics', 'clear'] as const) {
+for (const command of ['generation', 'write', 'list', 'detail', 'statistics', 'clear', 'writeKeyboard', 'keyboardStatistics', 'keyboardDetail'] as const) {
   ipcMain.handle(`records:${command}`, (event, ...args: unknown[]) => recordCall(
     Boolean(win && event.sender === win.webContents && event.senderFrame === win.webContents.mainFrame
       && trustedRecordUrl(event.senderFrame.url, recordsPageUrl)),
@@ -45,6 +46,9 @@ for (const command of ['generation', 'write', 'list', 'detail', 'statistics', 'c
       if (command === 'list') return db.list(args[0])
       if (command === 'statistics') return db.statistics(args[0])
       if (command === 'detail') return db.detail(args[0] as string, args[1] as string)
+      if (command === 'writeKeyboard') return db.writeKeyboard(args[0])
+      if (command === 'keyboardStatistics') return db.keyboardStatistics(args[0])
+      if (command === 'keyboardDetail') return db.keyboardDetail(args[0] as string, args[1] as string)
       return db.clear(args[0] as string)
     },
   ))
@@ -84,6 +88,7 @@ const getFreeLocalPort = () => new Promise<number>((resolve, reject) => {
 })
 
 const stopKeyboardService = () => {
+  globalShortcut.unregisterAll()
   keyboardGeneration += 1
   const processToStop = keyboardProcess
   keyboardProcess = null
@@ -107,12 +112,17 @@ const waitForKeyboardService = async (origin: string, child: ChildProcessWithout
   throw new Error('키보드 분석 프로세스 준비 시간이 초과되었습니다.')
 }
 
-const startKeyboardService = async () => {
+const startKeyboardService = async (external: boolean) => {
   if (keyboardProcess && keyboardService && keyboardProcess.exitCode === null) return keyboardService
   if (keyboardStarting) return keyboardStarting
 
   const starting = (async () => {
     const generation = keyboardGeneration
+    const settings = readKeyboardSettings()
+    if (external && !settings.apps.length) throw new Error('설정에서 관찰할 일반 앱을 먼저 승인해 주세요.')
+    if (external && !globalShortcut.register(settings.stopShortcut, () => {
+      stopKeyboardService(); win?.webContents.send('keyboard-service:halt')
+    })) throw new Error('관찰 중지 단축키를 등록할 수 없습니다. 설정에서 다른 단축키를 선택해 주세요.')
     const port = await getFreeLocalPort()
     if (generation !== keyboardGeneration) throw new Error('키보드 분석 시작이 취소되었습니다.')
     const token = randomBytes(32).toString('base64url')
@@ -140,7 +150,7 @@ const startKeyboardService = async () => {
 
     const child = spawn(command, args, {
       cwd,
-      env: { ...process.env, MOTI_KEYBOARD_TOKEN: token, PYTHONUNBUFFERED: '1' },
+      env: { ...process.env, MOTI_KEYBOARD_TOKEN: token, MOTI_APPROVED_APPS: JSON.stringify(external ? settings.apps.map(item => item.path) : []), PYTHONUNBUFFERED: '1' },
       windowsHide: true,
     })
     if (generation !== keyboardGeneration) {
@@ -176,8 +186,19 @@ const startKeyboardService = async () => {
   })
 }
 
-ipcMain.handle('keyboard-service:start', startKeyboardService)
-ipcMain.handle('keyboard-service:stop', () => stopKeyboardService())
+const trustedKeyboard = (event: Electron.IpcMainInvokeEvent) => {
+  if (!win || event.sender !== win.webContents || event.senderFrame !== win.webContents.mainFrame
+    || !trustedRecordUrl(event.senderFrame.url, recordsPageUrl)) throw new Error('허용되지 않은 키보드 요청입니다.')
+}
+ipcMain.handle('keyboard-service:start', async (event, external: unknown = false) => {
+  trustedKeyboard(event)
+  if (typeof external !== 'boolean') throw new Error('잘못된 관찰 설정입니다.')
+  try { return await startKeyboardService(external) } catch (error) { stopKeyboardService(); throw error }
+})
+ipcMain.handle('keyboard-service:stop', event => { trustedKeyboard(event); stopKeyboardService() })
+ipcMain.handle('keyboard-settings:read', event => { trustedKeyboard(event); return readKeyboardSettings() })
+ipcMain.handle('keyboard-settings:choose', event => { trustedKeyboard(event); return chooseKeyboardApp(win!) })
+ipcMain.handle('keyboard-settings:update', (event, input: unknown) => { trustedKeyboard(event); return updateKeyboardSettings(input) })
 
 function createWindow() {
   // Create Splash Screen
@@ -201,6 +222,9 @@ function createWindow() {
     icon: path.join(publicDirectory, 'icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      backgroundThrottling: false,
     },
   })
 
@@ -262,7 +286,10 @@ if (ownsInstance) app.whenReady().then(() => {
     records = new RecordRepository(resolveRecordDatabasePath(__dirname, app.getPath('userData')))
   } catch (error) { recordsError = error instanceof Error ? error.message : '기록 저장소를 열 수 없습니다.' }
   createWindow()
+  const halt = () => { stopKeyboardService(); win?.webContents.send('keyboard-service:halt') }
+  powerMonitor.on('suspend', halt)
+  powerMonitor.on('lock-screen', halt)
 })
 app.on('second-instance', () => { win?.restore(); win?.focus() })
-app.on('will-quit', () => { records?.close() })
+app.on('will-quit', () => { globalShortcut.unregisterAll(); records?.close() })
 app.on('before-quit', stopKeyboardService)

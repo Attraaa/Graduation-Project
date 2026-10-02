@@ -8,6 +8,7 @@ import type {
   FingerId,
   Hand,
 } from './types'
+import type { KeyboardContext } from '../../../../database/keyboard'
 
 export interface RuntimeFingerPoint {
   hand: string
@@ -31,7 +32,7 @@ export interface RuntimeKeyboardMapping {
 
 export interface RuntimePressPayload {
   ok: boolean
-  key_event: { key: string; code?: string | null; sequence: number }
+  key_event: { key: string; code?: string | null; sequence: number; context?: KeyboardContext }
   frame_sequence?: number | null
   frame_delta_ms?: number | null
   pressed_key?: string | null
@@ -49,11 +50,12 @@ export interface KeyboardLiveResult {
   evaluation: FingerEvaluation
   frameDeltaMs: number | null
   error: string | null
+  context: KeyboardContext
 }
 
 export const PROVISIONAL_KEYBOARD_THRESHOLDS: FingerEvaluationOptions = {
   minKeyboardConfidence: 0.18,
-  minFingerConfidence: 0.45,
+  minFingerConfidence: 0.8,
   maxAbsoluteFrameDeltaMs: 180,
   maxNormalizedDistanceToTarget: 0.9,
   ambiguityNormalizedDistance: 0.12,
@@ -103,14 +105,19 @@ export function adaptRuntimePress(payload: RuntimePressPayload): KeyboardLiveRes
     frameDeltaMs: payload.frame_delta_ms ?? null,
     candidates,
   }, ANSI_QWERTY_TOUCH_POLICY_V1, PROVISIONAL_KEYBOARD_THRESHOLDS)
+  const context = payload.key_event.context ?? 'plain'
+  if (context === 'shortcut') {
+    evaluation.verdict = 'unknown'; evaluation.reason = 'shortcut'; evaluation.observed = null
+  }
 
   return {
     id: payload.key_event.sequence,
     code,
     pressedKey,
-    observedFinger: toFingerId(payload.pressed_finger),
+    observedFinger: evaluation.observed,
     evaluation,
     frameDeltaMs: payload.frame_delta_ms ?? null,
     error: payload.error ?? null,
+    context,
   }
 }

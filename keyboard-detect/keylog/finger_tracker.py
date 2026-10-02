@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import threading
+import math
 from typing import List, Optional
 
 import cv2
@@ -76,13 +77,17 @@ class MediaPipeFingerTracker:
                 hand_label = {"Left": "Right", "Right": "Left"}.get(hand_label, hand_label)
             for landmark_id, finger_name in TIP_LANDMARKS.items():
                 lm = landmarks.landmark[landmark_id]
+                if not (math.isfinite(lm.x) and math.isfinite(lm.y) and 0 <= lm.x <= 1 and 0 <= lm.y <= 1):
+                    continue
                 points.append(
                     FingerPoint(
                         hand=hand_label,
                         finger=finger_name,
                         x=float(lm.x * w),
                         y=float(lm.y * h),
-                        score=float(getattr(lm, "visibility", 1.0) or 1.0),
+                        # Hands does not supply calibrated fingertip visibility.
+                        # This score describes hand-label quality, not occlusion.
+                        score=_hand_score(handedness, hand_index),
                         landmark_id=landmark_id,
                     )
                 )
@@ -94,3 +99,10 @@ def _hand_label(handedness, index: int) -> str:
         return str(handedness[index].classification[0].label)
     except Exception:
         return f"hand_{index}"
+
+def _hand_score(handedness, index: int) -> float:
+    try:
+        score = float(handedness[index].classification[0].score)
+        return score if math.isfinite(score) and 0 <= score <= 1 else 0.0
+    except (IndexError, AttributeError, TypeError, ValueError):
+        return 0.0

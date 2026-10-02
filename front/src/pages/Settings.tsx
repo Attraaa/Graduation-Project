@@ -3,6 +3,7 @@ import Button from '../components/Button';
 import { Bell, Moon, User, Shield, SlidersHorizontal, Trash2 } from 'lucide-react';
 import { changePassword, clearStatistics, getCurrentUser, updateCurrentUser } from '../utils/authStore';
 import { useDialog } from '../components/dialog/useDialog';
+import KeyboardSettings from '../features/keyboard/KeyboardSettings';
 
 const Settings = () => {
   const { notify, confirm } = useDialog();
@@ -83,6 +84,7 @@ const Settings = () => {
       </header>
 
       <div className="space-y-6">
+        <KeyboardSettings />
         {/* Account Section */}
         <div className="card-duo">
           <h2 className="text-xl font-black text-gray-700 mb-4 flex items-center">
