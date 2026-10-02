@@ -4,7 +4,7 @@ import { advanceEvaluation, createEvaluation } from '../src/features/posture/eva
 import { advanceObservation, createObservation } from '../src/features/posture/observation.ts';
 import { turtleScorePolicy } from '../src/features/posture/modes/turtle.ts';
 import { CaptureRecorder } from '../../database/recorder.ts';
-import { RecordRepository } from '../../database/sqlite/repository.ts';
+import { MemoryRecords } from './fixtures/memory-records.mjs';
 import { sampleBatch } from './fixtures/record-batch.mjs';
 
 // Feed the real observation/evaluation reducers; no UI sampling or reimplemented score formula.
@@ -28,25 +28,19 @@ test('capture storage conserves real evaluation totals across missing, duplicate
     capture.sample(at, evaluation);
   }
   capture.finish(8500);
-  const db = new RecordRepository(':memory:'); db.write(capture.batch(0));
+  const db = new MemoryRecords(); db.write(capture.batch(0));
   const { record } = db.detail('demo', 'one');
   for (const field of ['validMs', 'scoreTimeSum', 'deviationMs', 'deviationEpisodeCount', 'longestContinuousMs']) {
     assert.ok(Math.abs(record[field] - evaluation[field]) < 0.001, field + ': ' + record[field] + ' != ' + evaluation[field]);
   }
-  assert.ok(record.deviationEpisodeCount > 0); assert.ok(record.validMs < record.runMs); db.close();
+  assert.ok(record.deviationEpisodeCount > 0); assert.ok(record.validMs < record.runMs);
 });
-// Verify both real scoring streams survive a file restart without mixing old policies.
-test('upper-body paired scores persist independently and preserve earlier policy records', async t => {
-  const { mkdtempSync, rmSync } = await import('node:fs');
-  const { tmpdir } = await import('node:os');
-  const { join } = await import('node:path');
+// Verify both real scoring streams are stored independently without mixing old policies.
+test('upper-body paired scores persist independently and preserve earlier policy records', async () => {
   const { advanceCalibration, createCalibration } = await import('../src/features/posture/calibration.ts');
   const { shoulderScorePolicy } = await import('../src/features/posture/modes/shoulder.ts');
   const { localDateKey } = await import('../../database/contracts.ts');
   const { summarizeStatistics } = await import('../../database/aggregation.ts');
-  const directory = mkdtempSync(join(tmpdir(), 'moti-upper-body-'));
-  t.after(() => rmSync(directory, { recursive: true, force: true }));
-  const path = join(directory, 'records.sqlite');
   const frame = at => {
     const landmarks = Array.from({ length: 33 }, () => ({ x: 0.5, y: 0.5, visibility: 1 }));
     const changed = at >= 4000;
@@ -70,13 +64,10 @@ test('upper-body paired scores persist independently and preserve earlier policy
     evaluations=evaluations.map((state,index)=>advanceEvaluation(state,observation,policies[index]));
     captures.forEach((capture,index)=>capture.sample(at,evaluations[index]));
   }
-  let db=new RecordRepository(path);
-  try {
-    db.write(sampleBatch());
-    for (const capture of captures) { capture.finish(16000); db.write(capture.batch(0)); }
-  } finally { db.close(); }
-  db=new RecordRepository(path);
-  try {
+  const db=new MemoryRecords();
+  db.write(sampleBatch());
+  for (const capture of captures) { capture.finish(16000); db.write(capture.batch(0)); }
+  {
     const records=captures.map(capture=>db.detail('demo',capture.record.id).record);
     records.forEach((record,index)=>{
       assert.ok(Math.abs(record.scoreTimeSum - evaluations[index].scoreTimeSum)<0.001);
@@ -89,5 +80,5 @@ test('upper-body paired scores persist independently and preserve earlier policy
     const date=localDateKey(records[0].startedAt,records[0].offsetMinutes);
     const groups=summarizeStatistics(db.statistics({owner:'demo',from:date,to:date}));
     for(const policy of policies) assert.ok(groups.some(group=>group.mode===policy.mode && group.scorePolicyVersion===policy.version));
-  } finally { db.close(); }
+  }
 });

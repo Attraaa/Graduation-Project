@@ -27,7 +27,7 @@ export default function Statistics() {
   const rows = query.data ?? [];
   return <div className="space-y-6">
     <header><h1 className="text-3xl font-black text-heading">나의 관찰 통계</h1>
-      <p className="mt-2 text-muted">이 PC에 저장된 실제 관찰 집계입니다. 자세 유사도와 키보드 훈련 점수는 의학적 진단이 아닙니다.</p></header>
+      <p className="mt-2 text-muted">서버에 저장된 이 계정의 실제 관찰 집계입니다. 자세 유사도와 키보드 훈련 점수는 의학적 진단이 아닙니다.</p></header>
     <div className="flex flex-wrap items-end gap-3">
       {mode !== 'eye' && <label className="text-sm font-bold text-heading">날짜<input type="date" value={date} onChange={event => { if (/^\d{4}-\d{2}-\d{2}$/.test(event.target.value)) setDate(event.target.value); }} className="ml-2 rounded-xl border border-border bg-surface p-3" /></label>}
       <label className="text-sm font-bold text-heading">모드<select aria-label="통계 모드" value={mode} onChange={event => setMode(event.target.value as ModeId)} className="ml-2 rounded-xl border border-border bg-surface p-3">{learningModes.map(part => <option key={part.id} value={part.id}>{part.shortTitle}</option>)}</select></label>

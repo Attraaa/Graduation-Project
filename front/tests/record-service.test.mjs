@@ -1,21 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
-import { RecordRepository } from '../../database/sqlite/repository.ts';
+import { MemoryRecords, memoryServer, loggedIn } from './fixtures/memory-records.mjs';
 test('renderer retries the same failed batch and close flushes records before acknowledging', async () => {
-  const db = new RecordRepository(':memory:');
-  const values = new Map([['postureAI.currentUserId', 'demo']]);
-  globalThis.localStorage = { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, value) };
-  let closeHandler; let fail = true; const writes = [];
-  globalThis.window = { dispatchEvent() {}, motiRecords: {
-    onClosing: handler => { closeHandler = handler; return () => {}; },
-    generation: async owner => ({ ok: true, value: db.generation(owner) }),
-    write: async batch => {
-      writes.push(structuredClone(batch));
-      if (fail) { fail = false; return { ok: false, error: 'temporary disk failure' }; }
-      db.write(batch); return { ok: true };
-    },
-  }};
+  const db = new MemoryRecords(), server = memoryServer(db, 'demo'), { writes } = server, originalFetch = globalThis.fetch;
+  const fail = () => server.fail('/api/records/posture', 'temporary server failure');
+  globalThis.localStorage = loggedIn('demo'); globalThis.fetch = server.fetch;
+  let closeHandler; fail();
+  globalThis.window = { dispatchEvent() {}, motiRecords: { onClosing: handler => { closeHandler = handler; return () => {}; } } };
   const compiled = await build({ entryPoints: ['src/features/records/recording.ts'], bundle: true, platform: 'node', format: 'esm', write: false });
   const service = await import('data:text/javascript;base64,' + Buffer.from(compiled.outputFiles[0].text).toString('base64'));
   const at = performance.now();
@@ -30,7 +22,7 @@ test('renderer retries the same failed batch and close flushes records before ac
   assert.equal(db.detail('demo', writes[0].record.id).record.status, 'finished');
   assert.equal(await closeHandler(), true);
   // A still-active recording must also flush on close; failure must veto the close.
-  fail = true;
+  fail();
   const nextAt = performance.now();
   const activeSink = service.beginPostureRecording({ mode: 'shoulder', scorePolicyVersion: 'v1', habitPolicyVersion: 'h1', at: nextAt, epoch: 1800000060000 });
   activeSink.sample(nextAt, { validMs: 0, scoreTimeSum: 0, currentScore: 0, deviationMs: 0, deviationEpisodeCount: 0 });
@@ -49,7 +41,7 @@ test('renderer retries the same failed batch and close flushes records before ac
     part.sample(pairAt, { validMs: 0, scoreTimeSum: 0, currentScore: score, deviationMs: 0, deviationEpisodeCount: 0 });
     part.sample(pairAt + 100, { validMs: 100, scoreTimeSum: score * 100, currentScore: score, deviationMs: 0, deviationEpisodeCount: 0 });
   }
-  fail = true;
+  fail();
   assert.equal(await closeHandler(), false);
   assert.equal(await closeHandler(), true);
   const neck = db.detail('demo', 'paired:turtle').record;
@@ -58,5 +50,5 @@ test('renderer retries the same failed batch and close flushes records before ac
   assert.equal(neck.scoreTimeSum / neck.validMs, 80);
   assert.equal(shoulder.scoreTimeSum / shoulder.validMs, 60);
   assert.equal(neck.status, 'finished'); assert.equal(shoulder.status, 'finished');
-  db.close(); delete globalThis.window; delete globalThis.localStorage;
+  globalThis.fetch = originalFetch; delete globalThis.window; delete globalThis.localStorage;
 });

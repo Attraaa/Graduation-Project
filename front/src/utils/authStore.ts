@@ -1,108 +1,49 @@
-export type StoredUser = {
-  id: string;
-  nickname: string;
-  password: string;
-};
+import { apiRequest, clearSession, readSession, writeSession } from './apiClient';
+import type { SessionUser } from './apiClient';
 
-const USERS_KEY = 'postureAI.users';
-const CURRENT_USER_KEY = 'postureAI.currentUserId';
+export type CurrentUser = SessionUser;
+type Result = { ok: boolean; message: string };
+const failure = (error: unknown): Result => ({ ok: false, message: error instanceof Error ? error.message : '요청을 처리하지 못했습니다.' });
 
-const defaultUsers: StoredUser[] = [
-  { id: 'admin', nickname: '관리자', password: 'admin' },
-  { id: 'demo', nickname: '예비 사용자', password: 'demo1234' },
-];
+/** id is the server user ID as a string; records use it as their owner. username is the login ID. */
+export const getCurrentUser = (): CurrentUser | null => readSession()?.user ?? null;
 
-const withDefaultUsers = (users: StoredUser[]) => {
-  const existingIds = new Set(users.map((user) => user.id.toLowerCase()));
-  const missingDefaults = defaultUsers.filter((user) => !existingIds.has(user.id.toLowerCase()));
-  return [...missingDefaults, ...users];
-};
+export const isDuplicateId = async (username: string) =>
+  (await apiRequest<{ exists: boolean }>(`/api/auth/check/${encodeURIComponent(username.trim())}`)).exists;
 
-const readUsers = (): StoredUser[] => {
-  const raw = localStorage.getItem(USERS_KEY);
-  if (!raw) {
-    localStorage.setItem(USERS_KEY, JSON.stringify(defaultUsers));
-    return defaultUsers;
-  }
-
+export const registerUser = async (user: { username: string; nickname: string; password: string }): Promise<Result> => {
   try {
-    const parsed = JSON.parse(raw) as StoredUser[];
-    if (!Array.isArray(parsed)) return defaultUsers;
-    const users = withDefaultUsers(parsed);
-    if (users.length !== parsed.length) writeUsers(users);
-    return users;
-  } catch {
-    localStorage.setItem(USERS_KEY, JSON.stringify(defaultUsers));
-    return defaultUsers;
-  }
+    const { message } = await apiRequest<{ message: string }>('/api/auth/register', { method: 'POST', body: user });
+    return { ok: true, message };
+  } catch (error) { return failure(error); }
 };
 
-const writeUsers = (users: StoredUser[]) => {
-  localStorage.setItem(USERS_KEY, JSON.stringify(users));
+export const loginUser = async (username: string, password: string): Promise<Result> => {
+  try {
+    const { token, user } = await apiRequest<{ token: string; user: { id: number; username: string; nickname: string } }>(
+      '/api/auth/login', { method: 'POST', body: { username: username.trim(), password } });
+    writeSession({ token, user: { id: String(user.id), username: user.username, nickname: user.nickname } });
+    return { ok: true, message: '로그인되었습니다.' };
+  } catch (error) { return failure(error); }
 };
 
-export const getUsers = () => readUsers();
+export const logoutUser = () => clearSession();
 
-export const findUserById = (id: string) => {
-  const normalized = id.trim().toLowerCase();
-  return readUsers().find((user) => user.id.toLowerCase() === normalized) ?? null;
+export const updateCurrentUser = async (nickname: string): Promise<Result> => {
+  const session = readSession();
+  if (!session) return { ok: false, message: '로그인이 필요합니다.' };
+  try {
+    const { message } = await apiRequest<{ message: string }>('/api/auth/me', { method: 'PUT', body: { nickname } });
+    writeSession({ ...session, user: { ...session.user, nickname: nickname.trim() } });
+    return { ok: true, message };
+  } catch (error) { return failure(error); }
 };
 
-export const isDuplicateId = (id: string) => Boolean(findUserById(id));
-
-export const registerUser = (user: StoredUser) => {
-  if (isDuplicateId(user.id)) {
-    return { ok: false, message: '이미 사용 중인 아이디입니다. 다른 아이디를 입력해 주세요.' };
-  }
-
-  const users = readUsers();
-  writeUsers([...users, { ...user, id: user.id.trim(), nickname: user.nickname.trim() }]);
-  return { ok: true, message: '회원가입이 완료되었습니다. 로그인해 주세요.' };
-};
-
-export const loginUser = (id: string, password: string) => {
-  const user = findUserById(id);
-  if (!user || user.password !== password) {
-    return { ok: false, message: '아이디 또는 비밀번호를 확인해 주세요.' };
-  }
-
-  localStorage.setItem(CURRENT_USER_KEY, user.id);
-  localStorage.setItem('isLoggedIn', 'true');
-  return { ok: true, message: '로그인되었습니다.' };
-};
-
-export const logoutUser = () => {
-  localStorage.removeItem(CURRENT_USER_KEY);
-  localStorage.removeItem('isLoggedIn');
-};
-
-export const getCurrentUser = () => {
-  const currentId = localStorage.getItem(CURRENT_USER_KEY);
-  return currentId ? findUserById(currentId) : null;
-};
-
-export const updateCurrentUser = (nickname: string, currentPassword: string) => {
-  const current = getCurrentUser();
-  if (!current) return { ok: false, message: '로그인이 필요합니다.' };
-  if (current.password !== currentPassword) return { ok: false, message: '비밀번호 인증에 실패했습니다.' };
-
-  const users = readUsers().map((user) =>
-    user.id === current.id ? { ...user, nickname: nickname.trim() } : user,
-  );
-  writeUsers(users);
-  return { ok: true, message: '계정 정보가 변경되었습니다.' };
-};
-
-export const changePassword = (currentPassword: string, nextPassword: string) => {
-  const current = getCurrentUser();
-  if (!current) return { ok: false, message: '로그인이 필요합니다.' };
-  if (current.password !== currentPassword) return { ok: false, message: '현재 비밀번호를 확인해 주세요.' };
-
-  const users = readUsers().map((user) =>
-    user.id === current.id ? { ...user, password: nextPassword } : user,
-  );
-  writeUsers(users);
-  return { ok: true, message: '비밀번호가 변경되었습니다.' };
+export const changePassword = async (currentPassword: string, newPassword: string): Promise<Result> => {
+  try {
+    const { message } = await apiRequest<{ message: string }>('/api/auth/me/password', { method: 'PUT', body: { currentPassword, newPassword } });
+    return { ok: true, message };
+  } catch (error) { return failure(error); }
 };
 
 export const clearStatistics = async () => {

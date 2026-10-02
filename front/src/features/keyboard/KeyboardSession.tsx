@@ -107,7 +107,7 @@ export default function KeyboardSession() {
         <p className="text-xs leading-relaxed text-muted">
           판정은 임시 ANSI QWERTY 권장 손가락표와 보수적인 신뢰도 기준을 사용합니다. 불확실하거나 서로 가까운 후보는 오답 대신 판정 보류로 표시합니다.
           70점은 검증 전의 훈련 가중치이며, 반대 손과 엄지는 인접 손가락으로 처리하지 않습니다.
-          원문·입력 순서·영상은 저장하지 않고 키·손가락·판정 횟수만 이 PC의 SQLite에 저장합니다.
+          원문·입력 순서·영상은 저장하지 않고 키·손가락·판정 횟수만 서버에 저장합니다.
         </p>
       </section>
       <CameraSettings value={camera} onChange={value => { setCamera(value); localStorage.setItem('moti.keyboard.camera', JSON.stringify(value)); setRemapRequest(value => value + 1); }} />

@@ -177,3 +177,9 @@ Electron 검증은 샌드박스 GPU 제한 후 일반 실행 권한에서 통과
 이번 수정에서 실제 카메라·사용자 DB·외부 키 입력·Electron 화면 smoke는 실행하지 않았습니다. 작은 회전의 검출, 머리/어깨 상하 움직임의 분리와 실사용 감도는 촬영 검증이 남습니다. 처리 방향과 한계는 [평가 안내](evaluation.md)를 따릅니다.
 
 `codex/posture-rotation-vertical`에서 네 계산 파일의 역할·입출력·시간 규칙과 계산 예시를 한국어 주석으로 설명했습니다. 주석을 제외한 실행 코드 토큰이 추가 전후 동일함을 확인했고, 프론트 타입·린트 및 관련 회귀 테스트 35개를 다시 통과했습니다.
+
+## 2026-10-03 서버 기록 전환
+
+앱 로그인과 목·어깨·키보드 기록을 서버 API로 전환했습니다. Electron SQLite 저장소·records IPC와 이를 검사하던 `front/scripts/check-records-electron.mjs`, `tests/electron-record-smoke.mjs`, 파일 DB 전용 테스트를 제거했습니다. 서버 저장 규칙은 `server/test/records-repository.test.ts`(실제 MySQL, `MOTI_TEST_MYSQL_URL` 지정 시)로 옮겼고 프론트 저장 서비스 테스트는 메모리 서버 대역을 사용합니다. 서버 빌드는 `tsc` 타입 검사 후 esbuild로 `dist/server.js` 하나를 만들며(`esbuild` 개발 의존성 추가), `database/contracts.ts`·`keyboard.ts`를 포함합니다.
+
+이 macOS 환경에서 프로젝트 Node 24.20.0으로 프론트 타입·린트·116개 테스트와 `npm run build -- --configLoader runner`, 서버 타입 검사·빌드와 37개 HTTP/서비스 테스트 및 임시 MySQL 9.6의 기록 저장소 7개 테스트를 통과했습니다. Windows `setup.cmd`/`moti.cmd check`와 Python 검사는 이번에 실행하지 않았습니다. 배포 서버는 DB·서버 코드·nginx 설정을 백업한 뒤 002 적용, 서버 재빌드·재시작, nginx 기본 서버를 API 프록시(`client_max_body_size 2m`)로 변경했고 외부 HTTP 종단 검사를 통과했습니다. 실행 중인 Vite 개발 서버는 `.env`를 시작 시에만 읽으므로 앱을 다시 시작해야 서버 주소가 적용됩니다. 실제 카메라 측정 → 저장 → 재실행 조회는 사용자 확인이 남아 있습니다. 상세는 [database 안내](../database/README.md)에 있습니다.

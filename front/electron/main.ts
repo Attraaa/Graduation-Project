@@ -5,9 +5,7 @@ import { existsSync } from 'node:fs'
 import net from 'node:net'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
-import { RecordRepository } from '../../database/sqlite/repository'
-import { recordCall, requireRecords, trustedRecordUrl } from './recordHandlers'
-import { resolveRecordDatabasePath } from './recordDatabasePath'
+import { trustedRecordUrl } from './recordHandlers'
 import { readKeyboardSettings, chooseKeyboardApp, updateKeyboardSettings } from './keyboardSettings'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -30,29 +28,9 @@ app.setName('Moti')
 const ownsInstance = app.requestSingleInstanceLock()
 if (!ownsInstance) app.quit()
 
-let records: RecordRepository | null = null
-let recordsError = ''
 let allowClose = false
 let closingTimer: ReturnType<typeof setTimeout> | undefined
 const recordsPageUrl = process.env.VITE_DEV_SERVER_URL || pathToFileURL(path.join(distDirectory, 'index.html')).href
-for (const command of ['generation', 'write', 'list', 'detail', 'statistics', 'clear', 'writeKeyboard', 'keyboardStatistics', 'keyboardDetail'] as const) {
-  ipcMain.handle(`records:${command}`, (event, ...args: unknown[]) => recordCall(
-    Boolean(win && event.sender === win.webContents && event.senderFrame === win.webContents.mainFrame
-      && trustedRecordUrl(event.senderFrame.url, recordsPageUrl)),
-    () => {
-      const db = requireRecords(records, recordsError)
-      if (command === 'generation') return db.generation(args[0] as string)
-      if (command === 'write') return db.write(args[0])
-      if (command === 'list') return db.list(args[0])
-      if (command === 'statistics') return db.statistics(args[0])
-      if (command === 'detail') return db.detail(args[0] as string, args[1] as string)
-      if (command === 'writeKeyboard') return db.writeKeyboard(args[0])
-      if (command === 'keyboardStatistics') return db.keyboardStatistics(args[0])
-      if (command === 'keyboardDetail') return db.keyboardDetail(args[0] as string, args[1] as string)
-      return db.clear(args[0] as string)
-    },
-  ))
-}
 
 let win: BrowserWindow | null
 let splash: BrowserWindow | null
@@ -282,14 +260,11 @@ app.on('activate', () => {
 })
 
 if (ownsInstance) app.whenReady().then(() => {
-  try {
-    records = new RecordRepository(resolveRecordDatabasePath(__dirname, app.getPath('userData')))
-  } catch (error) { recordsError = error instanceof Error ? error.message : '기록 저장소를 열 수 없습니다.' }
   createWindow()
   const halt = () => { stopKeyboardService(); win?.webContents.send('keyboard-service:halt') }
   powerMonitor.on('suspend', halt)
   powerMonitor.on('lock-screen', halt)
 })
 app.on('second-instance', () => { win?.restore(); win?.focus() })
-app.on('will-quit', () => { globalShortcut.unregisterAll(); records?.close() })
+app.on('will-quit', () => { globalShortcut.unregisterAll() })
 app.on('before-quit', stopKeyboardService)

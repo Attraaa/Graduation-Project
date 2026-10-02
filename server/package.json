@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/server.ts",
-    "build": "tsc",
+    "build": "tsc && esbuild src/server.ts --bundle --platform=node --format=esm --packages=external --target=node24 --outfile=dist/server.js",
     "start": "node dist/server.js",
     "seed": "tsx seed.ts",
     "test": "tsx --test test/*.test.ts"
@@ -24,6 +24,7 @@
     "@types/express": "^4.17.21",
     "@types/jsonwebtoken": "^9.0.6",
     "@types/node": "^24.12.2",
+    "esbuild": "0.28.2",
     "tsx": "^4.15.6",
     "typescript": "~6.0.3"
   },

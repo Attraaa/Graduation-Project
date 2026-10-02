@@ -1,11 +1,8 @@
 import { Link } from 'react-router-dom';
 import { Search } from 'lucide-react';
 import Button from '../components/Button';
-import { getUsers } from '../utils/authStore';
 
 const FindId = () => {
-  const users = getUsers();
-
   return (
     <div className="flex min-h-screen w-screen items-center justify-center bg-white md:bg-[#f7f7f7]">
       <div className="w-full max-w-md p-8 md:card-duo">
@@ -15,18 +12,13 @@ const FindId = () => {
           </div>
           <h1 className="text-center text-3xl font-black text-[#1cb0f6]">아이디 찾기</h1>
           <p className="text-center text-gray-500 font-bold">
-            현재 목업 DB에 등록된 아이디를 확인합니다.
+            서버 계정의 아이디 찾기는 아직 지원하지 않습니다.
           </p>
         </div>
 
-        <div className="space-y-3 rounded-2xl bg-gray-50 p-4">
-          {users.map((user) => (
-            <div key={user.id} className="flex items-center justify-between rounded-xl bg-white px-4 py-3 font-bold text-gray-700">
-              <span>{user.nickname}</span>
-              <span className="text-[#1cb0f6]">{user.id}</span>
-            </div>
-          ))}
-        </div>
+        <p className="rounded-2xl bg-gray-50 p-4 text-sm font-bold text-gray-600">
+          가입한 아이디가 기억나지 않으면 관리자에게 문의해 주세요. 다른 사용자의 계정 목록은 표시하지 않습니다.
+        </p>
 
         <Link to="/login" className="mt-6 block">
           <Button type="button" variant="primary" fullWidth>

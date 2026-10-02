@@ -2,20 +2,23 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { KeyRound } from 'lucide-react';
 import Button from '../components/Button';
-import { findUserById } from '../utils/authStore';
+import { isDuplicateId } from '../utils/authStore';
 
 const FindPassword = () => {
   const [userId, setUserId] = useState('');
   const [message, setMessage] = useState('');
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const user = findUserById(userId);
-    setMessage(
-      user
-        ? '등록된 계정을 확인했습니다. 실제 서비스에서는 본인 인증 후 비밀번호 재설정 링크를 제공합니다.'
-        : '입력한 아이디로 가입된 계정을 찾을 수 없습니다.',
-    );
+    try {
+      setMessage(
+        await isDuplicateId(userId)
+          ? '등록된 계정을 확인했습니다. 비밀번호 재설정은 아직 지원하지 않으므로 관리자에게 문의해 주세요.'
+          : '입력한 아이디로 가입된 계정을 찾을 수 없습니다.',
+      );
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '계정을 확인하지 못했습니다.');
+    }
   };
 
   return (

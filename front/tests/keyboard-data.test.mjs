@@ -1,12 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
-import { RecordRepository } from '../../database/sqlite/repository.ts';
 import { parseKeyboardBatch, keyboardSummary } from '../../database/keyboard.ts';
-import { sampleBatch } from './fixtures/record-batch.mjs';
 import { cameraTransform, normalizeKeyboardCamera, defaultKeyboardCamera } from '../src/features/keyboard/camera.ts';
 import { evaluatePress } from '../src/features/keyboard/evaluatePress.ts';
 import { ANSI_QWERTY_TOUCH_POLICY_V1 } from '../src/features/keyboard/fingerPolicy.ts';
@@ -19,7 +13,6 @@ function batch() {
     counts: [{ date: '2026-10-01', code: 'KeyA', context: 'plain', finger: 'left:pinky', verdict: 'preferred', reason: 'preferred-finger', count: 8 },
       { date: '2026-10-01', code: 'KeyA', context: 'plain', finger: 'left:ring', verdict: 'nearby', reason: 'neighboring-finger', count: 2 }] };
 }
-function fixture(t) { const directory = mkdtempSync(join(tmpdir(), 'moti-keyboard-')); t.after(() => rmSync(directory, { recursive: true, force: true })); return join(directory, 'records.sqlite'); }
 
 test('100/70/0 score excludes ambiguity, separates coverage, and never rewards consistency', () => {
   const counts = batch().counts;
@@ -40,28 +33,6 @@ test('strict aggregate input rejects text, sequences, unknown physical codes, an
     b => { b.counts[0].finger = null; }, b => { b.counts[0].date = '2026-09-30'; }, b => { b.counts[0].reason = 'different-finger'; }]) {
     const value = batch(); mutate(value); assert.throws(() => parseKeyboardBatch(value));
   }
-});
-test('additive schema v1 migration preserves posture data and supports keyboard restarts and owner isolation', t => {
-  const file = fixture(t); let db = new RecordRepository(file); const posture = sampleBatch(); db.write(posture); db.close();
-  // Construct a real v1 database from its unchanged original tables.
-  const v1 = new DatabaseSync(file); v1.exec('DROP TABLE keyboard_batches; DROP TABLE keyboard_counts; DROP TABLE keyboard_records; PRAGMA user_version=1'); v1.close();
-  db = new RecordRepository(file);
-  assert.equal(db.detail('demo', posture.record.id).record.status, 'interrupted');
-  assert.equal(db.detail('demo', posture.record.id).record.owner, 'demo');
-  const value = batch(); db.writeKeyboard(value); db.writeKeyboard(value);
-  assert.equal(db.keyboardDetail('demo', value.record.id).record.total, 10);
-  assert.throws(() => db.keyboardDetail('other', value.record.id));
-  assert.throws(() => db.writeKeyboard({ ...value, record: { ...value.record, total: 9 } }));
-  const next = structuredClone(value); next.sequence++; next.counts[0].count++; next.record.total++; db.writeKeyboard(next);
-  const bad = structuredClone(next); bad.sequence++; bad.counts[0].count--; bad.counts[1].count++; assert.throws(() => db.writeKeyboard(bad), /누적값/);
-  assert.equal(db.keyboardDetail('demo', value.record.id).record.total, 11);
-  const different = structuredClone(value); different.record.owner = 'other'; different.record.id = 'other'; db.writeKeyboard(different);
-  db.close(); db = new RecordRepository(file);
-  assert.equal(db.keyboardDetail('demo', value.record.id).record.status, 'interrupted');
-  assert.equal(db.keyboardStatistics({ owner: 'demo', from: '2026-10-01', to: '2026-10-01' }).length, 1);
-  assert.equal(db.clear('demo'), 1); assert.throws(() => db.writeKeyboard(value), /삭제/);
-  assert.throws(() => db.detail('demo', posture.record.id)); assert.throws(() => db.keyboardDetail('demo', value.record.id));
-  assert.equal(db.keyboardDetail('other', 'other').record.total, 10); assert.equal(db.integrity(), 'ok'); db.close();
 });
 test('arbitrary rotation retains source resolution and covers every output corner without black areas', () => {
   for (const [w, h] of [[1280, 720], [640, 480], [720, 1280]]) for (const angle of [-180, -135, -90, -45, -1, 0, 17, 80, 90, 133, 179]) {

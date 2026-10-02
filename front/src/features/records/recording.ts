@@ -13,7 +13,7 @@ const listeners = new Set<() => void>();
 interface RecorderParticipant { retry(): Promise<void>; finish(): void; discard(owner: string): void; error(): string | null }
 const participants = new Set<RecorderParticipant>();
 export function registerRecorder(participant: RecorderParticipant) { participants.add(participant); return () => { participants.delete(participant); }; }
-let message = '측정한 기록은 이 PC에 저장됩니다.';
+let message = '측정한 기록은 서버에 저장됩니다.';
 const announce = (next: string) => {
   const failed = [...active].find(entry => entry.error);
   const error = failed?.error ?? [...participants].map(item => item.error()).find(Boolean);
@@ -39,7 +39,7 @@ async function save(entry: Active) {
         if (batch.record.status !== 'running') { active.delete(entry); break; }
       } while (entry.stopped || entry.collector.hasPending);
       entry.error = null;
-      announce('측정 기록이 이 PC에 저장되었습니다.');
+      announce('측정 기록이 서버에 저장되었습니다.');
     } catch (error) {
       if (!active.has(entry)) return;
       entry.error = error instanceof Error ? error.message : String(error);
@@ -56,7 +56,6 @@ export function beginPostureRecording(start: CaptureStart): CaptureSink {
   const owner = getCurrentUser()?.id;
   const noop = { sample: () => {}, finish: () => {} };
   if (!owner) { announce('로그인하면 측정 기록을 저장할 수 있습니다. 현재 측정은 저장되지 않습니다.'); return noop; }
-  try { recordsApi(); } catch (error) { announce((error as Error).message); return noop; }
   const collector = new CaptureRecorder({ ...emptyTotals(), id: start.id ?? crypto.randomUUID(), owner, mode: start.mode,
     startedAt: start.epoch, updatedAt: start.epoch, offsetMinutes: new Date(start.epoch).getTimezoneOffset(),
     scorePolicyVersion: start.scorePolicyVersion, habitPolicyVersion: start.habitPolicyVersion, longestContinuousMs: 0, status: 'running' }, start.at);

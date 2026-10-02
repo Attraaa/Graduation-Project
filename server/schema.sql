@@ -10,6 +10,13 @@ DROP TABLE IF EXISTS `Session`;
 DROP TABLE IF EXISTS `user`;
 
 -- 기존 서버 테이블도 초기화 (재생성 위해)
+DROP TABLE IF EXISTS keyboard_batches;
+DROP TABLE IF EXISTS keyboard_counts;
+DROP TABLE IF EXISTS keyboard_records;
+DROP TABLE IF EXISTS posture_batches;
+DROP TABLE IF EXISTS posture_buckets;
+DROP TABLE IF EXISTS posture_records;
+DROP TABLE IF EXISTS record_owners;
 DROP TABLE IF EXISTS keystroke_events;
 DROP TABLE IF EXISTS calibration_references;
 DROP TABLE IF EXISTS feedback;
@@ -124,3 +131,82 @@ CREATE TABLE keystroke_events (
 
 CREATE INDEX idx_keystroke_session ON keystroke_events(session_id, recorded_at);
 CREATE INDEX idx_keystroke_verdict ON keystroke_events(user_id, verdict);
+
+-- 8~13. 앱 기록 (migrations/002_record_tables.sql과 같은 정의)
+-- 8. 사용자별 삭제 세대. 통계 삭제마다 1씩 올라가며 이전 세대의 늦은 저장 요청을 거절합니다.
+CREATE TABLE record_owners (
+  user_id    INT NOT NULL PRIMARY KEY,
+  generation INT NOT NULL DEFAULT 0,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_bin;
+
+-- 9. 상체 부위(turtle/shoulder) 기록 요약
+CREATE TABLE posture_records (
+  id           VARCHAR(120) NOT NULL PRIMARY KEY,      -- 클라이언트가 만든 UUID
+  user_id      INT          NOT NULL,
+  mode         VARCHAR(16)  NOT NULL,
+  start_date   CHAR(10)     NOT NULL,                  -- 기록 시작 시각의 offset 기준 로컬 날짜
+  started_at   BIGINT       NOT NULL,                  -- epoch ms
+  score_policy VARCHAR(120) NOT NULL,
+  habit_policy VARCHAR(120) NOT NULL,
+  longest_ms   DOUBLE       NOT NULL,
+  sequence     INT          NOT NULL,                  -- 마지막으로 반영한 배치 순번
+  data         MEDIUMTEXT   NOT NULL,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  INDEX idx_posture_records_owner_date (user_id, start_date, started_at)
+) DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_bin;
+
+-- 10. 실제 관측 분 단위 버킷. date/hour는 기록 시작 offset 기준 로컬 시각입니다.
+CREATE TABLE posture_buckets (
+  record_id               VARCHAR(120) NOT NULL,
+  minute                  BIGINT       NOT NULL,       -- epoch ms, 60000의 배수
+  date                    CHAR(10)     NOT NULL,
+  hour                    CHAR(2)      NOT NULL,
+  run_ms                  DOUBLE       NOT NULL,
+  valid_ms                DOUBLE       NOT NULL,
+  score_time_sum          DOUBLE       NOT NULL,
+  deviation_ms            DOUBLE       NOT NULL,
+  deviation_episode_count INT          NOT NULL,
+  PRIMARY KEY (record_id, minute),
+  FOREIGN KEY (record_id) REFERENCES posture_records(id) ON DELETE CASCADE,
+  INDEX idx_posture_buckets_date (date, record_id)
+) DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_bin;
+
+-- 11. 반영한 배치의 digest. 같은 순번·같은 내용의 재시도는 한 번만 반영합니다.
+CREATE TABLE posture_batches (
+  record_id VARCHAR(120) NOT NULL,
+  sequence  INT          NOT NULL,
+  digest    CHAR(64)     NOT NULL,
+  PRIMARY KEY (record_id, sequence),
+  FOREIGN KEY (record_id) REFERENCES posture_records(id) ON DELETE CASCADE
+) DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_bin;
+
+-- 12. 키보드 세션 요약
+CREATE TABLE keyboard_records (
+  id         VARCHAR(120) NOT NULL PRIMARY KEY,
+  user_id    INT          NOT NULL,
+  start_date CHAR(10)     NOT NULL,
+  sequence   INT          NOT NULL,
+  data       MEDIUMTEXT   NOT NULL,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  INDEX idx_keyboard_records_owner_date (user_id, start_date)
+) DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_bin;
+
+-- 13. 키보드 누적 집계. count_key는 [날짜, 키, 상황, 손가락, 판정, 원인] JSON 문자열입니다.
+CREATE TABLE keyboard_counts (
+  record_id VARCHAR(120) NOT NULL,
+  count_key VARCHAR(255) NOT NULL,
+  date      CHAR(10)     NOT NULL,
+  data      TEXT         NOT NULL,
+  PRIMARY KEY (record_id, count_key),
+  FOREIGN KEY (record_id) REFERENCES keyboard_records(id) ON DELETE CASCADE,
+  INDEX idx_keyboard_counts_date (date, record_id)
+) DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_bin;
+
+CREATE TABLE keyboard_batches (
+  record_id VARCHAR(120) NOT NULL,
+  sequence  INT          NOT NULL,
+  digest    CHAR(64)     NOT NULL,
+  PRIMARY KEY (record_id, sequence),
+  FOREIGN KEY (record_id) REFERENCES keyboard_records(id) ON DELETE CASCADE
+) DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_bin;

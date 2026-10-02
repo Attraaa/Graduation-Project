@@ -1,5 +1,4 @@
 import { ipcRenderer, contextBridge } from 'electron'
-import type { RecordsApi } from '../../database/contracts'
 
 // --------- Expose some API to the Renderer process ---------
 contextBridge.exposeInMainWorld('motiKeyboard', {
@@ -15,19 +14,11 @@ contextBridge.exposeInMainWorld('motiKeyboard', {
   },
 })
 
+// Records are stored on the API server; main only asks the renderer to flush them before closing.
 contextBridge.exposeInMainWorld('motiRecords', {
-  onClosing: listener => {
+  onClosing: (listener: () => Promise<boolean>) => {
     const handle = () => { void listener().then(ok => ipcRenderer.send('records:close-ready', ok)).catch(() => ipcRenderer.send('records:close-ready', false)) }
     ipcRenderer.on('records:closing', handle)
     return () => { ipcRenderer.removeListener('records:closing', handle) }
   },
-  generation: owner => ipcRenderer.invoke('records:generation', owner),
-  write: batch => ipcRenderer.invoke('records:write', batch),
-  list: query => ipcRenderer.invoke('records:list', query),
-  detail: (owner, id) => ipcRenderer.invoke('records:detail', owner, id),
-  statistics: query => ipcRenderer.invoke('records:statistics', query),
-  writeKeyboard: batch => ipcRenderer.invoke('records:writeKeyboard', batch),
-  keyboardStatistics: query => ipcRenderer.invoke('records:keyboardStatistics', query),
-  keyboardDetail: (owner, id) => ipcRenderer.invoke('records:keyboardDetail', owner, id),
-  clear: owner => ipcRenderer.invoke('records:clear', owner),
-} satisfies RecordsApi)
+})

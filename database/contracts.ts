@@ -61,8 +61,8 @@ export interface StatisticsRow extends Totals {
   recordIds: string[];
 }
 export type RecordsResult<T> = { ok: true; value: T } | { ok: false; error: string };
+/** Owner arguments name the logged-in user; the server authorizes by its token, not by these. */
 export interface RecordsApi {
-  onClosing(listener: () => Promise<boolean>): () => void;
   generation(owner: string): Promise<RecordsResult<number>>;
   write(batch: RecordBatch): Promise<RecordsResult<void>>;
   list(query: RecordQuery): Promise<RecordsResult<RecordPage>>;

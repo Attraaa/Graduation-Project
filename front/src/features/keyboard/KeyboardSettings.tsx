@@ -24,6 +24,6 @@ export default function KeyboardSettings() {
       <Button variant="outline" onClick={() => void perform(() => window.motiKeyboard!.chooseApp())}>일반 앱 실행 파일 승인</Button>
       <label className="block text-sm font-bold text-heading">즉시 중지 단축키<select className="ml-2 rounded border border-border bg-surface p-2" value={settings.stopShortcut} onChange={event => void perform(() => window.motiKeyboard!.updateSettings({ stopShortcut: event.target.value }))}>{Array.from({ length: 12 }, (_, i) => `Control+Alt+F${i + 1}`).map(key => <option key={key} value={key}>{key.replace('Control', 'Ctrl')}</option>)}</select></label>
     </>}
-    <p className="text-xs text-muted">중지 단축키·화면 잠금·절전·페이지 이동 시 관찰을 끝냅니다. 다시 시작하려면 학습 화면에서 시작 버튼을 누르세요. 단축키가 다른 앱에서 사용 중이면 외부 관찰을 시작하지 않습니다. 원문·입력 순서·영상은 저장하지 않고 날짜·키·손가락별 횟수와 판정만 이 PC에 저장합니다.</p>
+    <p className="text-xs text-muted">중지 단축키·화면 잠금·절전·페이지 이동 시 관찰을 끝냅니다. 다시 시작하려면 학습 화면에서 시작 버튼을 누르세요. 단축키가 다른 앱에서 사용 중이면 외부 관찰을 시작하지 않습니다. 원문·입력 순서·영상은 저장하지 않고 날짜·키·손가락별 횟수와 판정만 서버에 저장합니다.</p>
   </section>;
 }
