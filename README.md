@@ -58,3 +58,9 @@ AGENTS.md와 README.md를 먼저 읽고, docs/architecture.md, docs/product-deci
 - 로그인은 로컬 데모입니다. 목·어깨 통계와 학습이력은 Electron의 로컬 SQLite 기록을 조회합니다. AI·의학 정보는 예시로 구분하며 원격 서버 전송, AI 요약, BYOK, SQLite 동기화는 후속 작업입니다. 저장 계약과 복구·삭제 정책은 [database/README.md](database/README.md)를 확인합니다.
 
 **기존 DB 주의:** `server/schema.sql`은 테이블을 삭제하는 초기화 SQL입니다. 보존할 데이터가 있는 DB에 실행하지 않습니다. `front/database_schema.sql`도 현재 서버와 구조가 다릅니다.
+
+## 안구 모드
+
+깜빡임 횟수·최근/누적 빈도, 기준 구도보다 가까워짐, 20분/20초 눈 휴식 안내를 추가했습니다. 기존 앱에서 안구 모드를 선택하거나 Windows에서 `eye.cmd`를 실행해 브라우저로 시연할 수 있습니다. `eye.cmd`는 프론트만 설치하므로 Electron/키보드 실행에는 기존 `setup.cmd`를 사용하세요. 카메라 영상은 기기 안에서 처리하며 안구 결과는 DB에 저장하지 않습니다.
+
+기능·모델·실행·검증 한계 및 팀원의 브랜치 적용 방법은 [docs/eye-mode.md](docs/eye-mode.md)를 참고하세요.

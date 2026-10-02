@@ -137,3 +137,7 @@ Windows 설치 파일 생성 경로는 `moti.cmd package`입니다. Electron 개
 ## 목·어깨 SQLite 기록 (2026-09-19)
 
 새 npm/native driver 의존성 없이 잠긴 Electron의 `node:sqlite`를 main에서 사용합니다. 설치된 Electron 41.10.7의 Node 24.18.0/SQLite 3.53.1, 프로젝트 Node 24.20.0의 SQLite 3.53.4에서 확인했습니다. 코드가 Electron main 번들에 포함되며 DB 소스 때문에 별도 패키지 관리자나 배포 디렉터리를 추가하지 않습니다. 런타임을 바꾸면 아래 [Electron 통합 검사](../database/README.md)를 다시 실행해야 합니다. 설치 패키지의 깨끗한 PC 검증은 남아 있습니다.
+
+## 안구 모델 자원
+
+`@mediapipe/tasks-vision@0.10.32`를 추가했습니다. 기존 패키지의 잠금 버전은 유지합니다. `copy-mediapipe.mjs`는 Face WASM도 복사하고, 저장소에 포함된 `front/public/models/face_landmarker.task`의 SHA-256을 검증합니다. 모델 출처·라이선스와 제한은 [eye-mode.md](eye-mode.md)와 모델 폴더의 NOTICE를 따릅니다. `predev:browser`에서도 이 준비 단계를 실행합니다.
