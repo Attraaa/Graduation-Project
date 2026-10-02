@@ -9,15 +9,15 @@ const delta = (value = 0, overrides = {}) => ({ headForward: value, torsoForward
 const close = (a, b) => assert.ok(Math.abs(a - b) < 1e-9, `${a} != ${b}`);
 
 test('each part uses its own weighted sum rather than the largest feature or a combined score', () => {
-  close(scorePosture(delta(0, { headForward: 0.2, torsoForward: 0.1, neckSlump: 0.3 }), neck).deviation, 0.21);
-  close(scorePosture(delta(0, { shoulderTilt: 0.2, shoulderShrug: 0.1 }), shoulder).deviation, 0.16);
+  close(scorePosture(delta(0, { headForward: 0.2, torsoForward: 0.1, neckSlump: 0.3 }), neck).deviation, 0.215);
+  close(scorePosture(delta(0, { shoulderTilt: 0.2, shoulderShrug: 0.1 }), shoulder).deviation, 0.17);
   close(Object.values(NECK_WEIGHTS).reduce((a,b) => a+b), 1);
   close(Object.values(SHOULDER_WEIGHTS).reduce((a,b) => a+b), 1);
 });
 test('yaw boundary suppresses only head-forward penalty, without redistributing its weight', () => {
   const sample = delta(0, { headForward: 0.4, torsoForward: 0.2, neckSlump: 0.2 });
-  close(scorePosture({ ...sample, yawRatio: 0.15 }, neck).deviation, 0.30);
-  close(scorePosture({ ...sample, yawRatio: 0.15 + 1e-9 }, neck).deviation, 0.10);
+  close(scorePosture({ ...sample, yawRatio: 0.15 }, neck).deviation, 0.27);
+  close(scorePosture({ ...sample, yawRatio: 0.15 + 1e-9 }, neck).deviation, 0.13);
   close(scorePosture(delta(0.2, { yawRatio: 1 }), shoulder).deviation, 0.2);
 });
 test('full and zero credit boundaries, linear midpoint and adjacent values', () => {

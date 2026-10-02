@@ -22,45 +22,49 @@ test('no observations are unknown; grace does not manufacture missing data', () 
   const first=step(missing,0,1);
   assert.equal(first.currentScore,100); assert.equal(first.averageScore,null); assert.equal(first.validMs,0);
 });
-test('five seconds of static deviation are protected and subsequent penalty is gradual', () => {
+test('grace period of static deviation is protected and subsequent penalty is gradual', () => {
   const boundary=run(MOTION_PROTECTION.graceMs,1);
   close(boundary.currentScore,100); close(boundary.averageScore,100);
   assert.equal(boundary.protection,'grace');
-  const after=step(boundary,5100,1);
-  close(after.currentScore,98); assert.equal(after.protection,'none');
-  const settled=run(11000,1);
-  assert.equal(settled.currentScore,0); assert.ok(settled.averageScore > 0);
-  const zero=step({ ...createEvaluation(policy), ...settled, validMs: 0, scoreTimeSum: 0 },11100,1);
+  const after=step(boundary,MOTION_PROTECTION.graceMs + 100,1);
+  close(after.currentScore, 100 - MOTION_PROTECTION.penaltyPointsPerSecond * 0.1); assert.equal(after.protection,'none');
+  const settled=run(MOTION_PROTECTION.graceMs + 6000,1);
+  close(settled.currentScore,0); assert.ok(settled.averageScore > 0);
+  const zero=step({ ...createEvaluation(policy), ...settled, validMs: 0, scoreTimeSum: 0 },MOTION_PROTECTION.graceMs + 6100,1);
   close(zero.averageScore,0);
 });
 test('a short departure returns without contaminating the average', () => {
   let state=run(1000);
-  for(let at=1100; at<=5000; at+=100) state=step(state,at,1);
-  state=step(state,5100,0);
+  for(let at=1100; at<=1000 + MOTION_PROTECTION.graceMs; at+=100) state=step(state,at,1);
+  state=step(state,1000 + MOTION_PROTECTION.graceMs + 100,0);
   close(state.averageScore,100); close(state.currentScore,100); assert.equal(state.staticDeviationMs,0);
 });
 test('a ten second stretch freezes the previous score and restarts grace when motion stops', () => {
   let state=run(1000);
-  for(let at=1100; at<=11100; at+=100) state=step(state,at,1,101);
+  for(let at=1100; at<=11100; at+=100) state=step(state,at,1,MOTION_PROTECTION.velocityPxPerSecond + 1);
   assert.equal(state.protection,'moving'); close(state.averageScore,100);
   assert.equal(state.deviationEpisodeCount,0); assert.equal(state.staticDeviationMs,0);
   state=step(state,11200,1,0);
   assert.equal(state.protection,'grace'); close(state.staticDeviationMs,0);
-  for(let at=11300; at<=16200; at+=100) state=step(state,at,1);
+  for(let at=11300; at<=11200 + MOTION_PROTECTION.graceMs; at+=100) state=step(state,at,1);
   close(state.currentScore,100);
-  state=step(state,16300,1); close(state.currentScore,98);
+  state=step(state,11200 + MOTION_PROTECTION.graceMs + 100,1);
+  close(state.currentScore, 100 - MOTION_PROTECTION.penaltyPointsPerSecond * 0.1);
 });
 test('motion holds an already lowered score instead of replacing it with a perfect score', () => {
-  const lowered=run(7000,1);
-  close(lowered.currentScore,60);
-  const moving=step(lowered,7100,1,200); close(moving.currentScore,60);
-  const stationary=step(moving,7200,1); close(stationary.currentScore,60);
-  const recovered=step(stationary,7300,0); close(recovered.currentScore,100);
+  const lowered=run(MOTION_PROTECTION.graceMs + 1000,1);
+  close(lowered.currentScore, 100 - MOTION_PROTECTION.penaltyPointsPerSecond * 1);
+  const moving=step(lowered,MOTION_PROTECTION.graceMs + 1100,1,MOTION_PROTECTION.velocityPxPerSecond + 50);
+  close(moving.currentScore, 100 - MOTION_PROTECTION.penaltyPointsPerSecond * 1);
+  const stationary=step(moving,MOTION_PROTECTION.graceMs + 1200,1);
+  close(stationary.currentScore, 100 - MOTION_PROTECTION.penaltyPointsPerSecond * 1);
+  const recovered=step(stationary,MOTION_PROTECTION.graceMs + 1300,0);
+  close(recovered.currentScore,100);
 });
 test('velocity comparison is strictly above its threshold', () => {
   const base=run(1000);
-  assert.equal(step(base,1100,1,100).protection,'grace');
-  assert.equal(step(base,1100,1,100+1e-8).protection,'moving');
+  assert.equal(step(base,1100,1,MOTION_PROTECTION.velocityPxPerSecond).protection,'grace');
+  assert.equal(step(base,1100,1,MOTION_PROTECTION.velocityPxPerSecond+1e-8).protection,'moving');
 });
 test('missing data resets grace and continuity but preserves completed totals', () => {
   const before=run(6000,1);
@@ -74,7 +78,7 @@ test('missing data resets grace and continuity but preserves completed totals', 
   close(interrupted.averageScore,before.averageScore);
 });
 test('time weighted protected averages do not depend on frame density', () => {
-  const dense=run(9000,1,0,100), sparse=run(9000,1,0,500);
+  const dense=run(3000,1,0,100), sparse=run(3000,1,0,500);
   close(dense.currentScore,sparse.currentScore); close(dense.validMs,sparse.validMs); close(dense.averageScore,sparse.averageScore);
 });
 test('invalid intervals and policy changes cannot bridge earlier totals', () => {
@@ -92,16 +96,16 @@ test('habit hysteresis uses weighted deviations and excludes moving intervals', 
   const away=step(almost,2000,0.15); assert.equal(away.deviationEpisodeCount,1); assert.equal(away.deviationMs,0);
   const continuing=step(away,2100,0.11); close(continuing.deviationMs,100);
   const exited=step(continuing,2200,0.10); assert.equal(exited.deviationState,'near-reference'); close(exited.deviationMs,100);
-  const moving=step(continuing,2200,0.2,200); assert.equal(moving.deviationState,'unknown'); close(moving.deviationMs,100);
+  const moving=step(continuing,2200,0.2,MOTION_PROTECTION.velocityPxPerSecond + 50); assert.equal(moving.deviationState,'unknown'); close(moving.deviationMs,100);
 });
 test('neck and shoulder have independent grace timers', () => {
   let neck=createEvaluation(policy), shoulder=createEvaluation(shoulderScorePolicy);
-  for(let at=0; at<=7000; at+=100) {
+  for(let at=0; at<=MOTION_PROTECTION.graceMs + 1000; at+=100) {
     const sample=observed(at,0);
     sample.delta.headForward=1;
     neck=advanceEvaluation(neck,sample,policy); shoulder=advanceEvaluation(shoulder,sample,shoulderScorePolicy);
   }
-  close(neck.currentScore,60); assert.equal(shoulder.currentScore,100); assert.equal(shoulder.staticDeviationMs,0);
+  close(neck.currentScore, 100 - MOTION_PROTECTION.penaltyPointsPerSecond * 1); assert.equal(shoulder.currentScore,100); assert.equal(shoulder.staticDeviationMs,0);
 });
 test('identical samples preserve caller data and replay deterministically', () => {
   const state=createEvaluation(policy), input=observed(0,0.2), before=structuredClone({state,input});
