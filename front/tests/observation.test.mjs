@@ -6,6 +6,8 @@ import { advanceObservation, createObservation, interruptObservation } from '../
 function frame(timestampMs, overrides = {}) {
   const landmarks = Array.from({ length: 33 }, () => ({ x: 0.5, y: 0.5, visibility: 1 }));
   landmarks[0] = { x: 0.5, y: 0.25, visibility: 1 };
+  landmarks[7] = { x: 0.6, y: 0.25, visibility: 0.99 };
+  landmarks[8] = { x: 0.4, y: 0.25, visibility: 0.99 };
   landmarks[11] = { x: 0.75, y: 0.5, visibility: 1 };
   landmarks[12] = { x: 0.25, y: 0.5, visibility: 1 };
   return { landmarks, widthPx: 1000, heightPx: 1000, sourceId: 'camera-one', timestampMs, ...overrides };
@@ -35,7 +37,7 @@ test('calibration time and first valid frame add no observed duration', () => {
   const first = advanceObservation(pending, reference(), frame(3000));
   assert.equal(first.observedSeconds, 0);
   assert.deepEqual(first.delta, {
-    noseOffsetShoulderWidths: 0, noseHeightShoulderWidths: 0, shoulderHeightDifferenceShoulderWidths: 0,
+    headForward: 0, torsoForward: 0, neckSlump: 0, shoulderTilt: 0, shoulderShrug: 0, yawRatio: 0,
   });
   assert.equal(advanceObservation(first, reference(), frame(3100)).observedSeconds, 0.1);
 });
@@ -97,21 +99,19 @@ test('stream interruption, camera replacement and a new reference do not join ol
   assert.equal(advanceObservation(createObservation(), baseline, frame(2999)).reason, 'invalid-time');
 });
 
-test('signed projected differences are distinct from scores and anatomical diagnoses', () => {
+test('head growth, one-sided height loss and absolute shoulder tilt follow the design', () => {
   const baseline = reference();
   const moved = frame(3100);
-  moved.landmarks[0].x += 0.125;
+  moved.landmarks[7].x = 0.65; moved.landmarks[8].x = 0.35;
+  moved.landmarks[7].y = moved.landmarks[8].y = 0.35;
   const result = advanceObservation(createObservation(), baseline, moved);
-  assert.equal(result.delta.noseOffsetShoulderWidths, 0.25);
-  assert.equal(result.delta.noseHeightShoulderWidths, 0);
-  // A very different stable pose can itself become a zero-difference reference.
-  let calibration = createCalibration();
-  for (let at = 0; at <= 3000; at += 100) {
-    calibration = advanceCalibration(calibration, { ...moved, timestampMs: at });
-  }
-  const matching = advanceObservation(createObservation(), calibration.reference, moved);
-  assert.equal(matching.delta.noseOffsetShoulderWidths, 0);
-  for (const key of ['score', 'diagnosis', 'isCorrect', 'isResting', 'misuse']) assert.equal(key in matching, false);
+  assert.ok(Math.abs(result.delta.headForward - 0.5) < 1e-12);
+  assert.ok(Math.abs(result.delta.neckSlump - 0.2) < 1e-12);
+  assert.equal(result.delta.shoulderShrug, result.delta.neckSlump);
+  moved.landmarks[7].y = moved.landmarks[8].y = 0.15;
+  assert.equal(advanceObservation(createObservation(), baseline, moved).delta.neckSlump, 0);
+  moved.landmarks[11].y = 0.6;
+  assert.ok(advanceObservation(createObservation(), baseline, moved).delta.shoulderTilt > 0);
 });
 
 test('monotonic observation time crosses wall-clock midnight without a duration reset', () => {

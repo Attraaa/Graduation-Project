@@ -5,7 +5,7 @@ import type { RecordMode } from '../../../../database/contracts';
 import { getCurrentUser } from '../../utils/authStore';
 import { recordsApi, recordValue } from './api';
 
-export interface CaptureStart { mode: RecordMode; scorePolicyVersion: string; habitPolicyVersion: string; at: number; epoch: number }
+export interface CaptureStart { id?: string; mode: RecordMode; scorePolicyVersion: string; habitPolicyVersion: string; at: number; epoch: number }
 export interface CaptureSink { sample(at: number, evaluation: CaptureEvaluation): void; finish(at: number): void }
 type Active = { collector: CaptureRecorder; generation: Promise<number>; saving: Promise<void> | null; timer: ReturnType<typeof setInterval>; stopped: boolean; error: string | null };
 const active = new Set<Active>();
@@ -52,7 +52,7 @@ export function beginPostureRecording(start: CaptureStart): CaptureSink {
   const noop = { sample: () => {}, finish: () => {} };
   if (!owner) { announce('로그인하면 측정 기록을 저장할 수 있습니다. 현재 측정은 저장되지 않습니다.'); return noop; }
   try { recordsApi(); } catch (error) { announce((error as Error).message); return noop; }
-  const collector = new CaptureRecorder({ ...emptyTotals(), id: crypto.randomUUID(), owner, mode: start.mode,
+  const collector = new CaptureRecorder({ ...emptyTotals(), id: start.id ?? crypto.randomUUID(), owner, mode: start.mode,
     startedAt: start.epoch, updatedAt: start.epoch, offsetMinutes: new Date(start.epoch).getTimezoneOffset(),
     scorePolicyVersion: start.scorePolicyVersion, habitPolicyVersion: start.habitPolicyVersion, longestContinuousMs: 0, status: 'running' }, start.at);
   const generation = recordValue(recordsApi().generation(owner));

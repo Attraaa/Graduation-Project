@@ -1,3 +1,5 @@
+import { YAW_LIMIT } from './scoreSettings.ts';
+
 export interface PoseLandmark {
   x: number;
   y: number;
@@ -15,15 +17,21 @@ export interface CalibrationFrame {
 }
 
 export interface FrontalMetrics {
-  /** Signed image-right displacement of the nose, divided by shoulder span. */
-  noseOffsetShoulderWidths: number;
-  /** Image-up nose height above the shoulder midpoint, divided by shoulder span. */
-  noseHeightShoulderWidths: number;
+  /** Signed image-right displacement of the ear midpoint / shoulder span. */
+  earOffsetShoulderWidths: number;
+  /** Ear midpoint height above the shoulder midpoint / shoulder span. */
+  earHeightShoulderWidths: number;
   /** (Anatomical left shoulder y - right shoulder y) / shoulder span; y points down. */
   shoulderHeightDifferenceShoulderWidths: number;
 }
 
 export interface FrontalMeasurement extends FrontalMetrics {
+  earSpanPx: number;
+  shoulderSpanPx: number;
+  earHeightPx: number;
+  yawRatio: number;
+  /** Both ears and shoulders, in pixels, for capture-time velocity. */
+  motionPoints: readonly { x: number; y: number }[];
   sourceId: string;
   widthPx: number;
   heightPx: number;
@@ -36,7 +44,7 @@ export interface FrontalMeasurement extends FrontalMetrics {
 
 export type CalibrationReason = 'invalid-frame' | 'missing-landmarks' | 'low-confidence'
   | 'out-of-frame' | 'shoulders-too-close' | 'moving' | 'interrupted' | 'camera-changed'
-  | 'invalid-time';
+  | 'invalid-time' | 'ears-too-close' | 'head-turned';
 
 export interface CalibrationOptions {
   durationMs: number;
@@ -45,6 +53,8 @@ export interface CalibrationOptions {
   maxGapMs: number;
   minVisibility: number;
   minShoulderWidthFrameWidths: number;
+  minEarWidthFrameWidths: number;
+  maxReferenceYawRatio: number;
   maxMetricRangeShoulderWidths: number;
   maxCenterRangeNormalized: number;
   maxWidthRangeFrameWidths: number;
@@ -58,13 +68,18 @@ export const DEFAULT_CALIBRATION_OPTIONS: Readonly<CalibrationOptions> = {
   maxGapMs: 500,
   minVisibility: 0.7,
   minShoulderWidthFrameWidths: 0.1,
+  minEarWidthFrameWidths: 0.02,
+  maxReferenceYawRatio: YAW_LIMIT,
   maxMetricRangeShoulderWidths: 0.08,
   maxCenterRangeNormalized: 0.025,
   maxWidthRangeFrameWidths: 0.025,
 };
 
 export interface CalibrationReference {
-  schemaVersion: 1;
+  schemaVersion: 2;
+  baseEarSpanPx: number;
+  baseShoulderSpanPx: number;
+  baseEarHeightPx: number;
   sourceId: string;
   widthPx: number;
   heightPx: number;
@@ -93,7 +108,7 @@ type MeasurementResult = { valid: true; measurement: FrontalMeasurement }
  * Read projected frontal geometry, not anatomical forward-head angle or a posture score.
  * MediaPipe x/y are normalized by different image dimensions, so convert to pixels first.
  * https://developers.google.com/edge/mediapipe/solutions/vision/pose_landmarker/web_js
- * The nose and both shoulders must be visible. A stable pose is not proof of a correct pose.
+ * Both ears, nose (yaw only) and shoulders must be visible. Stability is not correctness.
  */
 export function extractFrontalMeasurement(
   frame: CalibrationFrame,
@@ -105,8 +120,9 @@ export function extractFrontalMeasurement(
     return { valid: false, reason: 'invalid-frame' };
   }
   const nose = landmarks?.[0], left = landmarks?.[11], right = landmarks?.[12];
-  if (!nose || !left || !right) return { valid: false, reason: 'missing-landmarks' };
-  const points = [nose, left, right];
+  const leftEar = landmarks?.[7], rightEar = landmarks?.[8];
+  if (!nose || !left || !right || !leftEar || !rightEar) return { valid: false, reason: 'missing-landmarks' };
+  const points = [nose, left, right, leftEar, rightEar];
   if (points.some(point => point.visibility === undefined || !Number.isFinite(point.visibility)
     || point.visibility < options.minVisibility || point.visibility > 1)) {
     return { valid: false, reason: 'low-confidence' };
@@ -121,19 +137,27 @@ export function extractFrontalMeasurement(
   }
   const shoulderCenterX = (left.x + right.x) / 2;
   const shoulderCenterY = (left.y + right.y) / 2;
+  const earSpanPx = Math.abs(rightEar.x - leftEar.x) * widthPx;
+  if (earSpanPx < options.minEarWidthFrameWidths * widthPx) return { valid: false, reason: 'ears-too-close' };
+  const earCenterX = (leftEar.x + rightEar.x) / 2;
+  const earCenterY = (leftEar.y + rightEar.y) / 2;
+  const earHeightPx = (shoulderCenterY - earCenterY) * heightPx;
   return {
     valid: true,
     measurement: {
       sourceId, widthPx, heightPx, timestampMs, shoulderCenterX, shoulderCenterY,
+      earSpanPx, shoulderSpanPx, earHeightPx,
+      yawRatio: Math.abs(nose.x - earCenterX) * widthPx / earSpanPx,
+      motionPoints: [leftEar, rightEar, left, right].map(point => ({ x: point.x * widthPx, y: point.y * heightPx })),
       shoulderWidthFrameWidths: shoulderSpanPx / widthPx,
-      noseOffsetShoulderWidths: (nose.x - shoulderCenterX) * widthPx / shoulderSpanPx,
-      noseHeightShoulderWidths: (shoulderCenterY - nose.y) * heightPx / shoulderSpanPx,
+      earOffsetShoulderWidths: (earCenterX - shoulderCenterX) * widthPx / shoulderSpanPx,
+      earHeightShoulderWidths: earHeightPx / shoulderSpanPx,
       shoulderHeightDifferenceShoulderWidths: (left.y - right.y) * heightPx / shoulderSpanPx,
     },
   };
 }
 
-const metricKeys = ['noseOffsetShoulderWidths', 'noseHeightShoulderWidths',
+const metricKeys = ['earOffsetShoulderWidths', 'earHeightShoulderWidths',
   'shoulderHeightDifferenceShoulderWidths'] as const;
 const centerKeys = ['shoulderCenterX', 'shoulderCenterY'] as const;
 
@@ -168,6 +192,7 @@ export function advanceCalibration(
   const result = extractFrontalMeasurement(frame, options);
   if (!result.valid) return { ...createCalibration(), reason: result.reason };
   const sample = result.measurement;
+  if (sample.yawRatio > options.maxReferenceYawRatio) return { ...createCalibration(), reason: 'head-turned' };
   let samples = previous.samples;
   let reason: CalibrationReason | null = null;
   const last = samples.at(-1);
@@ -183,7 +208,8 @@ export function advanceCalibration(
   samples = [...samples, sample];
   if (metricKeys.some(key => range(samples, key) > options.maxMetricRangeShoulderWidths)
     || centerKeys.some(key => range(samples, key) > options.maxCenterRangeNormalized)
-    || range(samples, 'shoulderWidthFrameWidths') > options.maxWidthRangeFrameWidths) {
+    || range(samples, 'shoulderWidthFrameWidths') > options.maxWidthRangeFrameWidths
+    || (Math.max(...samples.map(value => value.earSpanPx)) - Math.min(...samples.map(value => value.earSpanPx))) / frame.widthPx > options.maxWidthRangeFrameWidths) {
     samples = [sample];
     reason = 'moving';
   } else if (!reason && last && sample.timestampMs - last.timestampMs < options.sampleIntervalMs) {
@@ -194,14 +220,17 @@ export function advanceCalibration(
   const progress = Math.min(1, elapsedMs / options.durationMs, samples.length / options.minSamples);
   if (progress < 1) return { phase: 'collecting', samples, progress, reason, reference: null };
   const metrics: FrontalMetrics = {
-    noseOffsetShoulderWidths: median(samples.map(value => value.noseOffsetShoulderWidths)),
-    noseHeightShoulderWidths: median(samples.map(value => value.noseHeightShoulderWidths)),
+    earOffsetShoulderWidths: median(samples.map(value => value.earOffsetShoulderWidths)),
+    earHeightShoulderWidths: median(samples.map(value => value.earHeightShoulderWidths)),
     shoulderHeightDifferenceShoulderWidths: median(samples.map(value => value.shoulderHeightDifferenceShoulderWidths)),
   };
   return {
     phase: 'ready', samples, progress: 1, reason: null,
     reference: {
-      schemaVersion: 1, sourceId: sample.sourceId, widthPx: sample.widthPx, heightPx: sample.heightPx,
+      schemaVersion: 2, sourceId: sample.sourceId, widthPx: sample.widthPx, heightPx: sample.heightPx,
+      baseEarSpanPx: median(samples.map(value => value.earSpanPx)),
+      baseShoulderSpanPx: median(samples.map(value => value.shoulderSpanPx)),
+      baseEarHeightPx: median(samples.map(value => value.earHeightPx)),
       startedAtMs: samples[0].timestampMs, completedAtMs: sample.timestampMs,
       sampleCount: samples.length, metrics,
     },

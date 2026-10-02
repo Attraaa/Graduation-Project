@@ -63,3 +63,7 @@ README와 docs/collaboration.md, docs/evaluation.md를 읽어.
 ## 안구 모드 담당 경계
 
 안구 계산·정책·영상 처리는 `front/src/features/eye/`가 소유합니다. `EyeSession`은 기존 SessionFrame/Metric/useSessionControls를 재사용합니다. 기존 공통 훅과 다른 모드 알고리즘·SQLite·서버 계약은 변경하지 않습니다. 안구 정책 변경은 `eyePolicy.ts`, 안구 테스트, [eye-mode.md](eye-mode.md)를 함께 갱신합니다. 아직 안구 결과의 DB 저장·조회는 구현하지 않았습니다.
+
+## 상체 통합 담당 경계 (2026-10-02)
+
+사용자가 선택하는 상체 화면은 `upper_body` 하나이며 목·어깨를 동시에 계산합니다. `modes/turtle.ts`와 `shoulder.ts`는 독립 부위 정책으로 유지하고, 조정값은 `scoreSettings.ts` 상단에 모읍니다. 한 카메라의 관측을 두 evaluation 상태와 두 저장 sink에 전달합니다. 가중치·보호 설정 해시가 정책 ID에 포함되며, 공식 변경 시 v2 버전도 올립니다. 기존 저장 부위 키와 데이터는 보존합니다.

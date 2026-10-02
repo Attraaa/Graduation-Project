@@ -19,7 +19,7 @@ export default function StatisticsData({ rows, previous }: { rows: StatisticsRow
     return <section key={key} className="card-duo space-y-5">
       <h2 className="text-xl font-black text-heading">{group.mode === 'turtle' ? '목' : '어깨'} 기준 자세 유사도</h2>
       <p className="text-xs text-muted">점수 정책: {group.scorePolicyVersion} · 관찰 정책: {group.habitPolicyVersion}</p>
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2">
         <Metric label="평균 기준 자세 유사도" value={group.average === null ? '자료 없음' : group.average.toFixed(1) + '점'} detail="유효 관측 시간으로 가중한 평균" />
         <Metric label="전일 대비 유사도 변화" value={difference === null ? '비교 자료 없음' : (difference >= 0 ? '+' : '') + difference.toFixed(1) + '점'} detail="같은 모드·정책의 전일 평균과 비교" />
         <Metric label="관측률" value={group.coverage === null ? '자료 없음' : group.coverage.toFixed(1) + '%'} detail="유효 관측 시간 / 실행 시간" />

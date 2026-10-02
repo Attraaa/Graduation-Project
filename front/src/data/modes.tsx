@@ -1,7 +1,7 @@
 import type React from 'react';
-import { Activity, Eye, Keyboard, Maximize } from 'lucide-react';
+import { Activity, Eye, Keyboard } from 'lucide-react';
 
-export type ModeId = 'turtle' | 'keyboard' | 'shoulder' | 'eye';
+export type ModeId = 'upper_body' | 'keyboard' | 'eye';
 
 export type LearningMode = {
   id: ModeId;
@@ -17,10 +17,10 @@ export type LearningMode = {
 
 export const learningModes: LearningMode[] = [
   {
-    id: 'turtle',
-    title: '거북목 모드',
-    shortTitle: '거북목',
-    desc: '코 위치의 화면상 변화와 기준 자세 유사도를 확인합니다.',
+    id: 'upper_body',
+    title: '상체 자세 모니터링',
+    shortTitle: '상체',
+    desc: '목과 어깨를 함께 관찰하고 각각의 점수를 확인합니다.',
     color: '#58cc02',
     bgClass: 'bg-[#58cc02]',
     textClass: 'text-[#58cc02]',
@@ -37,17 +37,6 @@ export const learningModes: LearningMode[] = [
     textClass: 'text-[#1cb0f6]',
     borderClass: 'border-[#1899d6]',
     icon: <Keyboard size={32} />,
-  },
-  {
-    id: 'shoulder',
-    title: '어깨 모드',
-    shortTitle: '어깨',
-    desc: '양어깨 높이 차이와 기준 자세 유사도를 확인합니다.',
-    color: '#ffc800',
-    bgClass: 'bg-[#ffc800]',
-    textClass: 'text-[#b38300]',
-    borderClass: 'border-[#c69b00]',
-    icon: <Maximize size={32} />,
   },
   {
     id: 'eye',

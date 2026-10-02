@@ -8,8 +8,8 @@ export default function LearningSession() {
   const { modeId } = useParams();
   const mode = getLearningMode(modeId);
   // Changing mode discards the old camera session and its reference posture.
-  if (mode.id === 'turtle' || mode.id === 'shoulder') {
-    return <PostureSession key={mode.id} modeId={mode.id} />;
+  if (mode.id === 'upper_body') {
+    return <PostureSession key={mode.id} />;
   }
   if (mode.id === 'keyboard') return <KeyboardSession key={mode.id} />;
   return <EyeSession />;

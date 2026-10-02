@@ -6,7 +6,6 @@ import { build } from 'esbuild';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createMonitorSnapshot } from '../src/features/posture/monitorTypes.ts';
-import { turtleScorePolicy } from '../src/features/posture/modes/turtle.ts';
 
 // Compile the real renderer and its imports without requiring a browser or camera.
 const bundle = await build({
@@ -25,8 +24,8 @@ new Function('module', 'exports', 'require', bundle.outputFiles[0].text)(
 const PostureMetrics = compiled.exports.default;
 
 function render(evaluation = {}, props = {}) {
-  const snapshot = createMonitorSnapshot(turtleScorePolicy);
-  snapshot.evaluation = { ...snapshot.evaluation, ...evaluation };
+  const snapshot = createMonitorSnapshot();
+  snapshot.neck = { ...snapshot.neck, ...evaluation };
   return renderToStaticMarkup(createElement(PostureMetrics, {
     snapshot, elapsedSeconds: 10, isRunning: true, ...props,
   }));
@@ -42,7 +41,7 @@ test('measured zero scores render as zero, distinct from unavailable scores', ()
   const measured = render({ currentScore: 0, averageScore: 0, currentDeviation: 0.3, validMs: 1000 });
   assert.equal(metric(measured, '현재 점수').value, '0점');
   assert.equal(metric(measured, '세션 평균').value, '0점');
-  assert.equal(metric(measured, '기준 대비 변화').value, '30.0%');
+  assert.equal(metric(measured, '가중 편차').value, '30.0%');
   const unavailable = render();
   assert.equal(metric(unavailable, '현재 점수').value, '—');
   assert.equal(metric(unavailable, '세션 평균').value, '—');
@@ -52,7 +51,7 @@ test('an entirely unobserved session has no average and missing time is not labe
   const markup = render({}, { elapsedSeconds: 60 });
   assert.equal(metric(markup, '현재 점수').value, '—');
   assert.equal(metric(markup, '세션 평균').value, '—');
-  assert.equal(metric(markup, '기준 대비 변화').value, '—');
+  assert.equal(metric(markup, '가중 편차').value, '—');
   assert.equal(metric(markup, '유효 관찰 시간').value, '00:00');
   assert.deepEqual(metric(markup, '관측률'), {
     value: '0.0%', detail: '관찰 미확인 01:00 · 휴식 판정 아님',
@@ -67,11 +66,11 @@ test('stopping hides current measurements while preserving completed session sta
   };
   const running = render(evaluation, { elapsedSeconds: 20 });
   assert.equal(metric(running, '현재 점수').value, '87점');
-  assert.equal(metric(running, '기준 대비 변화').value, '12.5%');
+  assert.equal(metric(running, '가중 편차').value, '12.5%');
   assert.equal(metric(running, '연속 관찰').value, '00:06');
   const stopped = render(evaluation, { elapsedSeconds: 20, isRunning: false });
   assert.equal(metric(stopped, '현재 점수').value, '—');
-  assert.equal(metric(stopped, '기준 대비 변화').value, '—');
+  assert.equal(metric(stopped, '가중 편차').value, '—');
   assert.deepEqual(metric(stopped, '연속 관찰'), {
     value: '00:00', detail: '최장 00:09 · 실제 착석시간 아님',
   });
@@ -96,7 +95,7 @@ test('coverage is unavailable at zero elapsed time and bounded at one hundred pe
 test('an observation gap preserves the measured average without displaying a current score', () => {
   const markup = render({ averageScore: 0, validMs: 2500, longestContinuousMs: 2500 });
   assert.equal(metric(markup, '현재 점수').value, '—');
-  assert.equal(metric(markup, '기준 대비 변화').value, '—');
+  assert.equal(metric(markup, '가중 편차').value, '—');
   assert.equal(metric(markup, '세션 평균').value, '0점');
   assert.equal(metric(markup, '유효 관찰 시간').value, '00:02');
   assert.equal(metric(markup, '연속 관찰').value, '00:00');
@@ -108,4 +107,13 @@ test('renderer explains reference similarity without anatomical diagnosis or mis
   assert.match(markup, /개인 기준과의 유사도이며 건강·질환·해부학적 정상 여부를 진단하지 않습니다/);
   assert.match(markup, /기준 이탈은 자세가 달라진 구간이며 잘못된 자세나 오사용이라는 뜻이 아닙니다/);
   assert.match(markup, /세션 평균에는 확인한 구간만 남깁니다/);
+});
+
+test('upper body renders two independent scores and a visible protection state', () => {
+  const snapshot = createMonitorSnapshot();
+  snapshot.neck = { ...snapshot.neck, currentScore: 82, averageScore: 84, protection: 'moving' };
+  snapshot.shoulder = { ...snapshot.shoulder, currentScore: 61, averageScore: 65, protection: 'grace' };
+  const markup = renderToStaticMarkup(createElement(PostureMetrics, { snapshot, elapsedSeconds: 10, isRunning: true }));
+  for (const text of ['목 점수', '어깨 점수', '82점', '61점', '움직임 감지', '자세 변화 유예']) assert.ok(markup.includes(text));
+  assert.doesNotMatch(markup, /종합 점수/);
 });

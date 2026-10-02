@@ -41,5 +41,22 @@ test('renderer retries the same failed batch and close flushes records before ac
   assert.equal(await closeHandler(), true);
   assert.deepEqual(writes.at(-1), failedCloseBatch);
   assert.equal(db.detail('demo', failedCloseBatch.record.id).record.status, 'finished');
+  // A single upper-body capture persists both components, including close/retry.
+  const pairAt = performance.now();
+  for (const [mode, score] of [['turtle', 80], ['shoulder', 60]]) {
+    const part = service.beginPostureRecording({ id: `paired:${mode}`, mode, scorePolicyVersion: 'upper-body-test-v2',
+      habitPolicyVersion: 'weighted-reference-deviation-v2', at: pairAt, epoch: 1800000120000 });
+    part.sample(pairAt, { validMs: 0, scoreTimeSum: 0, currentScore: score, deviationMs: 0, deviationEpisodeCount: 0 });
+    part.sample(pairAt + 100, { validMs: 100, scoreTimeSum: score * 100, currentScore: score, deviationMs: 0, deviationEpisodeCount: 0 });
+  }
+  fail = true;
+  assert.equal(await closeHandler(), false);
+  assert.equal(await closeHandler(), true);
+  const neck = db.detail('demo', 'paired:turtle').record;
+  const shoulder = db.detail('demo', 'paired:shoulder').record;
+  assert.equal(neck.startedAt, shoulder.startedAt);
+  assert.equal(neck.scoreTimeSum / neck.validMs, 80);
+  assert.equal(shoulder.scoreTimeSum / shoulder.validMs, 60);
+  assert.equal(neck.status, 'finished'); assert.equal(shoulder.status, 'finished');
   db.close(); delete globalThis.window; delete globalThis.localStorage;
 });

@@ -7,19 +7,19 @@ import { advanceObservation, createObservation, interruptObservation } from '../
 import { advanceEvaluation, createEvaluation, interruptEvaluation } from '../features/posture/evaluation';
 import { createMonitorSnapshot } from '../features/posture/monitorTypes';
 import type { MonitorSnapshot } from '../features/posture/monitorTypes';
-import type { ScorePolicy } from '../features/posture/scoring';
+import { turtleScorePolicy } from '../features/posture/modes/turtle';
+import { shoulderScorePolicy } from '../features/posture/modes/shoulder';
 import type { CaptureSink, CaptureStart } from '../features/records/recording';
 
 interface PostureMonitorProps {
   isRunning: boolean;
   deviceId: string;
-  policy: ScorePolicy;
   onUpdate: (snapshot: MonitorSnapshot) => void;
   recordCapture?: (start: CaptureStart) => CaptureSink;
 }
 
-const PostureMonitor = ({ isRunning, deviceId, policy, onUpdate, recordCapture }: PostureMonitorProps) => {
-  const latest = useRef<MonitorSnapshot>(createMonitorSnapshot(policy));
+const PostureMonitor = ({ isRunning, deviceId, onUpdate, recordCapture }: PostureMonitorProps) => {
+  const latest = useRef<MonitorSnapshot>(createMonitorSnapshot());
   const publish = useCallback((snapshot: MonitorSnapshot) => {
     latest.current = snapshot;
     onUpdate(snapshot);
@@ -33,11 +33,18 @@ const PostureMonitor = ({ isRunning, deviceId, policy, onUpdate, recordCapture }
     let calibration = createCalibration();
     let lastUiAt = -Infinity;
     let observation = createObservation();
-    let evaluation = createEvaluation(policy);
+    let neck = createEvaluation(turtleScorePolicy);
+    let shoulder = createEvaluation(shoulderScorePolicy);
     const startMono = performance.now();
     const startEpoch = Date.now();
-    const beginRecord = (at: number) => recordCapture?.({ mode: policy.mode, scorePolicyVersion: policy.version,
-      habitPolicyVersion: evaluation.habitPolicyVersion, at, epoch: startEpoch + at - startMono });
+    const beginRecord = (at: number) => {
+      const sessionId = crypto.randomUUID();
+      const epoch = startEpoch + at - startMono;
+      return [turtleScorePolicy, shoulderScorePolicy].map(policy => recordCapture?.({
+        id: `${sessionId}:${policy.mode}`, mode: policy.mode, scorePolicyVersion: policy.version,
+        habitPolicyVersion: neck.habitPolicyVersion, at, epoch,
+      }));
+    };
     let recording = beginRecord(startMono);
     let recordedReference: string | null = null;
     let removeTrackListener = () => {};
@@ -47,15 +54,16 @@ const PostureMonitor = ({ isRunning, deviceId, policy, onUpdate, recordCapture }
       const stream = await startWebcam(deviceId || undefined);
       if (abort.signal.aborted) return;
       if (!stream) {
-        publish({ ...createMonitorSnapshot(policy), phase: 'error' });
+        publish({ ...createMonitorSnapshot(), phase: 'error' });
         return;
       }
       const track = stream.getVideoTracks()[0];
       const ended = () => {
         if (abort.signal.aborted) return;
         observation = interruptObservation(observation);
-        evaluation = interruptEvaluation(evaluation);
-        publish({ ...latest.current, phase: 'error', reason: 'interrupted', delta: null, evaluation });
+        neck = interruptEvaluation(neck);
+        shoulder = interruptEvaluation(shoulder);
+        publish({ ...latest.current, phase: 'error', reason: 'interrupted', delta: null, neck, shoulder });
         stopWebcam();
         void stopProcessing();
       };
@@ -102,22 +110,26 @@ const PostureMonitor = ({ isRunning, deviceId, policy, onUpdate, recordCapture }
         };
         calibration = advanceCalibration(calibration, frame);
         observation = advanceObservation(observation, calibration.reference, frame);
-        evaluation = advanceEvaluation(evaluation, observation, policy);
         const reference = calibration.reference;
         const referenceKey = reference ? `${reference.completedAtMs}:${reference.widthPx}:${reference.heightPx}` : null;
         if (recordedReference && recordedReference !== referenceKey) {
-          recording?.finish(receivedAtMs);
-          recording = beginRecord(receivedAtMs);
+          recording.forEach(sink => sink?.finish(capturedAtMs));
+          recording = beginRecord(capturedAtMs);
+          neck = createEvaluation(turtleScorePolicy);
+          shoulder = createEvaluation(shoulderScorePolicy);
         }
         recordedReference = referenceKey;
-        recording?.sample(capturedAtMs, evaluation);
+        neck = advanceEvaluation(neck, observation, turtleScorePolicy);
+        shoulder = advanceEvaluation(shoulder, observation, shoulderScorePolicy);
+        recording[0]?.sample(capturedAtMs, neck);
+        recording[1]?.sample(capturedAtMs, shoulder);
         const snapshot: MonitorSnapshot = {
           phase: calibration.reference ? (observation.delta ? 'observing' : 'unavailable') : 'calibrating',
           progress: calibration.progress,
           reason: observation.reason ?? calibration.reason,
           observedSeconds: observation.observedSeconds,
           delta: observation.delta,
-          evaluation,
+          neck, shoulder,
         };
         if (receivedAtMs - lastUiAt >= 200 || (observation.delta === null && latest.current.delta !== null)) {
           lastUiAt = receivedAtMs;
@@ -128,8 +140,9 @@ const PostureMonitor = ({ isRunning, deviceId, policy, onUpdate, recordCapture }
       }, abort.signal);
       if (abort.signal.aborted) return;
       if (!pose) {
-        evaluation = interruptEvaluation(evaluation);
-        publish({ phase: 'error', progress: 0, reason: null, observedSeconds: observation.observedSeconds, delta: null, evaluation });
+        neck = interruptEvaluation(neck);
+        shoulder = interruptEvaluation(shoulder);
+        publish({ phase: 'error', progress: 0, reason: null, observedSeconds: observation.observedSeconds, delta: null, neck, shoulder });
         stopWebcam();
         return;
       }
@@ -142,8 +155,9 @@ const PostureMonitor = ({ isRunning, deviceId, policy, onUpdate, recordCapture }
           watchdog = setInterval(() => {
             if (!abort.signal.aborted && lastFrameAt !== null && performance.now() - lastFrameAt > 1500 && latest.current.phase !== 'error') {
               observation = interruptObservation(observation);
-              evaluation = interruptEvaluation(evaluation);
-              publish({ ...latest.current, phase: 'unavailable', reason: 'interrupted', delta: null, evaluation });
+              neck = interruptEvaluation(neck);
+              shoulder = interruptEvaluation(shoulder);
+              publish({ ...latest.current, phase: 'unavailable', reason: 'interrupted', delta: null, neck, shoulder });
             }
           }, 500);
         }
@@ -151,34 +165,38 @@ const PostureMonitor = ({ isRunning, deviceId, policy, onUpdate, recordCapture }
     };
     void setup().catch(() => {
       if (!abort.signal.aborted) {
-        evaluation = interruptEvaluation(evaluation);
-        publish({ phase: 'error', progress: 0, reason: null, observedSeconds: observation.observedSeconds, delta: null, evaluation });
+        neck = interruptEvaluation(neck);
+        shoulder = interruptEvaluation(shoulder);
+        publish({ phase: 'error', progress: 0, reason: null, observedSeconds: observation.observedSeconds, delta: null, neck, shoulder });
         stopWebcam();
         void stopProcessing();
       }
     });
     return () => {
       abort.abort();
-      recording?.finish(performance.now());
+      const finishedAt = performance.now();
+      recording.forEach(sink => sink?.finish(finishedAt));
       clearInterval(watchdog);
       removeTrackListener();
       stopWebcam();
       void stopProcessing();
     };
-  }, [isRunning, deviceId, policy, publish, videoRef, canvasRef, startWebcam, stopWebcam, initMediaPipe, startProcessing, stopProcessing, recordCapture]);
+  }, [isRunning, deviceId, publish, videoRef, canvasRef, startWebcam, stopWebcam, initMediaPipe, startProcessing, stopProcessing, recordCapture]);
 
   useEffect(() => {
     // Flush the last computed interval on stop, but never publish from an old keyed session's cleanup.
     if (!isRunning && latest.current.phase !== 'loading') {
       publish({ ...latest.current, delta: null,
-        evaluation: { ...latest.current.evaluation, currentScore: null, currentDeviation: null, continuousMs: 0, deviationState: 'unknown' } });
+        neck: { ...latest.current.neck, currentScore: null, currentDeviation: null, continuousMs: 0, deviationState: 'unknown', protection: 'none' },
+        shoulder: { ...latest.current.shoulder, currentScore: null, currentDeviation: null, continuousMs: 0, deviationState: 'unknown', protection: 'none' } });
     }
   }, [isRunning, publish]);
 
   useEffect(() => {
     if (isRunning && (aiError || webcamError)) {
       publish({ ...latest.current, phase: 'error', delta: null,
-        evaluation: { ...latest.current.evaluation, currentScore: null, currentDeviation: null, continuousMs: 0, deviationState: 'unknown' } });
+        neck: { ...latest.current.neck, currentScore: null, currentDeviation: null, continuousMs: 0, deviationState: 'unknown', protection: 'none' },
+        shoulder: { ...latest.current.shoulder, currentScore: null, currentDeviation: null, continuousMs: 0, deviationState: 'unknown', protection: 'none' } });
       stopWebcam();
       void stopProcessing();
     }

@@ -170,8 +170,8 @@ const LearningHistory = () => {
               <p className="text-3xl font-black text-gray-700">{selectedSession.warningCount}회</p>
             </div>
             <div className="rounded-2xl bg-gray-50 p-5">
-              <p className="text-sm font-bold text-gray-500">모드</p>
-              <p className={`text-3xl font-black ${mode.textClass}`}>{mode.shortTitle}</p>
+              <p className="text-sm font-bold text-gray-500">관찰 부위</p>
+              <p className={`text-3xl font-black ${mode.textClass}`}>{selectedSession.mode === 'turtle' ? '목' : '어깨'}</p>
             </div>
           </div>
 
@@ -203,7 +203,7 @@ const LearningHistory = () => {
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <header className="mb-8">
         <h1 className="text-3xl font-black text-gray-700">학습이력</h1>
-        <p className="mt-2 font-bold text-gray-600">캘린더에서 날짜를 선택하면 이 PC에 저장한 목·어깨 관찰 기록을 확인할 수 있습니다. 기록은 시작일에 표시됩니다.</p>
+        <p className="mt-2 font-bold text-gray-600">상체 측정의 목·어깨 점수를 부위별로 확인합니다. 한 번의 상체 측정은 같은 시작 시각의 목·어깨 기록 2개로 저장되며, 달력은 부위별 기록 수를 표시합니다. 이전 기록도 보존됩니다.</p>
       </header>
 
       <div className="card-duo">

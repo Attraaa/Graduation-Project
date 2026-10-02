@@ -2,10 +2,11 @@ import { DEFAULT_CALIBRATION_OPTIONS } from './calibration.ts';
 import type { ObservationState } from './observation.ts';
 import { scorePosture } from './scoring.ts';
 import type { ScorePolicy } from './scoring.ts';
+import { MOTION_PROTECTION } from './scoreSettings.ts';
 
 /** Provisional reference-departure thresholds, not health, activity or rest criteria. */
 export const HABIT_POLICY = Object.freeze({
-  version: 'reference-deviation-v1',
+  version: 'weighted-reference-deviation-v2',
   enterDelta: 0.15,
   exitDelta: 0.10,
   minDurationMs: 2000,
@@ -26,6 +27,9 @@ export interface EvaluationState {
   lastObservedSeconds: number;
   scoreTimeSum: number;
   pendingMs: number;
+  protection: 'none' | 'moving' | 'grace';
+  staticDeviationMs: number;
+  rawScore: number | null;
 }
 
 export function createEvaluation(policy: ScorePolicy): EvaluationState {
@@ -44,6 +48,7 @@ export function createEvaluation(policy: ScorePolicy): EvaluationState {
     lastObservedSeconds: 0,
     scoreTimeSum: 0,
     pendingMs: 0,
+    protection: 'none', staticDeviationMs: 0, rawScore: null,
   };
 }
 
@@ -56,6 +61,7 @@ export function interruptEvaluation(previous: EvaluationState): EvaluationState 
     continuousMs: 0,
     deviationState: 'unknown',
     pendingMs: 0,
+    protection: 'none', staticDeviationMs: 0, rawScore: null,
   };
 }
 
@@ -72,21 +78,42 @@ export function advanceEvaluation(
     ...interruptEvaluation(base),
     currentScore: current.score,
     currentDeviation: current.deviation,
+    rawScore: current.score,
     lastObservedSeconds: observation.observedSeconds,
   };
   const elapsedMs = (observation.observedSeconds - base.lastObservedSeconds) * 1000;
   // Subtraction of accumulated seconds can round an accepted 500ms interval upward.
   const roundingMs = Number.EPSILON * Math.max(1, observation.observedSeconds, base.lastObservedSeconds) * 2000;
-  if (base.currentScore === null || current.score === null || elapsedMs <= 0
-    || elapsedMs > DEFAULT_CALIBRATION_OPTIONS.maxGapMs + roundingMs) return next;
+  const connected = base.currentScore !== null && current.score !== null && elapsedMs > 0
+    && elapsedMs <= DEFAULT_CALIBRATION_OPTIONS.maxGapMs + roundingMs;
+  if (current.score === null) return next;
+  const moving = observation.velocityPxPerSecond !== null
+    && observation.velocityPxPerSecond > MOTION_PROTECTION.velocityPxPerSecond;
+  if (moving) {
+    next.protection = 'moving';
+    next.currentScore = connected ? base.currentScore : 100;
+  } else if (current.score < 100) {
+    const wasStaticDeviation = connected && base.protection !== 'moving' && base.rawScore !== null && base.rawScore < 100;
+    next.staticDeviationMs = wasStaticDeviation ? base.staticDeviationMs + elapsedMs : 0;
+    const held = connected ? base.currentScore! : 100;
+    if (next.staticDeviationMs <= MOTION_PROTECTION.graceMs + roundingMs) {
+      next.protection = 'grace';
+      next.currentScore = held;
+    } else {
+      const penaltyMs = Math.min(elapsedMs, next.staticDeviationMs - MOTION_PROTECTION.graceMs);
+      next.currentScore = Math.max(current.score, held - MOTION_PROTECTION.penaltyPointsPerSecond * penaltyMs / 1000);
+    }
+  }
+  if (!connected) return next;
 
   const intervalMs = Math.min(elapsedMs, DEFAULT_CALIBRATION_OPTIONS.maxGapMs);
   next.validMs += intervalMs;
   next.continuousMs = base.continuousMs + intervalMs;
   next.longestContinuousMs = Math.max(base.longestContinuousMs, next.continuousMs);
-  next.scoreTimeSum += (base.currentScore + current.score) / 2 * intervalMs;
+  next.scoreTimeSum += (base.currentScore! + next.currentScore!) / 2 * intervalMs;
   next.averageScore = next.scoreTimeSum / next.validMs;
 
+  if (moving || base.protection === 'moving') return next;
   if (base.deviationState === 'away' && current.deviation! > HABIT_POLICY.exitDelta) {
     next.deviationState = 'away';
     next.deviationMs += intervalMs;

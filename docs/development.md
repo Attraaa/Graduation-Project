@@ -113,3 +113,13 @@ MediaPipe Pose의 스크립트·WASM·모델은 고정 npm 패키지에서 `publ
 프로젝트 도구를 로드하고 front에서 `node scripts/check-records-electron.mjs`를 실행하면 **별도 테스트 프로필**로 두 번 앱을 띄워 파일 저장/재시작, 중단 복구, 신뢰 창 IPC, 모드별 통계, 일/주/월 및 상세, 삭제 취소/계정별 삭제, 종료 flush를 검사합니다. 정상 Windows 실행 환경에서 통과했으며 샌드박스의 GPU 프로세스 제한에서는 실행이 실패했습니다. 결과 PNG는 출력된 front/.moti-cache/records-electron-* 아래에 있습니다. 실제 사용자 DB나 카메라를 사용하지 않습니다.
 
 현재 로그인은 데모, AI·의학 영역은 예시, 브라우저 단독 기록 저장과 원격 서버 동기화는 미지원입니다. 실제 촬영·장시간 사용·설치 패키지는 별도 검증이 필요합니다. [저장소 안내](../database/README.md), [작업 검증 기록](ai-workflow/work-items/2026-09-19/jangwon/statistics/09_VERIFICATION.md)을 확인합니다.
+
+## 2026-10-02 상체 통합 점수 v2 검증
+
+`setup.cmd`는 node_modules 권한 오류 후 권한을 확장한 재시도에서 완료했습니다. `moti.cmd check`로 프론트 타입·린트·테스트, 서버 빌드와 34개 테스트, Python 2개 테스트와 모델/import 확인을 통과했습니다. 추가 회귀 검사와 화면 배치 수정 후 프론트 타입·린트 및 **96개 테스트**와 `npm run build -- --configLoader runner`를 다시 통과했습니다.
+
+귀 기준 스키마 v2, 부위별 가중합, yaw 경계, 10초 움직임 동결, 5초 유예와 초당 감점, 추적 누락·시간 역행, 부위별 독립 타이머, 두 부위 동시 저장/종료 재시도, 실제 reducer 결과의 파일 재시작과 이전 정책 기록 보존을 검사했습니다. 테스트가 임시 DB를 사용하며 사용자 DB는 초기화하지 않았습니다.
+
+`node scripts/check-records-electron.mjs`는 샌드박스 GPU 제한 후 일반 실행 권한에서 통과했습니다. 두 Electron 프로세스로 저장/재시작, 실제 IPC, 두 점수/통계 병렬 배치, 이력/상세, 계정별 삭제, 정상 종료를 확인했습니다. 화면 증거는 `front/.moti-cache/records-electron-iqqfbK/`의 `verify-upper-body-scores.png`, `verify-statistics.png` 등에 남습니다. 실제 카메라 측정·가중치 정확도·설치 패키지는 검증하지 않았습니다.
+
+기존 큰 청크·정적/동적 import 경고와 DOM 없는 SSR 차트 크기 경고가 남습니다. 이번 setup의 npm audit 요약은 front 2건(moderate 1, high 1), server 0건이었으며 의존성과 잠금 파일은 변경하지 않았습니다. 조정 상수와 해석은 [평가 안내](evaluation.md), 기존 기록 보존과 부위별 저장은 [database 안내](../database/README.md)를 따릅니다.

@@ -6,10 +6,7 @@ import SessionFrame from '../session/SessionFrame';
 import { useSessionControls } from '../session/useSessionControls';
 import type { CalibrationReason } from './calibration';
 import { createMonitorSnapshot } from './monitorTypes';
-import { shoulderScorePolicy } from './modes/shoulder';
-import { turtleScorePolicy } from './modes/turtle';
 import PostureMetrics from './PostureMetrics';
-import type { PostureMode } from './scoring';
 import { beginPostureRecording } from '../records/recording';
 import RecordingStatus from '../records/RecordingStatus';
 
@@ -23,12 +20,13 @@ const reasonText: Record<CalibrationReason, string> = {
   interrupted: '관측이 끊겼습니다. 화면과 카메라 연결을 확인해 주세요.',
   'camera-changed': '카메라 조건이 바뀌어 기준 자세를 다시 수집합니다.',
   'invalid-time': '관측 시각을 확인하고 있습니다.',
+  'ears-too-close': '양쪽 귀가 보이도록 정면을 향해 주세요.',
+  'head-turned': '기준 자세를 수집하는 동안 정면을 봐 주세요.',
 };
 
-export default function PostureSession({ modeId }: { modeId: PostureMode }) {
+export default function PostureSession() {
   const controls = useSessionControls();
-  const policy = modeId === 'turtle' ? turtleScorePolicy : shoulderScorePolicy;
-  const [snapshot, setSnapshot] = useState(() => createMonitorSnapshot(policy));
+  const [snapshot, setSnapshot] = useState(createMonitorSnapshot);
   const { isRunning, elapsedSeconds, run, deviceId } = controls;
   const stop = controls.stop;
   useEffect(() => {
@@ -36,7 +34,7 @@ export default function PostureSession({ modeId }: { modeId: PostureMode }) {
     return () => window.removeEventListener('moti-stop-measurement', stop);
   }, [stop]);
   const start = () => {
-    setSnapshot(createMonitorSnapshot(policy));
+    setSnapshot(createMonitorSnapshot());
     controls.start();
   };
   const stateLabel = !isRunning ? (elapsedSeconds ? '측정 종료' : '시작 대기') : {
@@ -44,8 +42,8 @@ export default function PostureSession({ modeId }: { modeId: PostureMode }) {
     unavailable: '관찰 일시 불가', error: '카메라·분석 오류',
   }[snapshot.phase];
   return (
-    <SessionFrame modeId={modeId} controls={controls}
-      subtitle={modeId === 'turtle' ? '기준 대비 코의 화면상 위치 변화를 비교합니다.' : '기준 대비 양어깨의 화면상 높이 차이를 비교합니다.'}>
+    <SessionFrame modeId="upper_body" controls={controls}
+      subtitle="한 카메라로 목과 어깨를 함께 관찰하고 각각의 점수를 확인합니다.">
       <section className="card-duo flex flex-col gap-4 p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div aria-live="polite">
@@ -70,7 +68,7 @@ export default function PostureSession({ modeId }: { modeId: PostureMode }) {
           </div>
         )}
         <div className="flex h-[min(48vh,440px)] min-h-[260px]">
-          <PostureMonitor key={run} isRunning={isRunning} deviceId={deviceId} policy={policy} onUpdate={setSnapshot} recordCapture={beginPostureRecording} />
+          <PostureMonitor key={run} isRunning={isRunning} deviceId={deviceId} onUpdate={setSnapshot} recordCapture={beginPostureRecording} />
         </div>
         <PostureMetrics snapshot={snapshot} elapsedSeconds={elapsedSeconds} isRunning={isRunning} />
         <RecordingStatus />

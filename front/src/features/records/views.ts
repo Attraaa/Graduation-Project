@@ -10,7 +10,8 @@ export function historyView(record: PostureRecord) {
   const mode = record.mode === 'turtle' ? turtleRecordView : shoulderRecordView;
   const local = new Date(record.startedAt - record.offsetMinutes * 60_000).toISOString();
   return { id: record.id, date: localDateKey(record.startedAt, record.offsetMinutes), mode: record.mode,
-    title: mode.title, startedAt: local.slice(11, 19), duration: durationText(record.runMs), score: averageScore(record),
+    title: record.scorePolicyVersion.startsWith('upper-body-') ? `상체 자세 · ${record.mode === 'turtle' ? '목' : '어깨'}` : mode.title,
+    startedAt: local.slice(11, 19), duration: durationText(record.runMs), score: averageScore(record),
     warningCount: record.deviationEpisodeCount, status: record.status, policy: record.scorePolicyVersion,
     coverage: record.runMs ? 100 * record.validMs / record.runMs : null };
 }

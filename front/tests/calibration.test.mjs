@@ -10,6 +10,8 @@ import {
 function frame(timestampMs, overrides = {}) {
   const landmarks = Array.from({ length: 33 }, () => ({ x: 0.5, y: 0.5, visibility: 0.99 }));
   landmarks[0] = { x: 0.5, y: 0.25, visibility: 0.99 };
+  landmarks[7] = { x: 0.6, y: 0.25, visibility: 0.99 };
+  landmarks[8] = { x: 0.4, y: 0.25, visibility: 0.99 };
   landmarks[11] = { x: 0.7, y: 0.6, visibility: 0.99 };
   landmarks[12] = { x: 0.3, y: 0.6, visibility: 0.99 };
   return { landmarks, widthPx: 1280, heightPx: 720, sourceId: 'camera-one', timestampMs, ...overrides };
@@ -32,9 +34,32 @@ test('converts each coordinate dimension to pixels before calculating shoulder-r
   const a = extractFrontalMeasurement(wide);
   const b = extractFrontalMeasurement(square);
   assert.ok(a.valid && b.valid);
-  assert.equal(a.measurement.noseOffsetShoulderWidths, 0);
-  assert.ok(Math.abs(a.measurement.noseHeightShoulderWidths - 252 / 512) < 1e-12);
-  assert.ok(Math.abs(a.measurement.noseHeightShoulderWidths - b.measurement.noseHeightShoulderWidths) < 1e-12);
+  assert.equal(a.measurement.earOffsetShoulderWidths, 0);
+  assert.ok(Math.abs(a.measurement.earHeightShoulderWidths - 252 / 512) < 1e-12);
+  assert.ok(Math.abs(a.measurement.earHeightShoulderWidths - b.measurement.earHeightShoulderWidths) < 1e-12);
+});
+
+test('reference schema stores median ear span, shoulder span and ear height in pixels', () => {
+  const { reference } = collect();
+  assert.equal(reference.schemaVersion, 2);
+  assert.ok(Math.abs(reference.baseEarSpanPx - 256) < 1e-9);
+  assert.ok(Math.abs(reference.baseShoulderSpanPx - 512) < 1e-9);
+  assert.ok(Math.abs(reference.baseEarHeightPx - 252) < 1e-9);
+});
+
+test('both ears must be visible and a collapsed ear span is unavailable', () => {
+  for (const id of [7, 8]) {
+    const input = frame(2100); input.landmarks[id].visibility = 0.69;
+    assert.equal(advanceCalibration(collect(0, 2000), input).reason, 'low-confidence');
+  }
+  const collapsed = frame(0); collapsed.landmarks[7].x = collapsed.landmarks[8].x;
+  assert.equal(extractFrontalMeasurement(collapsed).reason, 'ears-too-close');
+});
+
+test('turned heads cannot set the reference, but remain observable for yaw protection', () => {
+  const turned = frame(2100); turned.landmarks[0].x += 0.04;
+  assert.ok(extractFrontalMeasurement(turned).valid);
+  assert.equal(advanceCalibration(collect(0, 2000), turned).reason, 'head-turned');
 });
 
 test('requires both continuous elapsed capture time and enough distinct samples', () => {
@@ -51,11 +76,11 @@ test('requires both continuous elapsed capture time and enough distinct samples'
 
 test('uses a median so a small accepted landmark spike does not shift the reference', () => {
   const result = collect(0, 3000, createCalibration(), value => {
-    if (value.timestampMs === 1000) value.landmarks[0].x += 0.02;
+    if (value.timestampMs === 1000) for (const id of [0, 7, 8]) value.landmarks[id].x += 0.02;
     return value;
   });
   assert.equal(result.phase, 'ready');
-  assert.equal(result.reference.metrics.noseOffsetShoulderWidths, 0);
+  assert.equal(result.reference.metrics.earOffsetShoulderWidths, 0);
 });
 
 test('missing, uncertain, nonfinite and out-of-frame landmarks never become a valid zero', () => {
@@ -99,12 +124,12 @@ test('a missing frame discards earlier samples and requires a fresh full window'
 
 test('large movement and slow drift restart acquisition, rather than averaging different poses', () => {
   const sudden = frame(2100);
-  sudden.landmarks[0].x += 0.1;
+  for (const id of [0, 7, 8]) sudden.landmarks[id].x += 0.1;
   const reset = advanceCalibration(collect(0, 2000), sudden);
   assert.equal(reset.reason, 'moving');
   assert.equal(reset.samples.length, 1);
   const drift = collect(0, 3000, createCalibration(), value => {
-    value.landmarks[0].x += value.timestampMs * 0.00003;
+    for (const id of [0, 7, 8]) value.landmarks[id].x += value.timestampMs * 0.00003;
     return value;
   });
   assert.equal(drift.phase, 'collecting');
@@ -113,7 +138,7 @@ test('large movement and slow drift restart acquisition, rather than averaging d
 
 test('movement between retained samples also breaks the stable window', () => {
   const transient = frame(2050);
-  transient.landmarks[0].x += 0.1;
+  for (const id of [0, 7, 8]) transient.landmarks[id].x += 0.1;
   const next = advanceCalibration(collect(0, 2000), transient);
   assert.equal(next.reason, 'moving');
   assert.equal(next.samples.length, 1);
@@ -193,7 +218,7 @@ test('stability includes the configured metric range and restarts immediately ab
   for (const shift of [0.0625 - 1e-9, 0.0625, 0.0625 + 1e-9]) {
     const changed = structuredClone(input);
     changed.timestampMs = 100;
-    changed.landmarks[0].x += shift;
+    for (const id of [0, 7, 8]) changed.landmarks[id].x += shift;
     const next = advanceCalibration(initial, changed, options);
     assert.equal(next.reason, shift <= 0.0625 ? null : 'moving');
   }

@@ -14,7 +14,7 @@ flowchart TD
   M --> W[웹캠 생명주기]
   W --> P[앱에 포함된 MediaPipe Pose]
   P --> C[매 세션 기준 자세 수집 · 화면상 변화]
-  C --> V1[모드별 유사도 점수 · 시간 평균 · 관찰 습관]
+  C --> V1[목·어깨 독립 점수 v2 · 움직임 보호 · 시간 평균]
   R --> D[로컬 데모 계정]
   V1 --> REC[모든 관측의 분 버킷 · 배치 기록]
   REC -->|검증된 records IPC| E
@@ -45,9 +45,9 @@ Electron 개발 앱의 키보드 모드는 로컬 Python 프로세스를 자동 
 | `front/src/components/Button.tsx`, `Sidebar.tsx`, `ModeSelector.tsx` | 공유 UI. 새 화면은 공통 토큰/컴포넌트부터 사용 |
 | `front/src/components/AppDialog.tsx` | 대화상자 Provider와 표시 |
 | `front/src/components/dialog/dialogContext.ts`, `useDialog.ts` | 대화상자 타입/상태 계약과 호출 훅 |
-| `front/src/pages/LearningSession.tsx` | 모드별 세션 화면 선택. 모드 변경 시 이전 상태 폐기 |
+| `front/src/pages/LearningSession.tsx` | 상체 단일 모드 / 키보드 / 안구 화면 선택. 모드 변경 시 이전 상태 폐기 |
 | `front/src/features/session/` | 공통 화면 틀·장치 선택·시작/중지 타이머·지표 카드 |
-| `front/src/features/posture/PostureSession.tsx` | 상체 모드 정책 선택, 시작/중지/기준 재수집과 결과 상태 |
+| `front/src/features/posture/PostureSession.tsx` | 상체 단일 모드의 시작/중지/기준 재수집과 두 부위 결과 상태 |
 | `front/src/features/posture/PostureMetrics.tsx` | 점수와 관찰 습관 카드 표시. 점수 산식·임계값을 소유하지 않음 |
 | `front/src/features/posture/monitorTypes.ts` | 카메라와 독립된 상태·점수·습관 표시 계약 |
 | `front/src/components/PostureMonitor.tsx` | 웹캠·모델·기준 수집 연결, 오버레이, 누락/오류 상태 전달 |
@@ -57,8 +57,8 @@ Electron 개발 앱의 키보드 모드는 로컬 Python 프로세스를 자동 
 | `front/src/hooks/useMediaPipe.ts` | 로컬 Pose 파일 로드, 프레임 처리, 비동기 초기화/종료 제어 |
 | `front/src/features/posture/calibration.ts` | DOM 없는 기준 자세 수집/관측 계산. 단위·품질·샘플 정책 |
 | `front/src/features/posture/observation.ts` | DOM 없는 기준 대비 변화·유효 관찰 시간 계산. 누락·중복·역행 시각과 관측 연속성 처리 |
-| `front/src/features/posture/modes/turtle.ts`, `modes/shoulder.ts` | 모드별 선택 지표·유사도 점수 임계값·정책 버전 |
-| `front/src/features/posture/scoring.ts` | 선택된 지표를 0–100 유사도로 환산하는 순수 함수 |
+| `front/src/features/posture/modes/turtle.ts`, `modes/shoulder.ts` | 부위별 가중합 정책·버전. 조정 상수는 scoreSettings.ts |
+| `front/src/features/posture/scoring.ts` | 귀·어깨 비율을 부위별 가중합으로 0–100 환산하는 순수 함수 |
 | `front/src/features/posture/evaluation.ts` | 유효 시간 가중 평균·연속 관찰·기준 이탈 구간의 순수 집계 |
 | `front/src/utils/authStore.ts` | 아직 사용하는 로컬 데모 인증. 서버 연결 때 교체할 경계 |
 | `database/contracts.ts`, `recorder.ts`, `aggregation.ts`, `sqlite/repository.ts` | 직렬화 계약·관측 시간 분할·순수 집계·SQLite 단일 쓰기 주체 |
@@ -81,18 +81,18 @@ Electron 개발 앱의 키보드 모드는 로컬 Python 프로세스를 자동 
 
 ## 측정 화면의 계약
 
-상체 화면은 `LearningSession → PostureSession → PostureMonitor`로 연결합니다. 프레임 계산은 `useWebcam/useMediaPipe → calibration → observation → scoring/evaluation → MonitorSnapshot → PostureMetrics` 순서입니다. 모드 변경과 기준 다시 잡기는 이전 스트림·모델·점수·습관 상태를 정리하고 새 기준을 수집합니다. 중지하면 카메라를 해제하고 마지막 계산까지 화면에 반영합니다. 기준 수집은 현재 `turtle`, `shoulder`에 연결되어 있으며 안구 모드는 독립된 `EyeSession → EyeMonitor → Face Landmarker → measurement` 경로로 깜빡임·상대 얼굴 크기·휴식 안내를 제공합니다. 화면 내 세션만 유지하며 로컬 SQLite/API 저장은 연결하지 않습니다. [안구 모드](eye-mode.md)를 참고합니다.
+상체 화면은 `LearningSession → PostureSession → PostureMonitor`로 연결합니다. 프레임 계산은 `useWebcam/useMediaPipe → calibration → observation → scoring/evaluation → MonitorSnapshot → PostureMetrics` 순서입니다. 모드 변경과 기준 다시 잡기는 이전 스트림·모델·점수·습관 상태를 정리하고 새 기준을 수집합니다. 중지하면 카메라를 해제하고 마지막 계산까지 화면에 반영합니다. 기준 수집은 현재 `upper_body`에 연결되어 있으며, 안구 모드는 독립된 `EyeSession → EyeMonitor → Face Landmarker → measurement` 경로로 깜빡임·상대 얼굴 크기·휴식 안내를 제공합니다. 화면 내 세션만 유지하며 로컬 SQLite/API 저장은 연결하지 않습니다. [안구 모드](eye-mode.md)를 참고합니다.
 
 키보드는 `LearningSession → KeyboardSession → KeyboardMonitor → loopback Python service → runtime adapter → finger policy` 순서입니다. Electron main은 빈 로컬 포트와 세션 토큰을 만들고 개발 환경의 `.venv` Python을 자식 프로세스로 실행합니다. 렌더러는 실행 중인 화면의 `keydown`만 전송하며 전역 키로거를 켜지 않습니다. Python은 키 영역·손끝 후보·프레임 시간차를 반환하고, 권장/허용/다름/판정 보류 결정은 앱의 버전된 정책이 담당합니다. 손 가림, 낮은 키보드 신뢰도, 프레임 시간차, 가까운 복수 후보는 오답으로 강제하지 않고 판정 보류합니다. 카메라 영상과 결과는 아직 저장하거나 원격 서버로 보내지 않습니다.
 
-`MonitorSnapshot`은 준비/수집/관찰/관찰 불가/오류 상태와 수집 진행률, 기준 대비 변화량, 유효 관찰 시간, 모드별 현재/평균 유사도와 습관 집계·정책 버전을 전달합니다. 사용자의 자세가 의학적으로 올바른지 판단하는 타입이 아닙니다.
+`MonitorSnapshot`은 준비/수집/관찰/관찰 불가/오류 상태와 수집 진행률, 부위별 편차, 유효 관찰 시간, 목·어깨 각각의 현재/평균 점수와 보호 상태·습관 집계·정책 버전을 전달합니다. 사용자의 자세가 의학적으로 올바른지 판단하는 타입이 아닙니다.
 
 - 2D 좌표는 이미지 가로/세로 픽셀로 환산한 뒤 어깨 너비 대비 비율을 계산합니다.
 - 약 3초의 연속 안정 관측으로 중앙값 기준을 수집합니다. 이는 잠정 수집 설정이며 점수/건강 임계값이 아닙니다.
 - 얼굴·어깨가 안 보이거나 신뢰도가 낮으면 수집을 다시 시작합니다.
 - 기준 확보 후 관측이 사라지면 값과 유효 관찰 시간의 증가를 중단합니다. 이를 휴식이나 정상으로 바꾸지 않습니다.
 - 관찰 시간은 단조 캡처 시각의 양수 간격 중 500ms 이하만 더합니다. 중복·역행 시각과 누락은 연속성을 끊고 같은 구간을 다시 더하지 않습니다.
-- 화면의 “기준 대비 변화”는 모드에서 선택한 지표의 최대 절댓값입니다. 목은 코 위치·높이, 어깨는 양어깨 높이 차이를 사용합니다. 초기 v1 점수는 5% 이하 100, 30% 이상 0, 중간 선형 환산입니다. 평균은 유효 관찰 시간으로 가중합니다.
+- 화면의 “가중 편차”는 귀·어깨 비율의 부위별 가중합입니다. 목은 머리 전진·상체 전진·귀 높이 감소, 어깨는 기울기·귀-어깨 간격 감소를 사용합니다. 목 8%/30%, 어깨 5%/25%를 100/0점으로 선형 환산하며 회전 방어·움직임 동결·5초 유예·점진 감점을 적용합니다. 보호된 점수로 시간 가중 평균과 SQLite 기록을 계산합니다.
 - 점수와 별도로 관측률·연속 관찰·지속된 기준 이탈을 표시합니다. 기준 이탈과 오사용·휴식·질환 판정을 구분합니다. 산식·초기 설정·검증 한계는 [evaluation.md](evaluation.md)를 따릅니다.
 - 카메라 위치를 물리적으로 옮기면 다시 수집해야 합니다. 장치 ID/해상도 변경은 자동 감지하지만 모든 물리적 이동을 자동 판별하지는 못합니다.
 

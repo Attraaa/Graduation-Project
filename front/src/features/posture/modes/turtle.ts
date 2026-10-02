@@ -1,10 +1,10 @@
 import type { ScorePolicy } from '../scoring.ts';
+import { NECK_WEIGHTS, NECK_LIMITS, scoreSettingsVersion } from '../scoreSettings.ts';
 
 /** Initial product parameters for projected reference similarity, not medical thresholds. */
 export const turtleScorePolicy: ScorePolicy = Object.freeze({
-  version: 'reference-similarity-turtle-v1',
+  version: scoreSettingsVersion('neck', NECK_WEIGHTS, NECK_LIMITS),
   mode: 'turtle',
-  metrics: Object.freeze(['noseOffsetShoulderWidths', 'noseHeightShoulderWidths'] as const),
-  fullCreditDelta: 0.05,
-  zeroCreditDelta: 0.30,
+  weights: NECK_WEIGHTS,
+  ...NECK_LIMITS,
 });

@@ -66,9 +66,15 @@ async function run(window) {
   await delay(600);
   console.log('capture statistics');
   await screenshot('statistics');
-  await js("const select=document.querySelector('select');select.value='shoulder';select.dispatchEvent(new Event('change',{bubbles:true}))");
-  await until("document.body.innerText.includes('75.0점')");
-  console.log('statistics modes passed');
+  await until("document.body.innerText.includes('75.0점') && document.body.innerText.includes('50.0점')");
+  assert.equal(await js("(()=>{const a=document.querySelector('[aria-label=\"목 통계\"]'),b=document.querySelector('[aria-label=\"어깨 통계\"]');return a.getBoundingClientRect().top===b.getBoundingClientRect().top})()"), true);
+  console.log('independent neck and shoulder statistics passed');
+  await route('/learn/upper_body');
+  await until("document.body.innerText.includes('상체 자세 모니터링') && document.body.innerText.includes('목 점수') && document.body.innerText.includes('어깨 점수')");
+  await screenshot('upper-body');
+  await js("[...document.querySelectorAll('h2')].find(h=>h.textContent==='목 점수').scrollIntoView({block:'start'})");
+  assert.equal(await js("(()=>{const titles=[...document.querySelectorAll('h2')];return titles.find(h=>h.textContent==='목 점수').getBoundingClientRect().top===titles.find(h=>h.textContent==='어깨 점수').getBoundingClientRect().top})()"), true);
+  await screenshot('upper-body-scores');
   await route('/history');
   await until("document.body.innerText.includes('50.0점') && document.body.innerText.includes('75.0점')");
   for (const view of ['일간', '월간', '주간']) { await click(view); await delay(250); }
