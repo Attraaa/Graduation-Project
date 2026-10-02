@@ -68,6 +68,10 @@ export interface RecordsApi {
   list(query: RecordQuery): Promise<RecordsResult<RecordPage>>;
   detail(owner: string, id: string): Promise<RecordsResult<RecordDetail>>;
   statistics(query: RecordQuery): Promise<RecordsResult<StatisticsRow[]>>;
+  writeEye(batch: import('./eye').EyeBatch): Promise<RecordsResult<void>>;
+  eyeStatistics(query: RecordQuery): Promise<RecordsResult<import('./eye').EyeStatisticsRow[]>>;
+  eyeDetail(owner: string, id: string): Promise<RecordsResult<import('./eye').EyeDetail>>;
+  history(query: RecordQuery): Promise<RecordsResult<import('./eye').HistoryPage>>;
   clear(owner: string): Promise<RecordsResult<number>>;
   writeKeyboard(batch: import('./keyboard').KeyboardBatch): Promise<RecordsResult<void>>;
   keyboardStatistics(query: import('./keyboard').KeyboardQuery): Promise<RecordsResult<import('./keyboard').KeyboardStored[]>>;

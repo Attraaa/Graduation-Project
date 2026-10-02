@@ -35,7 +35,7 @@ let recordsError = ''
 let allowClose = false
 let closingTimer: ReturnType<typeof setTimeout> | undefined
 const recordsPageUrl = process.env.VITE_DEV_SERVER_URL || pathToFileURL(path.join(distDirectory, 'index.html')).href
-for (const command of ['generation', 'write', 'list', 'detail', 'statistics', 'clear', 'writeKeyboard', 'keyboardStatistics', 'keyboardDetail'] as const) {
+for (const command of ['generation', 'write', 'list', 'detail', 'statistics', 'clear', 'writeKeyboard', 'keyboardStatistics', 'keyboardDetail', 'writeEye', 'eyeStatistics', 'eyeDetail', 'history'] as const) {
   ipcMain.handle(`records:${command}`, (event, ...args: unknown[]) => recordCall(
     Boolean(win && event.sender === win.webContents && event.senderFrame === win.webContents.mainFrame
       && trustedRecordUrl(event.senderFrame.url, recordsPageUrl)),
@@ -49,6 +49,10 @@ for (const command of ['generation', 'write', 'list', 'detail', 'statistics', 'c
       if (command === 'writeKeyboard') return db.writeKeyboard(args[0])
       if (command === 'keyboardStatistics') return db.keyboardStatistics(args[0])
       if (command === 'keyboardDetail') return db.keyboardDetail(args[0] as string, args[1] as string)
+      if (command === 'writeEye') return db.writeEye(args[0])
+      if (command === 'eyeStatistics') return db.eyeStatistics(args[0])
+      if (command === 'eyeDetail') return db.eyeDetail(args[0] as string, args[1] as string)
+      if (command === 'history') return db.history(args[0])
       return db.clear(args[0] as string)
     },
   ))

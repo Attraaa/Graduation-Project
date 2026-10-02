@@ -44,7 +44,7 @@ test('strict aggregate input rejects text, sequences, unknown physical codes, an
 test('additive schema v1 migration preserves posture data and supports keyboard restarts and owner isolation', t => {
   const file = fixture(t); let db = new RecordRepository(file); const posture = sampleBatch(); db.write(posture); db.close();
   // Construct a real v1 database from its unchanged original tables.
-  const v1 = new DatabaseSync(file); v1.exec('DROP TABLE keyboard_batches; DROP TABLE keyboard_counts; DROP TABLE keyboard_records; PRAGMA user_version=1'); v1.close();
+  const v1 = new DatabaseSync(file); v1.exec('DROP TABLE eye_batches; DROP TABLE eye_buckets; DROP TABLE eye_records; DROP TABLE keyboard_batches; DROP TABLE keyboard_counts; DROP TABLE keyboard_records; PRAGMA user_version=1'); v1.close();
   db = new RecordRepository(file);
   assert.equal(db.detail('demo', posture.record.id).record.status, 'interrupted');
   assert.equal(db.detail('demo', posture.record.id).record.owner, 'demo');

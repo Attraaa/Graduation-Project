@@ -61,6 +61,6 @@ AGENTS.md와 README.md를 먼저 읽고, docs/architecture.md, docs/product-deci
 
 ## 안구 모드
 
-깜빡임 횟수·최근/누적 빈도, 기준 구도보다 가까워짐, 20분/20초 눈 휴식 안내를 추가했습니다. 기존 앱에서 안구 모드를 선택하거나 Windows에서 `eye.cmd`를 실행해 브라우저로 시연할 수 있습니다. `eye.cmd`는 프론트만 설치하므로 Electron/키보드 실행에는 기존 `setup.cmd`를 사용하세요. 카메라 영상은 기기 안에서 처리하며 안구 결과는 DB에 저장하지 않습니다.
+깜빡임 횟수·최근/누적 빈도, 기준 구도보다 가까워짐, 20분/20초 눈 휴식 안내를 추가했습니다. 기존 앱에서 안구 모드를 선택하거나 Windows에서 `eye.cmd`를 실행해 브라우저로 시연할 수 있습니다. `eye.cmd`는 프론트만 설치하므로 Electron/키보드 실행에는 기존 `setup.cmd`를 사용하세요. 카메라 영상은 기기 안에서 처리하며 로그인한 Electron 앱은 안구 집계를 기존 database/sqlite/posture.sqlite에 저장하고 통계·학습이력에서 조회합니다. eye.cmd의 브라우저 시연에는 저장 기능이 없습니다.
 
 기능·모델·실행·검증 한계 및 팀원의 브랜치 적용 방법은 [docs/eye-mode.md](docs/eye-mode.md)를 참고하세요.

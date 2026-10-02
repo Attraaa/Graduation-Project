@@ -54,7 +54,14 @@ async function run(window) {
       status: 'running', policyVersion: 'ansi-qwerty-touch:2.0.0', recognitionVersion: 'hands-label-distance-v2', nearbyCredit: 70, total: 10 },
     counts: [{ date, code: 'KeyA', context: 'plain', finger: 'left:pinky', verdict: 'preferred', reason: 'preferred-finger', count: 8 },
       { date, code: 'KeyA', context: 'plain', finger: 'left:ring', verdict: 'nearby', reason: 'neighboring-finger', count: 2 }] };
+  const eye = { schemaVersion: 1, generation: 0, sequence: 0,
+    record: { id: 'eye', owner: 'demo', mode: 'eye', startedAt: start, updatedAt: start + 60000,
+      offsetMinutes: now.getTimezoneOffset(), policyVersion: 'eye-habits-v2', status: 'running',
+      runMs: 60000, validMs: 30000, blinks: 12, breaks: 1, nearReminders: 2, openReminders: 1 },
+    buckets: [{ minute: Math.floor(start / 60000) * 60000, runMs: 60000, validMs: 30000, blinks: 12, breaks: 1, nearReminders: 2, openReminders: 1 }] };
   if (phase === 'seed') {
+    value(await call('writeEye', eye)); value(await call('writeEye', eye));
+    assert.equal((await call('writeEye', { ...eye, image: 'forbidden' })).ok, false);
     for (const record of [batch('turtle', 'demo', 'turtle', 50), batch('shoulder', 'demo', 'shoulder', 75, 'running'), batch('other', 'admin', 'turtle', 20)]) {
       value(await call('write', record)); value(await call('write', record));
     }
@@ -65,11 +72,15 @@ async function run(window) {
     assert.equal(await js("window.motiKeyboard.updateSettings({apps:[]}).then(()=>false,()=>true)"), true);
   } else {
     assert.equal(value(await call('detail', 'demo', 'shoulder')).record.status, 'interrupted');
+    assert.equal(value(await call('eyeDetail', 'demo', 'eye')).record.status, 'interrupted');
     assert.equal(value(await call('keyboardDetail', 'demo', 'keyboard')).record.status, 'interrupted');
     assert.equal((await js('window.motiKeyboard.settings()')).stopShortcut, 'Control+Alt+F9');
   }
   assert.equal(value(await call('keyboardStatistics', query))[0].record.total, 10);
   assert.equal(value(await call('list', query)).records.length, 2);
+  assert.equal(value(await call('history', query)).records.length, 3);
+  assert.equal(value(await call('eyeStatistics', query))[0].blinks, 12);
+  assert.equal((await call('eyeDetail', 'admin', 'eye')).ok, false);
   assert.equal(value(await call('statistics', { ...query, mode: 'turtle' }))[0].scoreTimeSum, 25000);
   assert.equal((await call('detail', 'admin', 'turtle')).ok, false);
   await route('/statistics');
@@ -93,9 +104,11 @@ async function run(window) {
   await until("document.body.innerText.includes('75.0점') && document.body.innerText.includes('50.0점') && !document.body.innerText.includes('키별 히트맵')");
   console.log('keyboard statistics and return to upper-body statistics passed');
   await js("{ const select=document.querySelector('[aria-label=\"통계 모드\"]');select.value='eye';select.dispatchEvent(new Event('change',{bubbles:true})); }");
-  await until("document.body.innerText.includes('기록 저장은 아직 연결되지 않아') && !document.body.innerText.includes('목 점수') && !document.body.innerText.includes('키별 히트맵')");
+  await until("document.body.innerText.includes('24.0회/분') && document.body.innerText.includes('날짜별 추이') && !document.body.innerText.includes('목 점수') && !document.body.innerText.includes('키별 히트맵')");
   await screenshot('eye-statistics');
-  await click('안구 모드 열기');
+  await click('새로고침');
+  await until("document.body.innerText.includes('24.0회/분')");
+  await route('/learn/eye');
   await until("document.body.innerText.includes('안구 모드 시작') && document.body.innerText.includes('관찰한 깜빡임')");
   await screenshot('eye-ready');
   console.log('eye mode and statistics availability passed');
@@ -112,7 +125,14 @@ async function run(window) {
   await route('/history');
   await until("document.body.innerText.includes('50.0점') && document.body.innerText.includes('75.0점')");
   for (const view of ['일간', '월간', '주간']) { await click(view); await delay(250); }
+  await until("document.body.innerText.includes('12회 깜빡임')");
   await screenshot('history');
+  await js("[...document.querySelectorAll('button')].find(b=>b.textContent.includes('12회 깜빡임')).click()");
+  await until("document.body.innerText.includes('분별 안구 관찰') && document.body.innerText.includes('24.0회/분')");
+  assert.equal(await js("document.body.innerText.includes('AI 피드백')"), false);
+  await screenshot('eye-detail');
+  await click('학습이력으로 돌아가기');
+  await until("document.body.innerText.includes('50.0점')");
   await js("[...document.querySelectorAll('button')].find(b=>b.textContent.includes('50.0점')).click()");
   await until("document.body.innerText.includes('학습이력으로 돌아가기') && !document.body.innerText.includes('불러오는 중') && document.querySelector('.recharts-dot') !== null");
   await screenshot('detail');
@@ -139,6 +159,9 @@ async function run(window) {
     await until("document.body.innerText.includes('삭제 완료')");
     assert.equal(value(await call('list', query)).records.length, 0);
     assert.equal(value(await call('keyboardStatistics', query)).length, 0);
+    assert.equal(value(await call('eyeStatistics', query)).length, 0);
+    assert.equal(value(await call('history', query)).records.length, 0);
+    assert.equal((await call('writeEye', eye)).ok, false);
     assert.equal(value(await call('list', { ...query, owner: 'admin' })).records.length, 1);
     assert.equal((await call('write', batch('turtle', 'demo', 'turtle', 50))).ok, false);
     await route('/statistics'); await until("document.body.innerText.includes('기록이 없습니다')");

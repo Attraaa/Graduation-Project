@@ -29,5 +29,9 @@ contextBridge.exposeInMainWorld('motiRecords', {
   writeKeyboard: batch => ipcRenderer.invoke('records:writeKeyboard', batch),
   keyboardStatistics: query => ipcRenderer.invoke('records:keyboardStatistics', query),
   keyboardDetail: (owner, id) => ipcRenderer.invoke('records:keyboardDetail', owner, id),
+  writeEye: batch => ipcRenderer.invoke('records:writeEye', batch),
+  eyeStatistics: query => ipcRenderer.invoke('records:eyeStatistics', query),
+  eyeDetail: (owner, id) => ipcRenderer.invoke('records:eyeDetail', owner, id),
+  history: query => ipcRenderer.invoke('records:history', query),
   clear: owner => ipcRenderer.invoke('records:clear', owner),
 } satisfies RecordsApi)
