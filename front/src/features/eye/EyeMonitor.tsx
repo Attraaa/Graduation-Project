@@ -7,6 +7,7 @@ import { readEyes } from './observation';
 import { createEyeRunner } from './runner';
 import { eyeCameraChanged, eyeStreamIssue } from './streamStatus';
 import type { EyeCameraSignature } from './streamStatus';
+import { initializeMediaPipe } from '../session/mediaPipeInitialization';
 
 export type EyeUpdate = { measurement: EyeSnapshot; phase: 'loading' | 'calibrating' | 'observing' | 'unavailable' | 'error'; message: string };
 
@@ -54,11 +55,11 @@ export default function EyeMonitor({ active, deviceId, reference, onUpdate }: {
         const { FaceLandmarker, FilesetResolver } = await import('@mediapipe/tasks-vision');
         const base = new URL(import.meta.env.BASE_URL, document.baseURI);
         const files = await FilesetResolver.forVisionTasks(new URL('mediapipe/face/wasm', base).href);
-        return FaceLandmarker.createFromOptions(files, {
+        return initializeMediaPipe(() => FaceLandmarker.createFromOptions(files, {
           baseOptions: { modelAssetPath: new URL('models/face_landmarker.task', base).href, delegate: 'CPU' },
           runningMode: 'VIDEO', numFaces: 2, outputFaceBlendshapes: true,
           minFaceDetectionConfidence: 0.6, minFacePresenceConfidence: 0.6, minTrackingConfidence: 0.6,
-        });
+        }), true);
       },
       ready: async model => {
         const video = videoRef.current;

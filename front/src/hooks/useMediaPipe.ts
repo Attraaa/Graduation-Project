@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Pose, Results } from '@mediapipe/pose';
+import { initializeMediaPipe } from '../features/session/mediaPipeInitialization.ts';
 
 export type PoseResultsCallback = (results: Results, capturedAtMs: number) => void;
 type PoseConstructor = typeof Pose;
@@ -95,7 +96,7 @@ export function createMediaPipeController(
       run.pose.onResults(results => {
         if (active === run && run.processing && !signal?.aborted) onResults(results, run.capturedAtMs);
       });
-      run.pending = run.pose.initialize();
+      run.pending = initializeMediaPipe(() => run.pose.initialize());
       await run.pending;
       run.pending = null;
       if (active !== run || request !== generation || signal?.aborted) return null;
