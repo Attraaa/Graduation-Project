@@ -16,6 +16,7 @@ import { useRecordQuery } from '../features/records/useRecordQuery';
 import { recordsApi, recordValue } from '../features/records/api';
 import { getCurrentUser } from '../utils/authStore';
 import Button from '../components/Button';
+import { EyeDetailData } from '../features/eye/EyeRecordData';
 
 const calendarViews = [
   { id: 'day', label: '일간' },
@@ -98,8 +99,8 @@ const LearningHistory = () => {
   const load = useCallback(async () => {
     if (!owner) throw new Error('로그인하면 이 계정의 기록을 조회할 수 있습니다.');
     const [calendar, day] = await Promise.all([
-      recordValue(recordsApi().list({ owner, from, to })),
-      recordValue(recordsApi().list({ owner, from: selectedDate, to: selectedDate, offset: page * 100 })),
+      recordValue(recordsApi().history({ owner, from, to })),
+      recordValue(recordsApi().history({ owner, from: selectedDate, to: selectedDate, offset: page * 100 })),
     ]);
     return { calendar, day };
   }, [owner, from, to, selectedDate, page]);
@@ -107,9 +108,12 @@ const LearningHistory = () => {
   const sessionsByDate = query.data?.day.records.map(historyView) ?? [];
   const counts = query.data?.calendar.counts ?? {};
   const selectedId = selectedSession?.id ?? '';
-  const loadDetail = useCallback(async () => selectedId ? recordValue(recordsApi().detail(owner, selectedId)) : null, [owner, selectedId]);
-  const detail = useRecordQuery(owner + ':' + selectedId, loadDetail);
+  const loadDetail = useCallback(async () => selectedId && selectedSession?.mode !== 'eye' ? recordValue(recordsApi().detail(owner, selectedId)) : null, [owner, selectedId, selectedSession?.mode]);
+  const detail = useRecordQuery(owner + ':' + selectedSession?.mode + ':' + selectedId, loadDetail);
   const graph = historyGraph(detail.data);
+  const loadEyeDetail = useCallback(async () => selectedId && selectedSession?.mode === 'eye'
+    ? recordValue(recordsApi().eyeDetail(owner, selectedId)) : null, [owner, selectedId, selectedSession?.mode]);
+  const eyeDetail = useRecordQuery(owner + ':' + selectedSession?.mode + ':' + selectedId, loadEyeDetail);
 
   const handleDateClick = (date: string) => {
     setSelectedDate(date);
@@ -160,6 +164,11 @@ const LearningHistory = () => {
             </div>
           </div>
 
+          {selectedSession.mode === 'eye' ? <>
+            {eyeDetail.loading && <p role="status">안구 상세 기록을 불러오는 중입니다.</p>}
+            {eyeDetail.error && <div role="alert"><p>{eyeDetail.error}</p><Button variant="outline" onClick={eyeDetail.retry}>다시 불러오기</Button></div>}
+            {eyeDetail.data && <EyeDetailData detail={eyeDetail.data} />}
+          </> : <>
           <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
             <div className="rounded-2xl bg-gray-50 p-5">
               <p className="text-sm font-bold text-gray-500">점수</p>
@@ -194,6 +203,7 @@ const LearningHistory = () => {
             <p className="mb-2 font-black text-gray-700">AI 피드백 (예시 · 실측 연동 안 됨)</p>
             <p className="font-bold text-gray-500">초반에는 목이 앞으로 나왔지만 후반부에는 안정적으로 회복되었습니다. (기존 예시 문장)</p>
           </div>
+          </>}
         </div>
       </div>
     );
@@ -203,7 +213,7 @@ const LearningHistory = () => {
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <header className="mb-8">
         <h1 className="text-3xl font-black text-gray-700">학습이력</h1>
-        <p className="mt-2 font-bold text-gray-600">상체 측정의 목·어깨 점수를 부위별로 확인합니다. 한 번의 상체 측정은 같은 시작 시각의 목·어깨 기록 2개로 저장되며, 달력은 부위별 기록 수를 표시합니다. 이전 기록도 보존됩니다.</p>
+        <p className="mt-2 font-bold text-gray-600">로그인한 계정의 서버에 저장한 상체 자세·안구 관찰 기록을 시작일별로 확인합니다. 상체 측정은 목·어깨 기록 2개, 안구 측정은 기록 1개로 표시합니다. 안구 상세에서는 깜빡임·유효 시간·휴식 기록을 확인할 수 있습니다.</p>
       </header>
 
       <div className="card-duo">
@@ -303,7 +313,7 @@ const LearningHistory = () => {
       </div>
 
       <div className="card-duo">
-        <h2 className="mb-4 text-xl font-black text-gray-700">{selectedDate} 자세 관찰 기록</h2>
+        <h2 className="mb-4 text-xl font-black text-gray-700">{selectedDate} 관찰 기록</h2>
         {query.loading && <p role="status">기록을 불러오는 중입니다.</p>}
         {query.error && <div role="alert"><p>{query.error}</p><Button variant="outline" onClick={query.retry}>다시 불러오기</Button></div>}
         <div className="mb-4 flex gap-2">
@@ -319,7 +329,7 @@ const LearningHistory = () => {
               const mode = getLearningMode(session.mode);
               return (
                 <button
-                  key={session.id}
+                  key={session.mode + ':' + session.id}
                   onClick={() => setSelectedSession(session)}
                   className="flex w-full items-center justify-between rounded-2xl border-2 border-gray-100 bg-white p-4 text-left transition hover:border-blue-200 hover:bg-blue-50"
                 >
@@ -332,7 +342,7 @@ const LearningHistory = () => {
                       <p className="text-sm font-bold text-gray-500">{session.startedAt} · {session.duration}</p>
                     </div>
                   </div>
-                  <span className={`text-2xl font-black ${mode.textClass}`}>{session.score === null ? '자료 없음' : session.score.toFixed(1) + '점'}</span>
+                  <span className={`text-2xl font-black ${mode.textClass}`}>{session.mode === 'eye' ? session.blinks + '회 깜빡임' : session.score === null ? '자료 없음' : session.score.toFixed(1) + '점'}</span>
                 </button>
               );
             })}

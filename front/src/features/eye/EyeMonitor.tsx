@@ -11,7 +11,8 @@ import { initializeMediaPipe } from '../session/mediaPipeInitialization';
 
 export type EyeUpdate = { measurement: EyeSnapshot; phase: 'loading' | 'calibrating' | 'observing' | 'unavailable' | 'error'; message: string };
 
-export default function EyeMonitor({ active, deviceId, reference, onUpdate }: {
+export default function EyeMonitor({ active, deviceId, reference, onUpdate, onSample }: {
+  onSample: (at: number, snapshot: EyeSnapshot) => void;
   active: boolean; deviceId: string; reference: number; onUpdate: (update: EyeUpdate) => void;
 }) {
   const { videoRef, startWebcam, stopWebcam, webcamError } = useWebcam();
@@ -21,9 +22,11 @@ export default function EyeMonitor({ active, deviceId, reference, onUpdate }: {
   useEffect(() => {
     if (lastReference.current === reference) return;
     lastReference.current = reference;
-    onUpdate({ measurement: measurement.current.recalibrate(), phase: 'calibrating',
+    const snapshot = measurement.current.recalibrate();
+    onSample(performance.now(), snapshot);
+    onUpdate({ measurement: snapshot, phase: 'calibrating',
       message: '새 거리 기준을 수집합니다. 지금까지의 깜빡임과 휴식 기록은 유지합니다.' });
-  }, [reference, onUpdate]);
+  }, [reference, onUpdate, onSample]);
   useEffect(() => {
     if (!active) return;
     const engine = measurement.current;
@@ -36,7 +39,9 @@ export default function EyeMonitor({ active, deviceId, reference, onUpdate }: {
     let lastVideoTime = -1;
     let lastPublished = 0;
     const invalidate = (message: string, phase: EyeUpdate['phase'] = 'unavailable') => {
-      onUpdate({ measurement: engine.sample(performance.now(), null), phase, message });
+      const at = performance.now(), snapshot = engine.sample(at, null);
+      onSample(at, snapshot);
+      onUpdate({ measurement: snapshot, phase, message });
     };
     invalidate('얼굴 모델을 불러오고 있습니다. 처음에는 잠시 걸릴 수 있습니다.', 'loading');
     const fail = (error: unknown) => {
@@ -80,6 +85,7 @@ export default function EyeMonitor({ active, deviceId, reference, onUpdate }: {
               const result = model.detectForVideo(video, now);
               const { observation, reason } = readEyes(result, video.videoWidth, video.videoHeight);
               const current = engine.sample(now, observation);
+              onSample(now, current);
               lastVideoTime = video.currentTime;
               lastFrameAt = now;
               // Analyze every available frame; render cards at most 10 times per second.
@@ -115,7 +121,7 @@ export default function EyeMonitor({ active, deviceId, reference, onUpdate }: {
       engine.sample(performance.now(), null);
       runner.stop();
     };
-  }, [active, deviceId, onUpdate, startWebcam, stopWebcam, videoRef]);
+  }, [active, deviceId, onUpdate, onSample, startWebcam, stopWebcam, videoRef]);
   return (
     <div className="relative overflow-hidden rounded-2xl bg-surface-muted">
       <video ref={videoRef} muted playsInline aria-label="안구 모드 카메라 미리보기"

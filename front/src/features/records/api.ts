@@ -24,6 +24,10 @@ const serverRecords: RecordsApi = {
   writeKeyboard: batch => call(() => apiRequest<void>('/api/records/keyboard', { method: 'POST', body: batch })),
   keyboardStatistics: ({ from, to }) => call(() => apiRequest('/api/records/keyboard' + search({ from, to }))),
   keyboardDetail: (_owner, id) => call(() => apiRequest('/api/records/keyboard/' + path(id))),
+  writeEye: batch => call(() => apiRequest<void>('/api/records/eye', { method: 'POST', body: batch })),
+  eyeStatistics: ({ from, to }) => call(() => apiRequest('/api/records/eye-statistics' + search({ from, to }))),
+  eyeDetail: (_owner, id) => call(() => apiRequest('/api/records/eye/' + path(id))),
+  history: ({ from, to, offset }) => call(() => apiRequest('/api/records/history' + search({ from, to, offset }))),
 };
 
 export function recordsApi(): RecordsApi {

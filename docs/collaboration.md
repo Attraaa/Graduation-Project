@@ -62,8 +62,10 @@ README와 docs/collaboration.md, docs/evaluation.md를 읽어.
 
 ## 안구 모드 담당 경계
 
-안구 계산·정책·영상 처리는 `front/src/features/eye/`가 소유합니다. `EyeSession`은 기존 SessionFrame/Metric/useSessionControls를 재사용합니다. 기존 공통 훅과 다른 모드 알고리즘·기록·서버 계약은 변경하지 않습니다. 안구 정책 변경은 `eyePolicy.ts`, 안구 테스트, [eye-mode.md](eye-mode.md)를 함께 갱신합니다. 아직 안구 결과의 DB 저장·조회는 구현하지 않았습니다.
+안구 계산·정책·영상 처리는 `front/src/features/eye/`가 소유합니다. `EyeSession`은 기존 SessionFrame/Metric/useSessionControls를 재사용합니다. 기존 공통 훅과 다른 모드 알고리즘은 변경하지 않습니다. 공통 기록·서버 계약은 연결 담당자가 조정합니다. 안구 정책 변경은 `eyePolicy.ts`, 안구 테스트, [eye-mode.md](eye-mode.md)를 함께 갱신합니다. 안구 결과는 공통 MySQL/HTTP 경계에 저장하고 안구 통계·학습이력에서 조회합니다.
 
 ## 상체 통합 담당 경계 (2026-10-02)
 
 사용자가 선택하는 상체 화면은 `upper_body` 하나이며 목·어깨를 동시에 계산합니다. `modes/turtle.ts`와 `shoulder.ts`는 독립 부위 정책으로 유지하고, 조정값은 `scoreSettings.ts` 상단에 모읍니다. 한 카메라의 관측을 두 evaluation 상태와 두 저장 sink에 전달합니다. 가중치·상하 gain·보호 설정 해시가 정책 ID에 포함되며, 공식 변경 시 정책 버전도 올립니다. 현재 회전 보류·상하 양방향 감도·복귀 확인은 점수/습관 v3이고 기준 스키마는 v2입니다. 기존 저장 부위 키와 데이터는 보존합니다.
+
+안구 저장 통합은 `database/eye.ts`, `eyeRecorder.ts`, `front/src/features/eye/recording.ts`와 공통 HTTP 저장소/API가 소유합니다. 안구 표본/순수 정책과 서버 인증/SQL을 분리하며 서버 추가 테이블은 `server/migrations/003_eye_records.sql`을 따릅니다. 안구 통계·학습이력은 기존 상체·키보드 화면과 함께 유지합니다.

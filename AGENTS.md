@@ -87,11 +87,11 @@ approval boundary, an unsafe operation, or an unresolved conflict.
 - Read `docs/collaboration.md` for file ownership. Keep mode policies, pure
   observation/scoring/aggregation, camera lifecycle, and presentation separate.
   Coordinate shared contract changes and preserve other tasks' changes.
-- Login uses the Express API's JWT accounts. Turtle/shoulder/keyboard records,
+- Login uses the Express API's JWT accounts. Turtle/shoulder/keyboard/eye records,
   history, and statistics are stored only on the API server's MySQL through
   `/api/records` (server URL: `front/.env` `VITE_MOTI_API_URL`); read
   `database/README.md` for its contract. Server builds bundle `database/contracts.ts`
-  and `keyboard.ts`, so deploy them with `server/`. AI/medical sections remain
+  `keyboard.ts`, and `eye.ts`, so deploy them with `server/`. AI/medical sections remain
   labeled examples; AI summary, offline sync, and HTTPS are not implemented.
   Do not present demo values as measurements.
 - Reuse `src/styles/tokens.css`, `components/layout`, and the shared UI components.

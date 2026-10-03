@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Coffee, Play, RotateCcw, Square } from 'lucide-react';
 import Button from '../../components/Button';
 import Metric from '../session/Metric';
@@ -8,13 +8,30 @@ import EyeMonitor from './EyeMonitor';
 import type { EyeUpdate } from './EyeMonitor';
 import { emptyEyeSnapshot } from './measurement';
 import { createBreakTimer } from './breakTimer';
+import { beginEyeRecording } from './recording';
+import type { EyeSink } from './recording';
+import type { EyeSnapshot } from './measurement';
+import RecordingStatus from '../records/RecordingStatus';
 
 const clock = (ms: number) => `${Math.floor(ms / 60000).toString().padStart(2, '0')}:${Math.floor(ms / 1000 % 60).toString().padStart(2, '0')}`;
 const initialUpdate = (): EyeUpdate => ({ measurement: emptyEyeSnapshot(), phase: 'loading', message: '카메라를 화면 위에 고정하고 얼굴 정면이 보이도록 앉아 주세요.' });
 
 export default function EyeSession() {
   const controls = useSessionControls();
+  const stopControls = controls.stop;
   const [update, setUpdate] = useState(initialUpdate);
+  const recording = useRef<EyeSink | null>(null);
+  const onSample = useCallback((at: number, snapshot: EyeSnapshot) => recording.current?.sample(at, snapshot), []);
+  const onUpdate = useCallback((value: EyeUpdate) => {
+    setUpdate(value);
+    if (value.phase === 'error') recording.current?.finish();
+  }, []);
+  useEffect(() => () => { recording.current?.finish(); }, []);
+  useEffect(() => {
+    const stop = () => { recording.current?.finish(); stopControls(); };
+    window.addEventListener('moti-stop-measurement', stop);
+    return () => window.removeEventListener('moti-stop-measurement', stop);
+  }, [stopControls]);
   const [reference, setReference] = useState(0);
   const timer = useRef(createBreakTimer());
   const [rest, setRest] = useState(() => createBreakTimer().snapshot());
@@ -26,7 +43,10 @@ export default function EyeSession() {
     const handle = window.setInterval(() => setRest(timer.current.tick(performance.now())), 250);
     return () => window.clearInterval(handle);
   }, [isRunning, run, failed]);
+  const stop = () => { recording.current?.finish(); controls.stop(); };
   const start = () => {
+    recording.current?.finish();
+    recording.current = beginEyeRecording();
     timer.current = createBreakTimer();
     setRest(timer.current.tick(performance.now()));
     setUpdate(initialUpdate());
@@ -47,7 +67,7 @@ export default function EyeSession() {
               <RotateCcw size={16} className="mr-2 inline" />거리 기준만 다시 잡기
             </Button>}
             {isRunning && failed && <Button variant="outline" onClick={start}>분석 다시 시작</Button>}
-            <Button variant={isRunning ? 'danger' : 'primary'} onClick={isRunning ? controls.stop : start}>
+            <Button variant={isRunning ? 'danger' : 'primary'} onClick={isRunning ? stop : start}>
               {isRunning ? <Square size={16} className="mr-2 inline" /> : <Play size={16} className="mr-2 inline" />}{isRunning ? '측정 중지' : '안구 모드 시작'}
             </Button>
           </div>
@@ -56,7 +76,8 @@ export default function EyeSession() {
           <p className="mb-2 text-sm text-muted">편안한 거리에서 3초간 정면을 유지하세요. 자연스럽게 깜빡여도 됩니다. 움직임이 크면 수집을 다시 시작합니다.</p>
           <progress className="w-full accent-primary" aria-label="안구 거리 기준 수집" value={m.progress} max={1} />
         </div>}
-        <EyeMonitor key={run} active={active} deviceId={deviceId} reference={reference} onUpdate={setUpdate} />
+        <EyeMonitor key={run} active={active} deviceId={deviceId} reference={reference} onUpdate={onUpdate} onSample={onSample} />
+        <RecordingStatus />
         {observed && (m.openReminder || m.nearReminder) && <div role="status" className="rounded-xl border-2 border-warning bg-surface-muted p-3 text-heading">
           {m.openReminder && <p>눈이 열린 상태가 15초간 이어졌습니다. 편안하게 눈을 깜빡여 보세요.</p>}
           {m.nearReminder && <p>기준보다 얼굴이 크게 보이는 상태가 이어집니다. 처음의 편안한 거리로 돌아가 보세요.</p>}
@@ -76,13 +97,16 @@ export default function EyeSession() {
               <p className="mt-2 font-bold text-heading" role="status">{!isRunning ? '시작하면 휴식 타이머가 켜집니다.' : failed ? '오류로 타이머를 중지했습니다.' : rest.resting ? rest.remainingMs > 0 ? `휴식 ${Math.ceil(rest.remainingMs / 1000)}초 남음` : '20초가 지났습니다. 복귀 버튼을 눌러 휴식을 완료해 주세요.' : rest.due ? '눈을 쉬어 줄 시간입니다.' : `다음 휴식까지 ${clock(rest.untilBreakMs)}`}</p>
             </div>
             <Button variant={rest.due || rest.resting ? 'primary' : 'outline'} disabled={!isRunning || failed}
-              onClick={() => setRest(rest.resting ? timer.current.finish(performance.now()) : timer.current.start(performance.now()))}>
+              onClick={() => {
+                const next = rest.resting ? timer.current.finish(performance.now()) : timer.current.start(performance.now());
+                recording.current?.rest(next.completed); setRest(next);
+              }}>
               <Coffee size={16} className="mr-2 inline" />{rest.resting ? rest.remainingMs > 0 ? '휴식 취소하고 복귀' : '휴식 완료하고 복귀' : '지금 20초 쉬기'}
             </Button>
           </div>
           <p className="mt-3 text-xs text-muted">휴식 중에는 카메라를 끕니다. 20초 이후 복귀 버튼을 누르면 본인 확인 기록으로 남습니다. 실제로 먼 곳을 봤는지는 판별하지 않습니다. 지금 쉬기 버튼으로 바로 시연할 수 있습니다.</p>
         </div>
-        <p className="text-xs leading-relaxed text-muted">영상은 이 기기에서 처리하며 녹화·서버 전송하지 않습니다. 이번 세션 수치만 표시하며 종료 후 다른 화면으로 이동하면 보존되지 않습니다. 안경 반사·조명·카메라 성능에 따라 깜빡임을 놓칠 수 있습니다. 이 모드는 생활 습관 안내용이며 시력·안구건조증·질환 위험 점수를 측정하지 않습니다. 카메라 위치·줌이 바뀌면 거리 기준만 다시 잡으세요. 기존 횟수·유효 시간·휴식 기록은 유지되고 최근 빈도는 새로 수집합니다. 다른 사람이 측정할 때는 중지 후 새 세션을 시작하세요.</p>
+        <p className="text-xs leading-relaxed text-muted">영상은 이 기기에서 처리하며 녹화·서버 전송하지 않습니다. 로그인하면 깜빡임·유효 관찰 시간·안내 횟수·휴식 완료 기록을 서버에 저장하며 통계와 학습이력에서 확인할 수 있습니다. 서버에 연결할 수 없으면 저장 실패를 안내합니다. 안경 반사·조명·카메라 성능에 따라 깜빡임을 놓칠 수 있습니다. 이 모드는 생활 습관 안내용이며 시력·안구건조증·질환 위험 점수를 측정하지 않습니다. 카메라 위치·줌이 바뀌면 거리 기준만 다시 잡으세요. 기존 횟수·유효 시간·휴식 기록은 유지되고 최근 빈도는 새로 수집합니다. 다른 사람이 측정할 때는 중지 후 새 세션을 시작하세요.</p>
       </section>
     </SessionFrame>
   );

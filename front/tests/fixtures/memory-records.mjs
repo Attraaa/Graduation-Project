@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
-import { parseBatch, localDateKey } from '../../../database/contracts.ts';
+import { parseBatch, parseQuery, localDateKey } from '../../../database/contracts.ts';
 import { parseKeyboardBatch, keyboardCountKey } from '../../../database/keyboard.ts';
+import { parseEyeBatch, eyeFields, emptyEyeTotals } from '../../../database/eye.ts';
 
 const fields = ['runMs', 'validMs', 'scoreTimeSum', 'deviationMs', 'deviationEpisodeCount'];
 const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
@@ -14,6 +15,7 @@ export class MemoryRecords {
   generations = new Map();
   posture = new Map();
   keyboard = new Map();
+  eye = new Map();
 
   generation(owner) { return this.generations.get(owner) ?? 0; }
 
@@ -73,7 +75,7 @@ export class MemoryRecords {
   }
 
   clear(owner) {
-    for (const store of [this.posture, this.keyboard]) for (const [id, value] of store) if (value.record.owner === owner) store.delete(id);
+    for (const store of [this.posture, this.keyboard, this.eye]) for (const [id, value] of store) if (value.record.owner === owner) store.delete(id);
     this.generations.set(owner, this.generation(owner) + 1);
     return this.generation(owner);
   }
@@ -98,6 +100,68 @@ export class MemoryRecords {
         || (localDateKey(record.startedAt, record.offsetMinutes) >= from && localDateKey(record.startedAt, record.offsetMinutes) <= to)))
       .map(({ record, counts }) => ({ record, counts: [...counts.values()].filter(row => row.date >= from && row.date <= to) }));
   }
+
+  writeEye(input) {
+    const batch = parseEyeBatch(input), accepted = this.#accept(this.eye, batch);
+    if (!accepted) return;
+    const previous = accepted.previous?.record;
+    if (previous) {
+      for (const key of ['mode', 'owner', 'startedAt', 'offsetMinutes', 'policyVersion']) {
+        if (previous[key] !== batch.record[key]) throw new Error('안구 기록의 고정 정보가 변경되었습니다.');
+      }
+      if ([...eyeFields, 'updatedAt'].some(key => batch.record[key] + .01 < previous[key])) throw new Error('안구 기록 누적값이 감소했습니다.');
+    }
+    const buckets = new Map(accepted.previous?.buckets);
+    for (const bucket of batch.buckets) {
+      const previous = buckets.get(bucket.minute);
+      if (previous && eyeFields.some(key => bucket[key] + .01 < previous[key])) throw new Error('안구 시간 버킷 누적값이 감소했습니다.');
+      buckets.set(bucket.minute, bucket);
+    }
+    for (const field of eyeFields) {
+      const sum = [...buckets.values()].reduce((total, bucket) => total + bucket[field], 0);
+      if (Math.abs(sum - batch.record[field]) > Math.max(.02, Math.abs(sum) * 1e-10)) throw new Error('안구 요약과 시간 버킷의 합계가 일치하지 않습니다.');
+    }
+    this.eye.set(batch.record.id, structuredClone({ record: batch.record, buckets, digests: accepted.digests }));
+  }
+
+  eyeDetail(owner, id) {
+    const stored = this.eye.get(id);
+    if (stored?.record.owner !== owner) throw new Error('안구 기록을 찾을 수 없습니다.');
+    return structuredClone({ record: stored.record, buckets: [...stored.buckets.values()].sort((a, b) => a.minute - b.minute) });
+  }
+
+  eyeStatistics(input) {
+    const { owner, from, to, mode } = parseQuery(input), groups = new Map();
+    if (mode) throw new Error('안구 통계에는 자세 모드 조건을 사용할 수 없습니다.');
+    for (const { record, buckets } of this.eye.values()) {
+      if (record.owner !== owner) continue;
+      for (const bucket of buckets.values()) {
+        const local = new Date(bucket.minute - record.offsetMinutes * 60_000).toISOString();
+        const date = local.slice(0, 10), hour = local.slice(11, 13);
+        if (date < from || date > to) continue;
+        const key = JSON.stringify([date, hour, record.policyVersion]);
+        const group = groups.get(key) ?? { date, hour, policyVersion: record.policyVersion, ...emptyEyeTotals(), recordIds: new Set() };
+        for (const field of eyeFields) group[field] += bucket[field];
+        group.recordIds.add(record.id); groups.set(key, group);
+      }
+    }
+    return [...groups.values()].sort((a, b) => (a.date + a.hour).localeCompare(b.date + b.hour) || a.policyVersion.localeCompare(b.policyVersion))
+      .map(({ recordIds, ...row }) => ({ ...row, sessionCount: recordIds.size }));
+  }
+
+  history(input) {
+    const { owner, from, to, mode, offset } = parseQuery(input);
+    if (mode) throw new Error('학습이력에는 모드 조건을 사용할 수 없습니다.');
+    const records = [...this.posture.values(), ...this.eye.values()].map(({ record }) => record)
+      .filter(record => record.owner === owner
+        && localDateKey(record.startedAt, record.offsetMinutes) >= from && localDateKey(record.startedAt, record.offsetMinutes) <= to)
+      .sort((a, b) => b.startedAt - a.startedAt || a.mode.localeCompare(b.mode) || a.id.localeCompare(b.id));
+    const counts = {};
+    for (const record of records) {
+      const date = localDateKey(record.startedAt, record.offsetMinutes); counts[date] = (counts[date] ?? 0) + 1;
+    }
+    return structuredClone({ counts, records: records.slice(offset, offset + 100), hasMore: records.length > offset + 100 });
+  }
 }
 
 const json = (status, body) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
@@ -115,17 +179,24 @@ export function memoryServer(store, owner) {
     if (method === 'POST') writes.push(structuredClone(body));
     const failure = failures.findIndex(item => item.path === pathname);
     if (failure >= 0) return json(503, { message: failures.splice(failure, 1)[0].message });
-    const query = { owner, ...Object.fromEntries(searchParams) };
+    const eyeQueryFields = pathname === '/api/records/eye-statistics' ? ['from', 'to']
+      : pathname === '/api/records/history' ? ['from', 'to', 'offset'] : null;
+    if (eyeQueryFields && [...searchParams.keys()].some(key => !eyeQueryFields.includes(key))) return json(400, { message: '지원하지 않는 조회 조건입니다.' });
+    const query = { owner, ...Object.fromEntries(searchParams), ...(searchParams.has('offset') ? { offset: Number(searchParams.get('offset')) } : {}) };
     try {
       if (method === 'POST' && body.record.owner !== owner) return json(403, { message: '다른 계정의 기록은 저장할 수 없습니다.' });
       if (method === 'GET' && pathname === '/api/records/generation') return json(200, { generation: store.generation(owner) });
       if (method === 'DELETE' && pathname === '/api/records') return json(200, { generation: store.clear(owner) });
       if (method === 'POST' && pathname === '/api/records/posture') { store.write(body); return new Response(null, { status: 204 }); }
       if (method === 'POST' && pathname === '/api/records/keyboard') { store.writeKeyboard(body); return new Response(null, { status: 204 }); }
+      if (method === 'POST' && pathname === '/api/records/eye') { store.writeEye(body); return new Response(null, { status: 204 }); }
       if (method === 'GET' && pathname === '/api/records/posture-statistics') return json(200, store.statistics(query));
       if (method === 'GET' && pathname === '/api/records/keyboard') return json(200, store.keyboardStatistics(query));
+      if (method === 'GET' && pathname === '/api/records/eye-statistics') return json(200, store.eyeStatistics(query));
+      if (method === 'GET' && pathname === '/api/records/history') return json(200, store.history(query));
       if (method === 'GET' && pathname.startsWith('/api/records/posture/')) return json(200, store.detail(owner, decodeURIComponent(pathname.slice(21))));
       if (method === 'GET' && pathname.startsWith('/api/records/keyboard/')) return json(200, store.keyboardDetail(owner, decodeURIComponent(pathname.slice(22))));
+      if (method === 'GET' && pathname.startsWith('/api/records/eye/')) return json(200, store.eyeDetail(owner, decodeURIComponent(pathname.slice(17))));
       return json(404, { message: `${method} ${pathname}` });
     } catch (error) { return json(409, { message: error.message }); }
   };

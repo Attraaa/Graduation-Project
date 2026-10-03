@@ -1,12 +1,20 @@
 import { averageScore, localDateKey } from '../../../../database/contracts.ts';
 import type { PostureRecord, RecordDetail } from '../../../../database/contracts.ts';
+import type { EyeRecord } from '../../../../database/eye.ts';
 import { turtleRecordView } from './modes/turtle.ts';
 import { shoulderRecordView } from './modes/shoulder.ts';
 export function durationText(ms: number) {
   const seconds = Math.floor(ms / 1000);
   return seconds < 60 ? seconds + '초' : Math.floor(seconds / 60) + '분 ' + seconds % 60 + '초';
 }
-export function historyView(record: PostureRecord) {
+export function historyView(record: PostureRecord | EyeRecord) {
+  if (record.mode === 'eye') {
+    const local = new Date(record.startedAt - record.offsetMinutes * 60000).toISOString();
+    return { id: record.id, date: local.slice(0, 10), mode: record.mode, title: '안구 관찰',
+      startedAt: local.slice(11, 19), duration: durationText(record.runMs), score: null,
+      warningCount: record.nearReminders + record.openReminders, status: record.status, policy: record.policyVersion,
+      coverage: record.runMs ? 100 * record.validMs / record.runMs : null, blinks: record.blinks };
+  }
   const mode = record.mode === 'turtle' ? turtleRecordView : shoulderRecordView;
   const local = new Date(record.startedAt - record.offsetMinutes * 60_000).toISOString();
   return { id: record.id, date: localDateKey(record.startedAt, record.offsetMinutes), mode: record.mode,

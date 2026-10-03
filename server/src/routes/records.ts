@@ -5,6 +5,7 @@ import { asyncHandler, HttpError } from '../http.js';
 import type { MysqlRecordRepository } from '../repositories/records.js';
 import { parseBatch, parseQuery, recordText } from '../../../database/contracts.ts';
 import { parseKeyboardBatch, parseKeyboardQuery } from '../../../database/keyboard.ts';
+import { parseEyeBatch } from '../../../database/eye.ts';
 
 type RecordStore = Pick<MysqlRecordRepository, keyof MysqlRecordRepository>;
 
@@ -78,6 +79,28 @@ export function createRecordsRouter(repository: RecordStore, auth: Auth) {
   router.get('/keyboard/:id', asyncHandler(async (req, res) => {
     const id = parse(() => recordText(req.params.id));
     res.json(await repository.keyboardDetail(req.user!.userId, id));
+  }));
+
+  router.post('/eye', asyncHandler(async (req, res) => {
+    const batch = parse(() => parseEyeBatch(req.body));
+    ownBatch(req, batch.record.owner);
+    await repository.writeEye(req.user!.userId, batch);
+    res.status(204).end();
+  }));
+
+  router.get('/eye-statistics', asyncHandler(async (req, res) => {
+    const input = parse(() => parseQuery(query(req, owner(req), ['from', 'to'])));
+    res.json(await repository.eyeStatistics(req.user!.userId, input));
+  }));
+
+  router.get('/eye/:id', asyncHandler(async (req, res) => {
+    const id = parse(() => recordText(req.params.id));
+    res.json(await repository.eyeDetail(req.user!.userId, id));
+  }));
+
+  router.get('/history', asyncHandler(async (req, res) => {
+    const input = parse(() => parseQuery(query(req, owner(req), ['from', 'to', 'offset'])));
+    res.json(await repository.history(req.user!.userId, input));
   }));
 
   return router;
