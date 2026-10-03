@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import Button from '../components/Button';
 import { UserPlus } from 'lucide-react';
@@ -15,19 +15,20 @@ const Register = () => {
     confirmPassword: ''
   });
   const [idMessage, setIdMessage] = useState('');
+  const latestId = useRef('');
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const next = {...formData, [e.target.name]: e.target.value};
     setFormData(next);
 
     if (e.target.name === 'userId') {
-      if (!e.target.value.trim()) {
-        setIdMessage('');
-      } else if (isDuplicateId(e.target.value)) {
-        setIdMessage('이미 사용 중인 아이디입니다.');
-      } else {
-        setIdMessage('사용 가능한 아이디입니다.');
-      }
+      const value = e.target.value.trim();
+      latestId.current = value;
+      setIdMessage('');
+      // Only the answer for the latest typed ID may update the message.
+      if (value) void isDuplicateId(value).then(taken => {
+        if (latestId.current === value) setIdMessage(taken ? '이미 사용 중인 아이디입니다.' : '사용 가능한 아이디입니다.');
+      }).catch(() => {});
     }
   };
 
@@ -37,17 +38,13 @@ const Register = () => {
       void notify({ title: '입력 확인', message: '닉네임, 아이디, 비밀번호, 비밀번호 확인을 모두 입력해 주세요.', tone: 'warning' });
       return;
     }
-    if (isDuplicateId(formData.userId)) {
-      void notify({ title: '아이디 중복', message: '이미 사용 중인 아이디입니다. 다시 작성해 주세요.', tone: 'warning' });
-      return;
-    }
     if(formData.password !== formData.confirmPassword) {
       void notify({ title: '비밀번호 확인', message: '비밀번호가 일치하지 않습니다.', tone: 'warning' });
       return;
     }
-    const result = registerUser({
-      id: formData.userId,
-      nickname: formData.nickname,
+    const result = await registerUser({
+      username: formData.userId.trim(),
+      nickname: formData.nickname.trim(),
       password: formData.password,
     });
     await notify({ title: result.ok ? '가입 완료' : '가입 실패', message: result.message, tone: result.ok ? 'success' : 'warning' });

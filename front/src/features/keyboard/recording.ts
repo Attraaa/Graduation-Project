@@ -48,7 +48,7 @@ async function save(entry: Active): Promise<void> {
         entry.collector.acknowledge();
         if (batch.record.status !== 'running') { active.delete(entry); break; }
       } while (entry.collector.record.status !== 'running');
-      entry.error = null; announceRecording('키보드 집계가 이 PC에 저장되었습니다.');
+      entry.error = null; announceRecording('키보드 집계가 서버에 저장되었습니다.');
     } catch (error) {
       if (!active.has(entry)) return;
       entry.error = error instanceof Error ? error.message : String(error);
@@ -68,7 +68,7 @@ registerRecorder({
 export function beginKeyboardRecording() {
   const owner = getCurrentUser()?.id;
   const noop = { press: () => {}, finish: () => {} };
-  if (!owner || !window.motiRecords) { announceRecording('키보드 집계 저장은 로그인한 데스크톱 앱에서 사용할 수 있습니다.'); return noop; }
+  if (!owner) { announceRecording('로그인하면 키보드 집계를 저장할 수 있습니다.'); return noop; }
   const epoch = Date.now(), start = performance.now(), now = () => Math.round(epoch + performance.now() - start);
   const collector = new KeyboardCollector({ id: crypto.randomUUID(), owner, startedAt: epoch, updatedAt: epoch,
     offsetMinutes: new Date(epoch).getTimezoneOffset(), status: 'running',

@@ -8,12 +8,16 @@ import { useDialog } from '../components/dialog/useDialog';
 const Login = () => {
   const navigate = useNavigate();
   const { notify } = useDialog();
-  const [userId, setUserId] = useState('admin');
-  const [password, setPassword] = useState('admin');
+  const [userId, setUserId] = useState('');
+  const [password, setPassword] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    const result = loginUser(userId, password);
+    if (submitting) return;
+    setSubmitting(true);
+    const result = await loginUser(userId, password);
+    setSubmitting(false);
     if (!result.ok) {
       void notify({ title: '로그인 실패', message: result.message, tone: 'warning' });
       return;
@@ -61,7 +65,7 @@ const Login = () => {
           </div>
 
           <div className="space-y-3 pt-4">
-            <Button type="submit" variant="primary" fullWidth>
+            <Button type="submit" variant="primary" fullWidth disabled={submitting}>
               시작하기
             </Button>
             

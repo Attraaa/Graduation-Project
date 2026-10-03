@@ -1,22 +1,23 @@
-# 목·어깨·키보드·안구 로컬 기록
+# 목·어깨·키보드·안구 기록
 
-소스는 저장소 루트 `database/`에 두며, 실제 DB도 프로젝트 상대 경로 `database/sqlite/posture.sqlite`에 둡니다. 개발 빌드의 `front/dist-electron/main.js` 위치에서 `../../database/sqlite`를 계산하므로 현재 체크아웃을 옮겨도 같은 저장소 안의 상대 위치를 사용합니다. `front/database`나 기존 MySQL SQL을 사용하지 않습니다.
+기록 계약 소스는 저장소 루트 `database/`에 두고, 실제 저장소는 **Moti API 서버의 MySQL**입니다(2026-10-03 사용자 결정: 서버 전용 저장, 서버 로그인, 기존 로컬 기록은 이전하지 않음). 앱은 로그인한 계정의 JWT로 `/api/records`를 호출합니다. Electron 로컬 SQLite 저장(`database/sqlite/repository.ts`, records IPC)은 제거했습니다. 이전에 `database/sqlite/posture.sqlite`에 쌓인 파일은 삭제하지 않았지만 더 이상 읽거나 쓰지 않습니다.
 
-이 경로는 2026-09-19 사용자의 명시적 변경 요청을 반영합니다. 기존 `<Electron userData>/database/posture.sqlite`가 있고 새 경로에 DB가 없으면 첫 실행에 DB와 WAL을 한 번 복사하며, 기존 파일은 삭제하지 않습니다. 새 경로에 DB가 이미 있으면 덮어쓰지 않습니다. 테스트는 `MOTI_RECORD_DATABASE_DIRECTORY`로 격리된 임시 폴더를 사용합니다.
+서버 주소는 빌드 시 `front/.env`의 `VITE_MOTI_API_URL`로 고정됩니다. 로컬 서버로 개발할 때는 `front/.env.local`(gitignore)에 `VITE_MOTI_API_URL=http://localhost:4000`을 둡니다. 현재 운영 주소는 HTTP이므로 비밀번호와 토큰이 암호화되지 않은 채 전송됩니다. HTTPS 적용은 남은 작업입니다.
 
 ## 상체 통합 기록 (2026-10-02)
 
 사용자가 시작하는 모드는 `upper_body` 하나이며, 같은 캡처에서 목과 어깨를 독립 계산·저장합니다. 기존 DB와 이력을 보존하기 위해 저장 계약의 `turtle`/`shoulder`는 부위 키로 유지합니다. 두 기록은 같은 시작 시각과 UUID 접두어를 사용하고 각자 배치 재시도·종료 flush를 수행합니다. 한 부위 쓰기 실패가 다른 부위 데이터를 삭제하지 않으며, 미완료 배치는 기존 재시도 안내로 복구합니다. 두 쓰기의 원자적 동시 커밋은 보장하지 않습니다.
 
-통계의 상체 선택에서는 두 부위를 나란히 표시하고 정책별로 분리합니다. 이력과 달력 수는 부위별 기록 기준이므로 상체 1회는 기록 2개입니다. 합산 점수·두 부위 실행 시간 합산은 하지 않습니다. 기존 자세 데이터와 테이블은 보존하며 키보드 저장은 아래의 추가 마이그레이션을 사용합니다. 현재 v3 점수 정책 ID에는 설정 해시가 들어가므로 서로 다른 가중치·상하 gain·보호 설정 및 이전 v1/v2 정책의 점수를 평균하지 않습니다. 회전 보류 구간에는 유효 시간과 점수 적분을 더하지 않습니다. 상체 테이블은 유지하며 공통 SQLite 스키마 v3에서 안구 테이블만 추가합니다. 원시 좌표나 영상을 추가 저장하지 않습니다.
+통계의 상체 선택에서는 두 부위를 나란히 표시하고 정책별로 분리합니다. 이력과 달력 수는 부위별 기록 기준이므로 상체 1회는 기록 2개입니다. 합산 점수·두 부위 실행 시간 합산은 하지 않습니다. 현재 v3 점수 정책 ID에는 설정 해시가 들어가므로 서로 다른 가중치·상하 gain·보호 설정 및 이전 v1/v2 정책의 점수를 평균하지 않습니다. 회전 보류 구간에는 유효 시간과 점수 적분을 더하지 않습니다. 서버 기록 테이블에는 원시 좌표나 영상을 저장하지 않습니다.
 
 ## 책임과 흐름
 
 1. `PostureMonitor`는 기존 observation/evaluation 계산 직후 모든 캡처 결과의 누적 시간·점수 합을 `features/records/recording.ts`에 전달합니다. UI의 200ms 갱신 주기와 독립적입니다.
 2. `recorder.ts / CaptureRecorder`가 실제 분 경계에 유효 구간의 사다리꼴 점수 적분을 분할합니다. 원시 프레임·영상·좌표·비밀번호는 저장하지 않습니다.
 3. renderer는 약 1초마다 바뀐 분 버킷을 최대 120개씩 전달합니다. `contracts.ts`는 ID, 세대, 순번, 버전, 누적 합, 시간 범위의 직렬화 계약입니다.
-4. Electron main만 `sqlite/repository.ts / RecordRepository` 연결을 소유합니다. 신뢰한 main 창의 원래 문서만 IPC를 호출할 수 있습니다.
-5. `Statistics`와 `LearningHistory`가 IPC로 실제 데이터를 조회합니다. 목/어깨 표시 어댑터는 `front/src/features/records/modes/`에 있습니다.
+4. `features/records/api.ts`가 같은 `RecordsApi` 계약을 HTTP로 구현합니다. 서버의 `server/src/routes/records.ts`가 같은 `database/` 검증기로 입력을 다시 검사하고, `server/src/repositories/records.ts / MysqlRecordRepository`가 트랜잭션으로 저장합니다. 기록의 owner는 로그인 사용자 ID 문자열이며, 서버는 요청 본문의 owner가 토큰 사용자와 다르면 403으로 거절합니다. 조회는 토큰 사용자 기준이며 owner를 받지 않습니다.
+5. `Statistics`와 `LearningHistory`가 API로 실제 데이터를 조회합니다. 목/어깨 표시 어댑터는 `front/src/features/records/modes/`에 있습니다.
+6. Electron main은 창을 닫을 때 renderer에 미전송 배치를 서버로 보내도록 요청(`records:closing`)만 합니다.
 
 ## 시간과 숫자의 의미
 
@@ -29,15 +30,15 @@
 
 ## 저장·복구·삭제
 
-스키마 v3는 기존 owners, records, buckets, batches와 v2의 keyboard_records, keyboard_counts, keyboard_batches를 유지하고 eye_records, eye_buckets, eye_batches를 추가합니다. 기존 v1/v2 파일은 같은 Electron 연결의 트랜잭션에서 필요한 테이블만 추가하고 목·어깨·키보드 행을 보존합니다. application_id, user_version, quick_check, foreign_key_check를 확인하고 빈 새 파일만 초기화합니다. 손상·다른 제품·미지원 버전 파일은 덮어쓰지 않고 오류를 표시합니다. WAL과 synchronous=FULL을 사용합니다. 실제 DB와 `-wal`/`-shm` 보조 파일은 `.gitignore`로 제외됩니다. 서버 SQL은 실행하지 않습니다.
+서버 테이블은 `server/migrations/002_record_tables.sql`(기존 DB에 추가만 함)과 `server/schema.sql`(새 DB)에 있습니다. `record_owners`(사용자별 삭제 세대), `posture_records`/`posture_buckets`/`posture_batches`, `keyboard_records`/`keyboard_counts`/`keyboard_batches`이며 모두 `users` 삭제 시 함께 삭제됩니다. 기록 ID·집계 키 비교가 대소문자를 구분하도록 utf8mb4_bin을 사용합니다. 기존 `sessions`/`posture_logs`/`daily_statistics` 테이블과 API는 변경하지 않았고 이 기록과 섞지 않습니다.
 
-기록 요약, 바뀐 버킷, 순번 digest는 같은 트랜잭션으로 저장합니다. DB 합계와 요약이 불일치하면 전부 롤백합니다. 같은 ID/순번/내용 재시도는 한 번 반영하고 다른 내용의 순번 재사용·누적 감소는 거절합니다.
+한 사용자의 모든 쓰기·삭제는 `record_owners` 행을 먼저 잠가 직렬화합니다. 기록 요약, 바뀐 버킷, 순번 digest는 같은 트랜잭션으로 저장하며 버킷 합계와 요약이 불일치하면 전부 롤백합니다. 같은 ID/순번/내용 재시도는 한 번 반영하고 다른 내용의 순번 재사용·순서 건너뛰기·누적 감소·종료된 기록 갱신·다른 계정 ID 재사용은 409로 거절합니다. 계약 위반 입력은 400, 없는 기록은 404입니다.
 
-저장 실패 시 화면에 재시도 버튼을 표시하며 메모리 배치를 유지합니다. 정상 창 닫기는 flush 응답을 기다립니다. 5초 내 저장 확인을 받지 못하면 돌아가기 또는 미저장 기록을 버리고 닫기를 선택하게 합니다. 비정상 종료 후 커밋된 running 기록은 interrupted로 복구하지만 미전송 메모리까지 복원하지는 못합니다.
+저장 실패 시 화면에 재시도 버튼을 표시하며 메모리 배치를 유지합니다. 네트워크 오류도 같은 경로로 재시도합니다. 정상 창 닫기는 flush 응답을 기다리고, 5초 내 저장 확인을 받지 못하면 돌아가기 또는 미저장 기록을 버리고 닫기를 선택하게 합니다. 서버에는 앱 재시작 신호가 없으므로 비정상 종료된 기록은 `running` 상태로 남으며 SQLite 때처럼 `interrupted`로 바꾸지 않습니다. 미전송 메모리 배치는 복원하지 못합니다.
 
-설정의 통계 삭제는 확인 후 현재 로컬 계정의 자세·키보드·안구 이력, 집계·버킷·중복 기록을 함께 삭제하고 generation을 증가시킵니다. 늦게 도착한 이전 배치가 삭제 데이터를 되살릴 수 없습니다. 이 삭제는 되돌릴 수 없습니다. 다른 계정은 보존합니다. 자동 보존기간 삭제·export·백업 UI는 없습니다.
+설정의 통계 삭제는 확인 후 현재 계정의 자세·키보드·안구 기록과 버킷·집계·digest를 서버에서 함께 삭제하고 generation을 증가시킵니다. 늦게 도착한 이전 배치가 삭제 데이터를 되살릴 수 없습니다. 이 삭제는 되돌릴 수 없고 다른 계정은 보존합니다. 자동 보존기간 삭제·export·백업 UI는 없습니다.
 
-계정 ID는 기존 localStorage 데모 계정의 데이터 분리 기준입니다. 같은 PC 사용자의 악의적 접근을 막는 인증/암호화 경계가 아닙니다. 브라우저 단독 실행에는 저장 IPC가 없으며 저장 불가를 안내합니다. DB가 소스 체크아웃 안에 있으므로 저장소 폴더를 삭제하거나 새로 clone하면 로컬 기록도 함께 사라집니다. 설치 패키지의 쓰기 권한과 보존 동작은 별도로 검증해야 합니다.
+인증은 서버 `users` 테이블과 JWT(`/api/auth`)입니다. 토큰과 사용자 정보는 localStorage `moti.session`에 두며, 만료·무효 토큰(401)이면 세션을 지우고 로그인 화면으로 돌아갑니다. 아이디 찾기·비밀번호 재설정은 서버에 기능이 없어 안내만 표시합니다. 오프라인 저장·큐는 없으므로 서버에 연결할 수 없으면 측정은 되지만 기록 저장은 실패로 표시됩니다.
 
 ## 키보드 집계
 
@@ -49,41 +50,28 @@
 
 ## 서버 연결 경계
 
-`contracts.ts`는 React/Electron/SQL과 독립된 버전·안정 ID·시간·정책 계약입니다. 향후 서버 어댑터에서 인증된 사용자 매핑, 서버 API, 전송 확인/재시도, 삭제 전파와 충돌 정책을 구현해야 합니다. 현재 HTTP 전송·동기화 큐·서버 인증·암호화·의료 분석은 구현하지 않았습니다. 기존 Express/MySQL 집계와 혼합하지 않습니다.
+`contracts.ts`는 React/Electron/SQL과 독립된 버전·안정 ID·시간·정책 계약입니다. 서버 저장은 위 HTTP 경로로 구현했습니다. 오프라인 동기화 큐·HTTPS·의료 분석은 구현하지 않았습니다. 기존 Express `sessions`/`daily_statistics` 집계와 혼합하지 않습니다.
 
 ## 검증과 실행
 
-루트에서 `setup.cmd`, `moti.cmd check`를 사용합니다. 별도 npm 프로젝트/패키지 관리자는 추가하지 않았습니다. frontend 타입 검사와 린트가 루트 database 소스까지 포함합니다.
+루트에서 `setup.cmd`, `moti.cmd check`를 사용합니다. frontend 타입 검사와 린트가 루트 database 소스까지 포함하고, 서버 빌드(`tsc` 타입 검사 + esbuild 번들)도 `database/contracts.ts`, `keyboard.ts`, `eye.ts`를 포함합니다. 서버를 배포할 때는 `server/`와 함께 `database/contracts.ts`, `database/keyboard.ts`, `database/eye.ts`를 같은 상대 위치(`<배포 루트>/database/`)에 두고 `npm run build`를 실행합니다.
 
-```powershell
-. .\scripts\toolchain.ps1
-Set-Location front
-& $MotiNode $MotiNpm run build -- --configLoader runner
-& $MotiNode scripts/check-records-electron.mjs
-```
+- 프론트 `front/tests/record-*.test.mjs`, `keyboard-*.test.mjs`: 계약, 버킷 경계, 저장 재시도·종료 flush·삭제 후 거절, 실 관측 reducer 재생, 표시를 검증합니다. 서버 대신 `tests/fixtures/memory-records.mjs`(서버 수용 규칙을 따르는 메모리 저장소와 fetch 대역)를 사용합니다.
+- 서버 `server/test/records.test.ts`: 인증 필수, 다른 계정 배치 403, 잘못된 계약·조회 조건 400이 DB 접근 전에 결정되는지 검사합니다.
+- 서버 `server/test/records-repository.test.ts`: 실제 MySQL에서 재시도 1회 반영, 합계 불일치 롤백, 소유권·순서·감소·삭제 세대, 동시 첫 쓰기, 100건 페이지·달력 수, 정책·모드·사용자 분리 평균, 자정 분할, 키보드 집계를 검사합니다. 데이터베이스를 만들 수 있는 계정을 `MOTI_TEST_MYSQL_URL=mysql://user:password@host:port`로 지정할 때만 실행되며, 실행마다 고유 이름의 임시 DB를 만들고 끝나면 삭제합니다. 지정하지 않으면 건너뜁니다.
 
-Electron 테스트는 `front/.moti-cache/records-electron-*`의 별도 프로필에 합성 데이터를 쓰고 두 앱 프로세스에서 재시작·IPC·통계·달력·상세·현재 계정 삭제·정상 종료를 검사합니다. 실제 사용자 DB/카메라/키 입력을 사용하지 않습니다. 캡처 PNG가 같은 프로필에 남습니다. Windows GPU 보조 프로세스가 허용되는 실행 환경이 필요합니다.
+2026-10-03 검증: 로컬 임시 MySQL 9.6에서 위 서버 테스트 전부, 프론트 116개 테스트·타입 검사·린트·빌드를 통과했습니다. 배포 서버(MySQL 8.4)에는 002를 적용하고 임시 계정으로 가입 → 로그인 → 자세 배치 저장·재시도·종료 → 목록·상세·시간대 통계 → 키보드 집계 저장·조회 → 1.5MB 본문 전달 → file://(Origin null)·개발 서버 CORS → 삭제 후 이전 세대 저장 거절까지 확인한 뒤 임시 계정을 삭제했습니다. 실제 카메라로 앱을 실행한 장시간 저장, 대규모 데이터 조회 성능, Windows 설치 패키지는 검증하지 않았습니다. 상세 조회는 한 기록의 분 버킷 전체, 중복 판정은 배치당 digest를 보관하므로 장기간 누적 데이터의 용량·조회 성능을 후속 측정해야 합니다.
 
-단위 테스트 `front/tests/record-*.test.mjs`는 계약, 파일 복구/잠금/롤백, 버킷 경계, 저장 재시도, 실 관측 reducer 재생, 집계·페이지·표시를 검증합니다. 실제 카메라 장시간 실행·설치 패키지·대규모 DB 성능은 별도 검증 대상입니다. 상세 조회는 한 기록의 분 버킷 전체, 중복 기록은 배치당 digest를 보관하므로 장기간 누적 데이터의 용량·조회 성능을 후속 측정해야 합니다.
+## 안구 기록 — 서버 저장 통합 (2026-10-03)
 
-## 안구 기록 (스키마 v3)
+정섭님의 서버 전용 저장·JWT 로그인 변경에 맞춰 안구의 분 집계와 통계·학습이력을 같은 API에 연결했습니다. 이전 로컬 DB 파일은 삭제하거나 서버로 이전하지 않습니다.
 
-같은 `database/sqlite/posture.sqlite` 파일에 저장합니다. 별도 DB 파일이나 서버 SQL은 추가하지 않습니다.
+- 공유 계약은 `database/eye.ts`, 순수 시간 집계는 `eyeRecorder.ts`입니다. 모든 캡처를 받아 실행/유효 시간, 깜빡임·휴식 완료·가까워짐/깜빡임 안내 횟수를 분 경계에 나누며, 카드 표시 주기와 독립적으로 약 1초마다 변경 버킷을 보냅니다.
+- `POST /api/records/eye`, `GET /api/records/eye-statistics`, `GET /api/records/eye/:id`를 사용합니다. `GET /api/records/history`는 목·어깨·안구를 합친 시작일별 개수와 100개 페이지를 반환합니다.
+- 안구의 `eye_records`(요약 JSON), `eye_buckets`(분별 누적 집계), `eye_batches`(순번 digest)를 추가합니다. 기존 DB에는 **추가 전용** `server/migrations/003_eye_records.sql`을 002 다음에 적용합니다. 기존 테이블이나 데이터를 삭제하지 않습니다. `server/schema.sql`은 새 테스트/설치 DB 전용이며 기존 운영 DB에는 실행하지 않습니다.
+- owner는 JWT 사용자 ID와 일치해야 합니다. record_owners 행 잠금·generation·순번·digest·요약 합계 검증을 공유해 재시도 중복·다른 계정 접근·삭제 후 늦은 쓰기를 거절합니다. 현재 계정 삭제 시 안구도 함께 삭제합니다.
+- 유효 관찰 30초 미만의 빈도는 자료 없음, 30초 이상이며 깜빡임 0회이면 0회/분입니다. 통계는 최근 7/30일을 정책별로 분리하고, 학습이력은 세션과 분별 상세를 제공합니다. 휴식 완료는 20초 이상 휴식 뒤 복귀 버튼을 누른 본인 확인 횟수이며 얼굴 유실로 만들지 않습니다.
+- 중지·오류·재시작·화면 이동·Electron 정상 종료에서 미전송 배치를 전송합니다. 네트워크 오류 시 메모리 배치를 같은 순번/내용으로 재시도합니다. 비정상 종료 후 커밋된 running 기록은 서버 정책에 따라 그대로 남습니다. 브라우저 강제 닫기와 앱 강제 종료의 미전송 배치는 복원하지 못합니다.
+- 영상·랜드마크·원시 얼굴 크기·건강 점수는 저장하지 않습니다. 로그인한 브라우저도 HTTP 저장을 사용하며 로그인이 없으면 저장하지 않는다고 안내합니다.
 
-| 테이블 | 저장 내용 |
-| --- | --- |
-| eye_records | 세션 ID, 계정 ID, 시작일, 배치 순번, 세션 요약 JSON |
-| eye_buckets | 세션 ID + epoch 분, 시작 offset으로 계산한 날짜/시간, 실행·유효 시간, 깜빡임·휴식·안내 횟수 |
-| eye_batches | 세션 ID + 배치 순번, 중복 재시도를 판별하는 SHA-256 digest |
-
-`eye.ts`가 직렬화·검증 계약, `eyeRecorder.ts`가 순수 분 집계, `front/src/features/eye/recording.ts`가 주기 저장과 종료·재시도를 소유합니다. Electron main의 기존 신뢰 창 검사와 단일 SQLite 연결을 공유합니다.
-
-- EyeMonitor의 모든 측정 표본을 집계하며 카드의 10Hz 표시 주기와 독립적입니다. 기준 수집·유실·긴 간격·휴식은 유효 시간에 포함하지 않습니다. 실행 시간에는 준비와 휴식을 포함합니다.
-- runMs/validMs는 밀리초, blinks는 관찰한 깜빡임, breaks는 20초 이상 휴식 후 사용자가 복귀 버튼을 눌러 확인한 횟수입니다. nearReminders/openReminders는 안내가 꺼짐에서 켜짐으로 바뀐 횟수이며 프레임마다 증가하지 않습니다.
-- 얼굴 크기 원시값·영상·랜드마크는 저장하지 않습니다. 가까워짐은 안내 횟수로 남깁니다. 눈 건강 점수나 시력·질환 판정은 만들지 않습니다.
-- 빈도는 전체 깜빡임 / 유효 시간(분)입니다. eye-habits-v2와 동일하게 유효 관찰 30초 미만은 자료 없음, 30초 이상에서 깜빡임 0회는 0회/분으로 구분합니다.
-- 약 1초마다 바뀐 분 버킷을 최대 120개씩 저장합니다. 오래 중단된 저장도 여러 배치로 나누어 합계를 맞춥니다. 배치 실패 후 같은 내용·순번을 재시도하며 그동안 추가된 관찰은 후속 배치에 반영합니다.
-- 중지·오류·재시작·화면 이탈·정상 창 종료에서 저장합니다. 휴식과 거리 기준 재수집은 같은 세션을 유지합니다. 비정상 종료 시 이미 커밋한 running 기록만 interrupted로 복구합니다.
-- 통계는 관찰 날짜별 최근 7/30일을 조회하고 정책 버전별로 분리합니다. 학습이력은 목·어깨와 안구를 합쳐 시작일별 개수·100개 페이지·안구 분별 상세를 제공합니다. 기존 list/detail/statistics 자세 API와 키보드 API는 유지합니다.
-- 현재 계정 삭제 시 안구 테이블도 함께 삭제하고 동일 generation으로 늦은 쓰기를 거절합니다. 다른 계정은 보존합니다.
-- 로그인하지 않았거나 브라우저 시연(eye.cmd)이면 저장 불가를 명시합니다. 이전 버전에서 메모리에만 있었던 안구 결과는 복구할 수 없으며 이 버전의 새 측정부터 기록합니다.
+이 PR 병합은 코드 통합이며 운영 서버 배포와 003 SQL 실행은 별도입니다. 신규 서버 코드를 배포할 때 `database/eye.ts`도 같은 상대 경로에 포함하세요.

@@ -15,3 +15,6 @@
 /scripts/capture-moti-screenshots.mjs
 /scripts/create-moti-flow-svg.mjs
 /scripts/create_moti_report.py
+
+# Personal local workspace
+/seop/

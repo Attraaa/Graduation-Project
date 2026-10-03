@@ -7,7 +7,7 @@ import { turtleScorePolicy as neck } from '../src/features/posture/modes/turtle.
 import { shoulderScorePolicy as shoulder } from '../src/features/posture/modes/shoulder.ts';
 import { MOTION_PROTECTION } from '../src/features/posture/scoreSettings.ts';
 import { CaptureRecorder } from '../../database/recorder.ts';
-import { RecordRepository } from '../../database/sqlite/repository.ts';
+import { MemoryRecords } from './fixtures/memory-records.mjs';
 import { sampleBatch } from './fixtures/record-batch.mjs';
 
 const policies = [neck, shoulder];
@@ -118,8 +118,8 @@ test('turning intervals remain excluded from persisted scores and old policy rec
     if (at === 6000) beforeTurn = latest;
     if (at === 8000) latest.evaluations.forEach((state, index) => close(state.validMs, beforeTurn.evaluations[index].validMs));
   }
-  const db = new RecordRepository(':memory:');
-  try {
+  const db = new MemoryRecords();
+  {
     const old = sampleBatch(); old.record.scorePolicyVersion = 'upper-body-neck-v2-old'; db.write(old);
     captures.forEach((capture, index) => {
       capture.finish(10000); db.write(capture.batch(0));
@@ -130,5 +130,5 @@ test('turning intervals remain excluded from persisted scores and old policy rec
       assert.match(stored.scorePolicyVersion, /-v3-/);
     });
     assert.equal(db.detail('demo', old.record.id).record.scorePolicyVersion, 'upper-body-neck-v2-old');
-  } finally { db.close(); }
+  }
 });

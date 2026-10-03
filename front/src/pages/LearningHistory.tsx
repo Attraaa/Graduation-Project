@@ -213,7 +213,7 @@ const LearningHistory = () => {
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <header className="mb-8">
         <h1 className="text-3xl font-black text-gray-700">학습이력</h1>
-        <p className="mt-2 font-bold text-gray-600">이 PC에 저장한 상체 자세·안구 관찰 기록을 시작일별로 확인합니다. 상체 측정은 목·어깨 기록 2개, 안구 측정은 기록 1개로 표시합니다. 안구 상세에서는 깜빡임·유효 시간·휴식 기록을 확인할 수 있습니다.</p>
+        <p className="mt-2 font-bold text-gray-600">로그인한 계정의 서버에 저장한 상체 자세·안구 관찰 기록을 시작일별로 확인합니다. 상체 측정은 목·어깨 기록 2개, 안구 측정은 기록 1개로 표시합니다. 안구 상세에서는 깜빡임·유효 시간·휴식 기록을 확인할 수 있습니다.</p>
       </header>
 
       <div className="card-duo">

@@ -11,8 +11,7 @@ const Settings = () => {
   const currentUser = getCurrentUser();
   const [notificationsEnabled, setNotificationsEnabled] = useState(localStorage.getItem('postureAI.notifications') !== 'off');
   const [darkMode, setDarkMode] = useState(localStorage.getItem('postureAI.theme') === 'dark');
-  const [nickname, setNickname] = useState(currentUser?.nickname ?? '예비 사용자');
-  const [accountPassword, setAccountPassword] = useState('');
+  const [nickname, setNickname] = useState(currentUser?.nickname ?? '');
   const [currentPassword, setCurrentPassword] = useState('');
   const [nextPassword, setNextPassword] = useState('');
   const [alertFrequency, setAlertFrequency] = useState(localStorage.getItem('postureAI.alertFrequency') ?? '10');
@@ -39,9 +38,8 @@ const Settings = () => {
   };
 
   const handleAccountSave = async () => {
-    const result = updateCurrentUser(nickname, accountPassword);
+    const result = await updateCurrentUser(nickname);
     await notify({ title: result.ok ? '변경 완료' : '변경 실패', message: result.message, tone: result.ok ? 'success' : 'warning' });
-    if (result.ok) setAccountPassword('');
   };
 
   const handlePasswordChange = async () => {
@@ -49,7 +47,7 @@ const Settings = () => {
       await notify({ title: '비밀번호 확인', message: '새 비밀번호는 6자 이상 입력해 주세요.', tone: 'warning' });
       return;
     }
-    const result = changePassword(currentPassword, nextPassword);
+    const result = await changePassword(currentPassword, nextPassword);
     await notify({ title: result.ok ? '변경 완료' : '변경 실패', message: result.message, tone: result.ok ? 'success' : 'warning' });
     if (result.ok) {
       setCurrentPassword('');
@@ -61,7 +59,7 @@ const Settings = () => {
     if (clearing) return;
     const confirmed = await confirm({
       title: '데이터 삭제',
-      message: '현재 계정의 이 PC에 저장된 통계와 학습이력을 삭제하시겠습니까?\n삭제한 데이터는 되돌릴 수 없습니다.',
+      message: '현재 계정으로 서버에 저장된 통계와 학습이력을 삭제하시겠습니까?\n삭제한 데이터는 되돌릴 수 없습니다.',
       tone: 'danger',
       confirmLabel: '삭제하기',
       cancelLabel: '유지하기',
@@ -70,7 +68,7 @@ const Settings = () => {
     setClearing(true);
     try {
       await clearStatistics();
-      await notify({ title: '삭제 완료', message: '현재 계정의 로컬 통계와 학습이력을 삭제했습니다.', tone: 'success' });
+      await notify({ title: '삭제 완료', message: '현재 계정의 통계와 학습이력을 삭제했습니다.', tone: 'success' });
     } catch (error) {
       await notify({ title: '삭제 실패', message: error instanceof Error ? error.message : '기록 삭제에 실패했습니다.', tone: 'warning' });
     } finally { setClearing(false); }
@@ -93,15 +91,11 @@ const Settings = () => {
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-bold text-gray-500 mb-1">아이디</label>
-              <input type="text" value={currentUser?.id ?? 'demo'} disabled className="w-full rounded-2xl border-2 border-gray-200 bg-gray-100 px-4 py-3 font-bold text-gray-600 outline-none" />
+              <input type="text" value={currentUser?.username ?? ''} disabled className="w-full rounded-2xl border-2 border-gray-200 bg-gray-100 px-4 py-3 font-bold text-gray-600 outline-none" />
             </div>
             <div>
               <label className="block text-sm font-bold text-gray-500 mb-1">닉네임</label>
               <input type="text" value={nickname} onChange={(e) => setNickname(e.target.value)} className="w-full rounded-2xl border-2 border-gray-200 bg-gray-50 px-4 py-3 font-bold text-gray-700 outline-none transition focus:border-[#1cb0f6] focus:bg-white" />
-            </div>
-            <div>
-              <label className="block text-sm font-bold text-gray-500 mb-1">정보 변경 인증 비밀번호</label>
-              <input type="password" value={accountPassword} onChange={(e) => setAccountPassword(e.target.value)} className="w-full rounded-2xl border-2 border-gray-200 bg-gray-50 px-4 py-3 font-bold text-gray-700 outline-none transition focus:border-[#1cb0f6] focus:bg-white" />
             </div>
             <Button type="button" variant="secondary" onClick={handleAccountSave}>
               계정정보 변경

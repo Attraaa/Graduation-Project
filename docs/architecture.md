@@ -15,20 +15,19 @@ flowchart TD
   W --> P[앱에 포함된 MediaPipe Pose]
   P --> C[매 세션 기준 자세 수집 · 화면상 변화]
   C --> V1[목·어깨 독립 점수 v3 · 움직임 보호 · 시간 평균]
-  R --> D[로컬 데모 계정]
+  R -->|JWT 로그인| A[Express API · nginx 뒤 배포]
   V1 --> REC[모든 관측의 분 버킷 · 배치 기록]
-  REC -->|검증된 records IPC| E
-  E --> SQLITE[루트 database 코드 · database/sqlite/posture.sqlite]
-  SQLITE -->|날짜 · 모드 · 정책별 조회| R
-  A[독립 Express API] --> V[검증 · 인증 · 세션 서비스]
+  REC -->|/api/records · 공통 database 검증기| A
+  A --> V[검증 · 인증 · 세션 · 기록 서비스]
   V --> DB[MySQL 저장소 어댑터]
+  DB -->|날짜 · 모드 · 정책별 조회| R
   M --> KM[키보드 카메라 · 실시간 결과 UI]
   KM -->|loopback 프레임·현재 화면 keydown| K
   K --> F[YOLO 키보드 맵 · MediaPipe 손끝 · 키 입력 매칭]
   KM --> FP[버전된 권장 손가락 정책 · 보수적 판정]
 ```
 
-Electron 개발 앱의 키보드 모드는 로컬 Python 프로세스를 자동 실행하고 현재 화면의 카메라 프레임·키 입력을 연결합니다. 서버에는 측정 결과를 저장할 경로를 만들었지만 프론트가 아직 그 API를 호출하지 않습니다. MySQL은 현재 코드와 호환되는 어댑터이며 최종 DB 제품을 승인받았다는 의미가 아닙니다.
+Electron 개발 앱의 키보드 모드는 로컬 Python 프로세스를 자동 실행하고 현재 화면의 카메라 프레임·키 입력을 연결합니다. 로그인과 목·어깨·키보드·안구 기록은 서버 API(`/api/auth`, `/api/records`)를 사용합니다. 기존 `/api/sessions` 측정 경로는 여전히 프론트가 호출하지 않습니다. 서버 주소는 `front/.env`의 `VITE_MOTI_API_URL`이며 저장 계약은 [database](../database/README.md)를 따릅니다.
 
 ## 파일별 책임
 
@@ -36,8 +35,8 @@ Electron 개발 앱의 키보드 모드는 로컬 Python 프로세스를 자동 
 | --- | --- |
 | `toolchain.json`, `scripts/setup.ps1`, `scripts/toolchain.ps1` | 정확한 도구 버전, 검증된 다운로드, 프로젝트 전용 환경 설치 |
 | `scripts/moti.ps1` | 앱/API/Python 실행과 검사 명령 묶음 |
-| `front/electron/main.ts` | 창·스플래시, Python 키보드 프로세스, SQLite 단일 연결·신뢰 창 IPC·종료 flush |
-| `front/electron/preload.ts` | 키보드 시작·중지 및 motiRecords 저장·조회·삭제·종료 IPC 경계 |
+| `front/electron/main.ts` | 창·스플래시, Python 키보드 프로세스, 신뢰 창 IPC·종료 전 기록 flush 요청 |
+| `front/electron/preload.ts` | 키보드 시작·중지 및 motiRecords 종료 flush IPC 경계 |
 | `front/vite.config.ts` | UI와 Electron 빌드, CommonJS preload 출력, 브라우저 검증 모드 |
 | `front/src/App.tsx` | 라우트 정의. 인증 보호 라우트는 아직 없음 |
 | `front/src/components/layout/AppLayout.tsx` | 사이드바와 공통 화면 틀/Outlet |
@@ -60,10 +59,10 @@ Electron 개발 앱의 키보드 모드는 로컬 Python 프로세스를 자동 
 | `front/src/features/posture/modes/turtle.ts`, `modes/shoulder.ts` | 부위별 가중합 정책·버전. 조정 상수는 scoreSettings.ts |
 | `front/src/features/posture/scoring.ts` | 귀·어깨 비율을 부위별 가중합으로 0–100 환산하는 순수 함수 |
 | `front/src/features/posture/evaluation.ts` | 유효 시간 가중 평균·연속 관찰·기준 이탈 구간의 순수 집계 |
-| `front/src/utils/authStore.ts` | 아직 사용하는 로컬 데모 인증. 서버 연결 때 교체할 경계 |
-| `database/contracts.ts`, `keyboard.ts`, `eye.ts`, `eyeRecorder.ts`, `recorder.ts`, `aggregation.ts`, `sqlite/repository.ts` | 자세·키보드·안구 직렬화 계약·순수 집계·SQLite 단일 쓰기 주체·v1/v2→v3 추가 마이그레이션 |
-| `front/src/features/records/` | 저장 배치/실패 재시도·조회 상태·목/어깨 표시 어댑터. AI/의학 예시는 별도 컴포넌트 |
-| `front/src/pages/Statistics.tsx`, `LearningHistory.tsx` | 로컬 실제 통계와 시작일별 달력·페이지 목록·분 그래프 |
+| `front/src/utils/apiClient.ts`, `authStore.ts` | API 주소·JWT 세션 보관·401 처리, 서버 회원가입/로그인/계정 변경 |
+| `database/contracts.ts`, `keyboard.ts`, `eye.ts`, `eyeRecorder.ts`, `recorder.ts`, `aggregation.ts` | 자세·키보드 직렬화 계약·순수 집계. 프론트와 서버가 같은 검증기를 사용 |
+| `front/src/features/records/` | 저장 배치/실패 재시도·HTTP 기록 API·조회 상태·목/어깨 표시 어댑터. AI/의학 예시는 별도 컴포넌트 |
+| `front/src/pages/Statistics.tsx`, `LearningHistory.tsx` | 서버에 저장된 실제 통계와 시작일별 달력·페이지 목록·분 그래프 |
 | `server/src/server.ts`, `config.ts` | 환경 검증 후 서버 시작. JWT 비밀값 자동 기본값 없음 |
 | `server/src/app.ts`, `http.ts` | API 조립과 공통 비동기 오류 응답 |
 | `server/src/validation.ts` | HTTP 입력을 런타임에서 검사 |
@@ -72,6 +71,7 @@ Electron 개발 앱의 키보드 모드는 로컬 Python 프로세스를 자동 
 | `server/src/services/statistics.ts` | 오늘·달력의 세션 수 가중 평균. 누락 평균과 실제 0점 구분 |
 | `server/src/repositories/sessions.ts` | MySQL SQL, 행 잠금, 트랜잭션, 통계 집계, 지표·날짜별 측정 데이터 기록/조회 |
 | `server/src/routes/feedback.ts` | 날짜·모드 단위 피드백 기록/조회. 서버가 요약을 만들지는 않음 |
+| `server/src/routes/records.ts`, `repositories/records.ts`, `migrations/002_record_tables.sql` | 앱 기록 API(토큰 사용자만), MySQL 트랜잭션 저장·조회·삭제 세대 |
 | `server/migrations/` | 기존 DB에 적용하는 변경. `schema.sql`은 새 DB용 전체 정의 |
 | `server/test/` | 입력·인증·HTTP 오류·세션 재시도/소유권 회귀 검사 |
 | `keyboard-detect/pyproject.toml`, `uv.lock` | Python 의존성의 입력 선언과 정확한 해결 결과 |
@@ -81,13 +81,13 @@ Electron 개발 앱의 키보드 모드는 로컬 Python 프로세스를 자동 
 
 ## 측정 화면의 계약
 
-학습 모드와 통계 선택은 `안구 / 상체 / 키보드` 순서로 제공합니다. 상체 통계는 목·어깨를 나란히 표시하고 키보드는 독립 집계 화면을 사용합니다. 안구 통계는 최근 7/30일의 깜빡임·유효 시간·휴식·안내 횟수를 정책별로 표시하고 학습이력에서 세션 상세를 제공합니다. 건강 점수는 생성하지 않습니다.
+학습 모드와 통계 선택은 `안구 / 상체 / 키보드` 순서로 제공합니다. 상체 통계는 목·어깨를 나란히 표시하고 키보드는 독립 집계 화면을 사용합니다. 안구 통계는 최근 7/30일의 깜빡임·유효 시간·휴식·안내 횟수를 정책별로 표시하고 학습이력에서 세션 상세를 제공합니다.
 
-상체 화면은 `LearningSession → PostureSession → PostureMonitor`로 연결합니다. 프레임 계산은 `useWebcam/useMediaPipe → calibration → observation → scoring/evaluation → MonitorSnapshot → PostureMetrics` 순서입니다. 모드 변경과 기준 다시 잡기는 이전 스트림·모델·점수·습관 상태를 정리하고 새 기준을 수집합니다. 중지하면 카메라를 해제하고 마지막 계산까지 화면에 반영합니다. 기준 수집은 현재 `upper_body`에 연결되어 있으며, 안구 모드는 독립된 `EyeSession → EyeMonitor → Face Landmarker → measurement` 경로로 깜빡임·상대 얼굴 크기·휴식 안내를 제공합니다. 로그인한 Electron 앱은 안구 집계를 같은 로컬 SQLite에 저장하며 안구 통계·학습이력에서 조회합니다. 서버 API 저장은 연결하지 않습니다. [안구 모드](eye-mode.md)를 참고합니다.
+상체 화면은 `LearningSession → PostureSession → PostureMonitor`로 연결합니다. 프레임 계산은 `useWebcam/useMediaPipe → calibration → observation → scoring/evaluation → MonitorSnapshot → PostureMetrics` 순서입니다. 모드 변경과 기준 다시 잡기는 이전 스트림·모델·점수·습관 상태를 정리하고 새 기준을 수집합니다. 중지하면 카메라를 해제하고 마지막 계산까지 화면에 반영합니다. 기준 수집은 현재 `upper_body`에 연결되어 있으며, 안구 모드는 독립된 `EyeSession → EyeMonitor → Face Landmarker → measurement` 경로로 깜빡임·상대 얼굴 크기·휴식 안내를 제공합니다. 같은 서버 API로 분 집계를 저장하고 안구 통계·학습이력에서 조회합니다. [안구 모드](eye-mode.md)를 참고합니다.
 
 키보드는 `LearningSession → KeyboardSession → KeyboardMonitor → loopback Python service → runtime adapter → finger policy → aggregate recording` 순서입니다. Electron main은 빈 로컬 포트와 세션 토큰으로 `.venv` Python을 실행합니다. 기본 입력은 현재 화면의 물리 `code`이며, 사용자가 설정에서 일반 앱을 승인하고 시작 시 체크한 경우에만 Windows Raw Input 경로를 추가합니다. 승인 경로·foreground 권한을 확인하고 미승인·관리자·확인 불가 앱을 제외합니다. 알려진 게임 실행 파일/디렉터리는 승인도 거절하지만 모든 게임의 자동 식별이나 제재 방지는 보장할 수 없습니다.
 
-Python은 손끝 후보와 프레임 시간차를 반환하고 앱의 `ansi-qwerty-touch:2.0.0` 정책이 100·70·0/보류를 결정합니다. 손 가림을 직접 감지하는 모델은 없으며 관측 부족·가까운 후보·시간 차이를 보류 근거로 사용합니다. 손가락 일관성은 별도 지표이며 가산점이 아닙니다. 원문·입력 순서·영상은 저장하지 않고 날짜·키·상황·손가락·판정 횟수만 SQLite에 저장합니다. 정책별 통계·히트맵·세션 상세는 Statistics의 키보드 모드에 있습니다. 원격 서버로 전송하지 않습니다. crop·자유 회전·필터는 미리보기와 분석에 동일하게 적용하고 변경 시 기존 맵과 프레임을 폐기합니다. 세부 산식/품질 한계는 [키보드 계약](../front/src/features/keyboard/README.md), 저장은 [database](../database/README.md)를 따릅니다.
+Python은 손끝 후보와 프레임 시간차를 반환하고 앱의 `ansi-qwerty-touch:2.0.0` 정책이 100·70·0/보류를 결정합니다. 손 가림을 직접 감지하는 모델은 없으며 관측 부족·가까운 후보·시간 차이를 보류 근거로 사용합니다. 손가락 일관성은 별도 지표이며 가산점이 아닙니다. 원문·입력 순서·영상은 저장하지 않고 날짜·키·상황·손가락·판정 횟수만 서버에 저장합니다. 정책별 통계·히트맵·세션 상세는 Statistics의 키보드 모드에 있습니다. 집계만 서버에 저장합니다. crop·자유 회전·필터는 미리보기와 분석에 동일하게 적용하고 변경 시 기존 맵과 프레임을 폐기합니다. 세부 산식/품질 한계는 [키보드 계약](../front/src/features/keyboard/README.md), 저장은 [database](../database/README.md)를 따릅니다.
 
 `MonitorSnapshot`은 준비/수집/관찰/관찰 불가/오류 상태와 수집 진행률, 부위별 편차, 유효 관찰 시간, 목·어깨 각각의 현재/평균 점수와 보호 상태·습관 집계·정책 버전을 전달합니다. 사용자의 자세가 의학적으로 올바른지 판단하는 타입이 아닙니다.
 
@@ -96,7 +96,7 @@ Python은 손끝 후보와 프레임 시간차를 반환하고 앱의 `ansi-qwer
 - 얼굴·어깨가 안 보이거나 신뢰도가 낮으면 수집을 다시 시작합니다.
 - 기준 확보 후 관측이 사라지거나 고개 회전 비율이 0.15를 초과하면 현재 값과 유효 관찰 시간의 증가를 중단합니다. 이를 휴식이나 정상으로 바꾸지 않습니다. 내부의 마지막 점수는 보존해 재개 시 이어갑니다.
 - 관찰 시간은 단조 캡처 시각의 양수 간격 중 500ms 이하만 더합니다. 중복·역행 시각과 누락은 연속성을 끊고 같은 구간을 다시 더하지 않습니다.
-- 화면의 “가중 편차”는 귀·어깨 비율의 부위별 가중합입니다. 목은 머리 전진·상체 전진·귀 높이 감소, 어깨는 기울기·귀-어깨 간격 변화의 절댓값을 사용하며 상하 항만 1.25배 강화합니다. 현재 조정값은 목 4%/20%, 어깨 3%/18%를 100/0점으로 선형 환산하며 회전 판정 보류·움직임 동결·2초 유예·점진 감점·1초 복귀 확인을 적용합니다. 첫 정지 유효 관측은 실제 원점수로 시작하며 보호된 점수로 시간 가중 평균과 SQLite 기록을 계산합니다.
+- 화면의 “가중 편차”는 귀·어깨 비율의 부위별 가중합입니다. 목은 머리 전진·상체 전진·귀 높이 감소, 어깨는 기울기·귀-어깨 간격 변화의 절댓값을 사용하며 상하 항만 1.25배 강화합니다. 현재 조정값은 목 4%/20%, 어깨 3%/18%를 100/0점으로 선형 환산하며 회전 판정 보류·움직임 동결·2초 유예·점진 감점·1초 복귀 확인을 적용합니다. 첫 정지 유효 관측은 실제 원점수로 시작하며 보호된 점수로 시간 가중 평균과 서버 기록을 계산합니다.
 - 점수와 별도로 관측률·연속 관찰·지속된 기준 이탈을 표시합니다. 기준 이탈과 오사용·휴식·질환 판정을 구분합니다. 산식·초기 설정·검증 한계는 [evaluation.md](evaluation.md)를 따릅니다.
 - 카메라 위치를 물리적으로 옮기면 다시 수집해야 합니다. 장치 ID/해상도 변경은 자동 감지하지만 모든 물리적 이동을 자동 판별하지는 못합니다.
 
@@ -126,7 +126,7 @@ Python은 손끝 후보와 프레임 시간차를 반환하고 앱의 `ansi-qwer
 - `elapsedMs`는 세션 시작 이후 경과 시간이며 클라이언트 시계 값이 아닙니다. 서버는 DB가 찍은 `started_at`에 더해 기록 시각을 만듭니다. 보내지 않으면 DB의 `NOW()`를 씁니다.
 - `GET /api/sessions/:id`는 저장된 기준 자세를 `calibration`으로 함께 돌려줍니다. 없으면 `null`이며, 그 세션의 `measured_value`는 해석할 수 없다는 뜻입니다. 그래프는 지표별로 나누어 돌려줍니다.
 
-`sessions.score`는 여전히 필수 입력입니다. 프론트의 버전된 기준 자세 유사도·로컬 SQLite와 이 서버 필드는 아직 연결하지 않았습니다. 서버 연동 시 점수 정책 매핑과 NULL 허용 여부를 별도 계약·마이그레이션으로 결정합니다. `bad_posture_seconds`와 휴식 기록은 아직 저장 계약이 없습니다.
+`sessions.score`는 여전히 필수 입력입니다. 프론트의 버전된 기준 자세 유사도 기록(`/api/records`)과 이 서버 필드는 연결하지 않았습니다. 서버 연동 시 점수 정책 매핑과 NULL 허용 여부를 별도 계약·마이그레이션으로 결정합니다. `bad_posture_seconds`와 휴식 기록은 아직 저장 계약이 없습니다.
 
 ## 사용자 설정과 피드백
 
@@ -141,4 +141,4 @@ React/Electron, UI 자산, Python 키보드 맵/손끝 분석은 재사용했습
 
 `front/src/utils/postureCalculator.ts`의 기존 각도 계산 유틸은 현재 새 모니터에서 사용하지 않습니다. 이전 코드를 임의 삭제하지 않고 남겼으며, 정면 캘리브레이션과 혼용하지 않습니다. 기존 Dockerfile과 두 SQL은 이전 구현 자료로 남아 있으므로 현재 개발 진입점 대신 실행하지 않습니다.
 
-안구 저장 경로는 `EyeMonitor → EyeRecorder → records:writeEye → eye_records/eye_buckets/eye_batches`입니다. 안구 통계는 `eyeStatistics`, 통합 달력은 `history`, 안구 상세는 `eyeDetail` IPC를 사용합니다. 저장 계약은 [database/README.md](../database/README.md)의 스키마 v3 설명을 따릅니다.
+안구 기록은 `EyeMonitor → EyeRecorder → features/records/api.ts → /api/records/eye → MysqlRecordRepository`로 저장합니다. 통계는 `/eye-statistics`, 통합 달력은 `/history`, 안구 상세는 `/eye/:id`를 사용하며 JWT 사용자·record_owners 잠금·삭제 세대와 재시도 계약을 다른 모드와 공유합니다.

@@ -23,7 +23,7 @@ async function save(entry: Active): Promise<void> {
         entry.collector.acknowledge();
         if (batch.record.status !== 'running') { active.delete(entry); break; }
       } while (entry.collector.record.status !== 'running' || entry.collector.hasPending);
-      entry.error = null; announceRecording('안구 기록이 이 PC에 저장되었습니다.');
+      entry.error = null; announceRecording('안구 기록이 서버에 저장되었습니다.');
     } catch (error) {
       if (!active.has(entry)) return;
       entry.error = error instanceof Error ? error.message : String(error);
@@ -46,8 +46,8 @@ export interface EyeSink { sample(at: number, value: EyeSample): void; rest(comp
 export function beginEyeRecording(): EyeSink {
   const owner = getCurrentUser()?.id;
   const noop = { sample: () => {}, rest: () => {}, finish: () => {} };
-  if (!owner || !window.motiRecords) {
-    announceRecording('안구 기록 저장은 로그인한 데스크톱 앱에서 사용할 수 있습니다. 현재 측정은 저장되지 않습니다.');
+  if (!owner) {
+    announceRecording('로그인하면 안구 기록을 서버에 저장할 수 있습니다. 현재 측정은 저장되지 않습니다.');
     return noop;
   }
   const epoch = Date.now(), at = performance.now();

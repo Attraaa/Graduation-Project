@@ -87,10 +87,12 @@ approval boundary, an unsafe operation, or an unresolved conflict.
 - Read `docs/collaboration.md` for file ownership. Keep mode policies, pure
   observation/scoring/aggregation, camera lifecycle, and presentation separate.
   Coordinate shared contract changes and preserve other tasks' changes.
-- Frontend authentication remains a local demo. Turtle/shoulder history and statistics
-  use Electron-owned local SQLite; read `database/README.md` for its contract.
-  AI/medical sections remain labeled examples. Express stays independent; production
-  server authentication, AI summary, and SQLite server sync are not implemented.
+- Login uses the Express API's JWT accounts. Turtle/shoulder/keyboard records,
+  history, and statistics are stored only on the API server's MySQL through
+  `/api/records` (server URL: `front/.env` `VITE_MOTI_API_URL`); read
+  `database/README.md` for its contract. Server builds bundle `database/contracts.ts`
+  and `keyboard.ts`, so deploy them with `server/`. AI/medical sections remain
+  labeled examples; AI summary, offline sync, and HTTPS are not implemented.
   Do not present demo values as measurements.
 - Reuse `src/styles/tokens.css`, `components/layout`, and the shared UI components.
   Keep camera lifecycle, pure measurement rules, HTTP routes, and database
