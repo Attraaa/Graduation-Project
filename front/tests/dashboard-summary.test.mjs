@@ -1,0 +1,110 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { buildDashboard, dashboardDates, sessionIdOf } from '../src/features/dashboard/summary.ts';
+import { keyboardSummary } from '../../database/keyboard.ts';
+
+const TODAY = '2026-10-06';
+const KST = -540;
+const at = iso => Date.parse(iso);
+const build = (input = {}) => buildDashboard({ today: TODAY, posture: [], eye: [], keyboard: [], history: [], ...input });
+
+const postureRow = (over = {}) => ({ date: TODAY, hour: '9', mode: 'turtle',
+  scorePolicyVersion: 'upper-body-neck-v3-a', habitPolicyVersion: 'reference-deviation-v1',
+  longestContinuousMs: 0, sessionCount: 1, recordIds: ['s1:turtle'],
+  runMs: 60_000, validMs: 60_000, scoreTimeSum: 60_000 * 80, deviationMs: 0, deviationEpisodeCount: 0, ...over });
+const shoulderRow = (over = {}) => postureRow({ mode: 'shoulder', scorePolicyVersion: 'upper-body-shoulder-v3-b', recordIds: ['s1:shoulder'], ...over });
+const eyeRow = (over = {}) => ({ date: TODAY, hour: '13', policyVersion: 'eye-habits-v2', sessionCount: 1,
+  runMs: 600_000, validMs: 600_000, blinks: 140, breaks: 2, nearReminders: 0, openReminders: 0, ...over });
+const keyboardStored = (over = {}) => ({
+  record: { id: 'k1', owner: '7', startedAt: at('2026-10-06T01:40:00Z'), updatedAt: at('2026-10-06T01:58:00Z'),
+    offsetMinutes: KST, status: 'finished', policyVersion: 'ansi-qwerty-touch:2.0.0',
+    recognitionVersion: 'hands-label-distance-v2', nearbyCredit: 70, total: 10, ...over },
+  counts: [
+    { date: TODAY, code: 'KeyA', context: 'plain', finger: 'left:pinky', verdict: 'preferred', reason: 'preferred-finger', count: 8 },
+    { date: TODAY, code: 'KeyA', context: 'plain', finger: 'left:ring', verdict: 'nearby', reason: 'neighboring-finger', count: 2 },
+  ] });
+
+test('dashboardDates covers six days back to today across month and year boundaries', () => {
+  assert.deepEqual(dashboardDates('2026-10-06'),
+    ['2026-09-30', '2026-10-01', '2026-10-02', '2026-10-03', '2026-10-04', '2026-10-05', '2026-10-06']);
+  assert.deepEqual(dashboardDates('2026-01-03').slice(0, 2), ['2025-12-28', '2025-12-29']);
+  assert.equal(sessionIdOf('abc:shoulder'), 'abc');
+  assert.equal(sessionIdOf('abc:turtle'), 'abc');
+});
+
+test('upper body scores are valid-time weighted and one session counts once', () => {
+  const summary = build({ posture: [
+    postureRow({ hour: '9', runMs: 60_000, validMs: 60_000, scoreTimeSum: 60_000 * 90, deviationEpisodeCount: 1 }),
+    postureRow({ hour: '10', runMs: 180_000, validMs: 180_000, scoreTimeSum: 180_000 * 70 }),
+    shoulderRow({ hour: '9', runMs: 240_000, validMs: 240_000, scoreTimeSum: 240_000 * 88, deviationEpisodeCount: 2 }),
+  ] });
+  const upper = summary.today.upper;
+  assert.equal(upper.turtle, 75);       // (90 x 1분 + 70 x 3분) / 4분
+  assert.equal(upper.shoulder, 88);
+  assert.equal(upper.sessions, 1);      // s1:turtle + s1:shoulder = 세션 1개
+  assert.equal(upper.runMs, 240_000);   // 목·어깨 중 큰 값, 합이 아님
+  assert.equal(upper.deviations, 3);
+  assert.equal(summary.today.totalMs, 240_000);
+});
+
+test('only the latest policy group of each mode is used', () => {
+  const summary = build({
+    posture: [
+      postureRow({ date: '2026-10-02', scorePolicyVersion: 'reference-similarity-turtle-v1', scoreTimeSum: 60_000 * 40 }),
+      postureRow({ date: '2026-10-05', scoreTimeSum: 60_000 * 80 }),
+    ],
+    eye: [eyeRow({ date: '2026-10-05', policyVersion: 'eye-habits-v1' }), eyeRow()],
+    keyboard: [
+      keyboardStored({ id: 'old', policyVersion: 'ansi-qwerty-touch:1.0.0',
+        startedAt: at('2026-10-04T00:50:00Z'), updatedAt: at('2026-10-04T01:00:00Z') }),
+      keyboardStored(),
+    ],
+  });
+  const day = date => summary.days.find(item => item.date === date);
+  assert.equal(day('2026-10-02').upper.turtle, null);
+  assert.equal(day('2026-10-05').upper.turtle, 80);
+  assert.equal(day('2026-10-05').eye.present, false);
+  assert.equal(day('2026-10-06').eye.present, true);
+  assert.equal(day('2026-10-04').keyboard.present, false);
+  assert.equal(day('2026-10-06').keyboard.sessions, 1);
+});
+
+test('days without records stay empty instead of zero', () => {
+  const summary = build({ posture: [postureRow({ date: '2026-10-04' })] });
+  const empty = summary.days.find(day => day.date === '2026-10-03');
+  assert.equal(empty.upper.turtle, null);
+  assert.equal(empty.upper.sessions, 0);
+  assert.equal(empty.hasRecords, false);
+  assert.equal(empty.totalMs, 0);
+  assert.equal(summary.days.find(day => day.date === '2026-10-04').hasRecords, true);
+  assert.deepEqual(summary.recent, { upper: true, keyboard: false, eye: false });
+});
+
+test('eye rate needs 30 seconds of valid observation and is never a score', () => {
+  const short = build({ eye: [eyeRow({ validMs: 29_000, blinks: 10 })] });
+  assert.equal(short.today.eye.rate, null);
+  assert.equal(short.today.eye.present, true);
+  assert.equal(short.today.hasRecords, true);
+  const enough = build({ eye: [eyeRow()] });
+  assert.equal(enough.today.eye.rate, 14);
+  assert.equal(enough.today.eye.breaks, 2);
+  assert.equal(enough.hasScores, false);
+});
+
+test('keyboard values match the shared keyboard summary and count sessions by start date', () => {
+  const stored = keyboardStored();
+  const today = build({ keyboard: [stored] }).today.keyboard;
+  const expected = keyboardSummary(stored.counts, 70);
+  assert.equal(today.score, expected.score);
+  assert.equal(today.coverage, expected.coverage);
+  assert.equal(today.sessions, 1);
+  assert.equal(today.runMs, 18 * 60_000);
+  assert.equal(today.present, true);
+});
+
+test('chart floor rounds the lowest score down to ten and stays below 100', () => {
+  assert.equal(build({ posture: [postureRow({ scoreTimeSum: 60_000 * 64 })] }).chartFloor, 60);
+  assert.equal(build({ posture: [postureRow({ scoreTimeSum: 60_000 * 100 })] }).chartFloor, 90);
+  assert.equal(build().chartFloor, 0);
+  assert.equal(build().hasScores, false);
+});
