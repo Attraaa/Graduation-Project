@@ -108,3 +108,48 @@ test('chart floor rounds the lowest score down to ten and stays below 100', () =
   assert.equal(build().chartFloor, 0);
   assert.equal(build().hasScores, false);
 });
+
+const postureRecord = (over = {}) => ({ id: 's1:turtle', owner: '7', mode: 'turtle',
+  startedAt: at('2026-10-06T00:12:00Z'), updatedAt: at('2026-10-06T00:37:00Z'), offsetMinutes: KST,
+  scorePolicyVersion: 'upper-body-neck-v3-a', habitPolicyVersion: 'reference-deviation-v1',
+  longestContinuousMs: 0, status: 'finished',
+  runMs: 25 * 60_000, validMs: 25 * 60_000, scoreTimeSum: 25 * 60_000 * 84, deviationMs: 0, deviationEpisodeCount: 0, ...over });
+const eyeRecord = (over = {}) => ({ id: 'e1', owner: '7', mode: 'eye',
+  startedAt: at('2026-10-06T04:05:00Z'), updatedAt: at('2026-10-06T04:45:00Z'), offsetMinutes: KST,
+  policyVersion: 'eye-habits-v2', status: 'finished',
+  runMs: 40 * 60_000, validMs: 40 * 60_000, blinks: 560, breaks: 2, nearReminders: 0, openReminders: 0, ...over });
+
+test('today timeline merges one upper session, keyboard and eye in start order', () => {
+  const turtle = postureRecord();
+  const shoulder = postureRecord({ id: 's1:shoulder', mode: 'shoulder',
+    scorePolicyVersion: 'upper-body-shoulder-v3-b', scoreTimeSum: 25 * 60_000 * 89 });
+  const yesterday = postureRecord({ id: 's0:turtle', startedAt: at('2026-10-05T00:12:00Z') });
+  const summary = build({ history: [eyeRecord({ status: 'interrupted' }), shoulder, turtle, yesterday], keyboard: [keyboardStored()] });
+  assert.deepEqual(summary.timeline.map(entry => [entry.mode, entry.id]), [['upper', 's1'], ['keyboard', 'k1'], ['eye', 'e1']]);
+  const [upper, keyboard, eye] = summary.timeline;
+  assert.equal(upper.turtle, 84);
+  assert.equal(upper.shoulder, 89);
+  assert.equal(upper.endedAt - upper.startedAt, 25 * 60_000);
+  assert.equal(upper.interrupted, false);
+  assert.equal(keyboard.score, keyboardSummary(keyboardStored().counts, 70).score);
+  assert.equal(keyboard.endedAt - keyboard.startedAt, 18 * 60_000);
+  assert.equal(eye.rate, 14);
+  assert.equal(eye.interrupted, true);
+});
+
+test('timeline drops records from a policy that is not the latest', () => {
+  const summary = build({ posture: [postureRow()],
+    history: [postureRecord({ id: 'old:turtle', scorePolicyVersion: 'reference-similarity-turtle-v1' }), postureRecord()] });
+  assert.deepEqual(summary.timeline.map(entry => entry.id), ['s1']);
+});
+
+test('deviation hours sum neck and shoulder episodes over the shown hour range', () => {
+  const summary = build({ posture: [
+    postureRow({ hour: '9', deviationEpisodeCount: 1 }),
+    shoulderRow({ hour: '9', deviationEpisodeCount: 2 }),
+    postureRow({ date: '2026-10-05', hour: '12', deviationEpisodeCount: 4 }),
+  ] });
+  assert.deepEqual(summary.deviationHours.map(hour => [hour.hour, hour.count, hour.strong]),
+    [[9, 3, true], [10, 0, false], [11, 0, false], [12, 4, true]]);
+  assert.deepEqual(build().deviationHours, []);
+});
