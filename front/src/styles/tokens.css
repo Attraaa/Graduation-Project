@@ -13,23 +13,41 @@
   --color-warning-border: #c69b00;
   --color-surface: #ffffff;
   --color-surface-muted: #f9fafb;
-  --color-background: #f7f7f7;
-  --color-border: #e5e7eb;
+  --color-background: #f3f5f8;
+  --color-border: #e3e7ee;
   --color-border-strong: #d1d5db;
-  --color-heading: #374151;
+  --color-heading: #1d2433;
   --color-muted: #6b7280;
   --color-text: #3c3c3c;
   --color-text-light: #777777;
+
+  /* Data-widget dashboard: mode colors, their soft icon backgrounds, ring/grid track, active nav. */
+  --color-mode-upper: #58cc02;
+  --color-mode-shoulder: #f5b700;
+  --color-mode-keyboard: #1cb0f6;
+  --color-mode-eye: #ff4b4b;
+  --color-mode-upper-soft: #eaf8dc;
+  --color-mode-shoulder-soft: #fff4cc;
+  --color-mode-keyboard-soft: #e1f4fe;
+  --color-mode-eye-soft: #ffe3e3;
+  --color-track: #eef0f3;
+  --color-nav-active: #eef1f6;
 }
 
 .dark-theme {
-  --color-surface: #1f2937;
+  --color-surface: #171b23;
   --color-surface-muted: #111827;
-  --color-background: #111827;
-  --color-border: #374151;
+  --color-background: #0f1218;
+  --color-border: #252b36;
   --color-border-strong: #4b5563;
-  --color-heading: #f3f4f6;
+  --color-heading: #e6e9ef;
   --color-muted: #9ca3af;
   --color-text: #e5e7eb;
   --color-text-light: #9ca3af;
+  --color-mode-upper-soft: #1f3313;
+  --color-mode-shoulder-soft: #3a2f0a;
+  --color-mode-keyboard-soft: #0f2c3d;
+  --color-mode-eye-soft: #3d1a1c;
+  --color-track: #252b36;
+  --color-nav-active: #222835;
 }
