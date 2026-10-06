@@ -50,7 +50,9 @@ const Dashboard = () => {
           </div>
           {scoresLoading ? <SourceLoading className="h-72" />
             : scoresFailed ? <SourceError onRetry={retry} />
-            : summary.hasScores ? <WeeklyScoreChart days={summary.days} today={today} floor={summary.chartFloor} />
+            : summary.hasScores ? (
+              <div className="min-h-72 flex-1"><WeeklyScoreChart days={summary.days} today={today} floor={summary.chartFloor} /></div>
+            )
             : <p className="flex h-72 items-center justify-center text-sm text-muted">측정을 시작하면 최근 7일 점수가 여기에 보여요</p>}
           {scoresPartial && <SourceError onRetry={retry} />}
           <p className="text-xs text-muted">점수는 기준 자세와의 화면상 유사도와 손가락 사용 점수예요. 의학적 진단이 아니에요.</p>

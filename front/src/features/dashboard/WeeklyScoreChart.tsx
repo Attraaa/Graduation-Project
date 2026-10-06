@@ -14,12 +14,12 @@ export default function WeeklyScoreChart({ days, today, floor }: { days: Dashboa
   const data = days.map(day => ({ date: day.date, turtle: day.upper.turtle, shoulder: day.upper.shoulder, keyboard: day.keyboard.score }));
   const ticks = Array.from({ length: Math.round((100 - floor) / 10) + 1 }, (_, index) => floor + index * 10);
   return (
-    <div className="h-72">
+    <div className="h-full min-h-72">
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={data} margin={{ top: 8, right: 16, bottom: 0, left: 0 }}>
           <CartesianGrid vertical={false} stroke="var(--color-track)" />
           <XAxis dataKey="date" tickLine={false} axisLine={false} tick={{ fill: 'var(--color-muted)', fontSize: 12 }}
-            tickFormatter={(date: string) => dayLabel(date, today)} />
+            padding={{ left: 20, right: 20 }} tickFormatter={(date: string) => dayLabel(date, today)} />
           <YAxis domain={[floor, 100]} ticks={ticks} tickLine={false} axisLine={false} width={36}
             tick={{ fill: 'var(--color-muted)', fontSize: 11 }} />
           <Tooltip cursor={false} filterNull={false} isAnimationActive={false}
