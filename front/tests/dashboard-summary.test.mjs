@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildDashboard, dashboardDates, sessionIdOf } from '../src/features/dashboard/summary.ts';
+import { buildDashboard, dashboardDates, dayEntries, pastDateOrNull, periodDates, sessionIdOf, shiftDate } from '../src/features/dashboard/summary.ts';
 import { keyboardSummary } from '../../database/keyboard.ts';
 
 const TODAY = '2026-10-06';
@@ -152,4 +152,24 @@ test('deviation hours sum neck and shoulder episodes over the shown hour range',
   assert.deepEqual(summary.deviationHours.map(hour => [hour.hour, hour.count, hour.strong]),
     [[9, 3, true], [10, 0, false], [11, 0, false], [12, 4, true]]);
   assert.deepEqual(build().deviationHours, []);
+});
+
+test('date helpers shift across months, build periods of any length and accept only real past dates', () => {
+  assert.equal(shiftDate('2026-03-01', -1), '2026-02-28');
+  assert.equal(shiftDate('2025-12-31', 1), '2026-01-01');
+  assert.deepEqual(periodDates('2026-10-06', 3), ['2026-10-04', '2026-10-05', '2026-10-06']);
+  assert.equal(periodDates('2026-10-06', 30)[0], '2026-09-07');
+  assert.equal(pastDateOrNull('2026-10-02', TODAY), '2026-10-02');
+  assert.equal(pastDateOrNull('2026-10-07', TODAY), null);
+  assert.equal(pastDateOrNull('2026-02-30', TODAY), null);
+  assert.equal(pastDateOrNull('10/02', TODAY), null);
+  assert.equal(pastDateOrNull(null, TODAY), null);
+});
+
+test('day entries without a filter keep every policy and expose the stored records', () => {
+  const old = postureRecord({ id: 'old:turtle', scorePolicyVersion: 'reference-similarity-turtle-v1' });
+  const entries = dayEntries([old, postureRecord()], [], TODAY);
+  assert.deepEqual(entries.map(entry => entry.id), ['old', 's1']);
+  assert.equal(entries[0].source.mode, 'upper');
+  assert.deepEqual(entries[0].source.records, [old]);
 });

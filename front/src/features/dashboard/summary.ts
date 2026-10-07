@@ -12,13 +12,21 @@ export interface UpperDay { turtle: number | null; shoulder: number | null; sess
 export interface KeyboardDay { score: number | null; coverage: number | null; sessions: number; runMs: number; present: boolean }
 export interface EyeDay { rate: number | null; runMs: number; breaks: number; present: boolean }
 export interface DashboardDay { date: string; upper: UpperDay; keyboard: KeyboardDay; eye: EyeDay; totalMs: number; hasRecords: boolean }
+/** Stored records behind one timeline row. The dashboard ignores it; the history screen reads it. */
+export type EntrySource =
+  | { mode: 'upper'; records: PostureRecord[] }
+  | { mode: 'keyboard'; stored: KeyboardStored }
+  | { mode: 'eye'; record: EyeRecord };
 export interface TimelineEntry {
   id: string; mode: 'upper' | 'keyboard' | 'eye';
   startedAt: number; endedAt: number; offsetMinutes: number;
   turtle: number | null; shoulder: number | null; score: number | null; rate: number | null;
   interrupted: boolean;
+  source: EntrySource;
 }
 export interface DeviationHour { hour: number; count: number; strong: boolean }
+/** Rows (keyboard: records) of the latest policy group of each mode. */
+export interface PolicyGroups { turtle: StatisticsRow[]; shoulder: StatisticsRow[]; eye: EyeStatisticsRow[]; keyboard: KeyboardStored[] }
 /** null means the source has not loaded (or failed); it is treated as empty. */
 export interface DashboardInput {
   today: string;
@@ -38,11 +46,29 @@ export interface DashboardSummary {
   recent: { upper: boolean; keyboard: boolean; eye: boolean };
 }
 
+/** `date` moved by `days` calendar days (YYYY-MM-DD, UTC arithmetic so the local time zone never shifts it). */
+export function shiftDate(date: string, days: number) {
+  const [year, month, day] = date.split('-').map(Number);
+  return new Date(Date.UTC(year, month - 1, day + days)).toISOString().slice(0, 10);
+}
+
+/** `days` dates ending at `end`, oldest first. */
+export function periodDates(end: string, days: number) {
+  return Array.from({ length: days }, (_, index) => shiftDate(end, index - (days - 1)));
+}
+
 /** Six days before today through today, oldest first. */
 export function dashboardDates(today: string) {
-  const [year, month, day] = today.split('-').map(Number);
-  return Array.from({ length: DASHBOARD_DAYS }, (_, index) =>
-    new Date(Date.UTC(year, month - 1, day - (DASHBOARD_DAYS - 1 - index))).toISOString().slice(0, 10));
+  return periodDates(today, DASHBOARD_DAYS);
+}
+
+/** A real YYYY-MM-DD date that is not after `today`, else null (dates read from the address bar). */
+export function pastDateOrNull(value: string | null, today: string) {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const [year, month, day] = value.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  const real = date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+  return real && value <= today ? value : null;
 }
 
 /** An upper-body session is stored as `${sessionId}:turtle` and `${sessionId}:shoulder`. */
@@ -67,6 +93,17 @@ function latestKeyboard(records: KeyboardStored[]) {
   const latest = records.reduce((last, stored) => (stored.record.updatedAt > last.record.updatedAt ? stored : last));
   const selected = keyboardKey(latest);
   return records.filter(stored => keyboardKey(stored) === selected);
+}
+
+/** Each mode keeps only the policy group of its latest row (keyboard: latest updated record). */
+export function latestPolicyGroups(input: Pick<DashboardInput, 'posture' | 'eye' | 'keyboard'>): PolicyGroups {
+  const posture = input.posture ?? [];
+  return {
+    turtle: latestGroup(posture.filter(row => row.mode === 'turtle'), statisticsKey),
+    shoulder: latestGroup(posture.filter(row => row.mode === 'shoulder'), statisticsKey),
+    eye: latestGroup(input.eye ?? [], row => row.policyVersion),
+    keyboard: latestKeyboard(input.keyboard ?? []),
+  };
 }
 
 function upperDay(turtle: StatisticsRow[], shoulder: StatisticsRow[], date: string): UpperDay {
@@ -100,25 +137,43 @@ function eyeDay(rows: EyeStatisticsRow[], date: string): EyeDay {
   };
 }
 
+/** One date's values from already selected policy groups. */
+export function dayValues(groups: PolicyGroups, date: string): DashboardDay {
+  const upper = upperDay(groups.turtle, groups.shoulder, date);
+  const typing = keyboardDay(groups.keyboard, date);
+  const eyes = eyeDay(groups.eye, date);
+  return { date, upper, keyboard: typing, eye: eyes, totalMs: upper.runMs + typing.runMs + eyes.runMs,
+    hasRecords: upper.sessions > 0 || typing.present || eyes.present };
+}
+
+/** Lowest score rounded down to ten and kept below 100; 0 without scores. */
+export function scoreFloor(scores: number[]) {
+  return scores.length ? Math.min(90, Math.max(0, Math.floor(Math.min(...scores) / 10) * 10)) : 0;
+}
+
 interface TimelineFilter { turtle: string | null; shoulder: string | null; eye: string | null }
 
-/** Today's sessions in start order. A null filter means "no statistics loaded, accept all". */
-function timelineEntries(history: (PostureRecord | EyeRecord)[], keyboard: KeyboardStored[], today: string,
-  accept: TimelineFilter): TimelineEntry[] {
-  const startsToday = (record: { startedAt: number; offsetMinutes: number }) =>
-    localDateKey(record.startedAt, record.offsetMinutes) === today;
+/**
+ * Rows that started on `date`, in start order: one per upper session, keyboard and eye record.
+ * Without `accept` every policy is kept (history). With it, records outside the selected groups are dropped
+ * (dashboard); a null key accepts all.
+ */
+export function dayEntries(history: (PostureRecord | EyeRecord)[], keyboard: KeyboardStored[], date: string,
+  accept?: TimelineFilter): TimelineEntry[] {
+  const startsOnDate = (record: { startedAt: number; offsetMinutes: number }) =>
+    localDateKey(record.startedAt, record.offsetMinutes) === date;
   const entries: TimelineEntry[] = [];
   const upper = new Map<string, PostureRecord[]>();
   for (const record of history) {
-    if (!startsToday(record)) continue;
+    if (!startsOnDate(record)) continue;
     if (record.mode === 'eye') {
-      if (accept.eye !== null && record.policyVersion !== accept.eye) continue;
+      if (accept && accept.eye !== null && record.policyVersion !== accept.eye) continue;
       entries.push({ id: record.id, mode: 'eye', startedAt: record.startedAt, endedAt: record.startedAt + record.runMs,
         offsetMinutes: record.offsetMinutes, turtle: null, shoulder: null, score: null, rate: eyeRate(record),
-        interrupted: record.status === 'interrupted' });
+        interrupted: record.status === 'interrupted', source: { mode: 'eye', record } });
       continue;
     }
-    const selected = record.mode === 'turtle' ? accept.turtle : accept.shoulder;
+    const selected = accept ? (record.mode === 'turtle' ? accept.turtle : accept.shoulder) : null;
     if (selected !== null && statisticsKey(record) !== selected) continue;
     const id = sessionIdOf(record.id);
     upper.set(id, [...(upper.get(id) ?? []), record]);
@@ -131,14 +186,14 @@ function timelineEntries(history: (PostureRecord | EyeRecord)[], keyboard: Keybo
       endedAt: Math.max(...records.map(record => record.startedAt + record.runMs)),
       offsetMinutes: records[0].offsetMinutes,
       turtle: neck ? averageScore(neck) : null, shoulder: side ? averageScore(side) : null, score: null, rate: null,
-      interrupted: records.some(record => record.status === 'interrupted') });
+      interrupted: records.some(record => record.status === 'interrupted'), source: { mode: 'upper', records } });
   }
   for (const stored of keyboard) {
-    if (!startsToday(stored.record)) continue;
+    if (!startsOnDate(stored.record)) continue;
     entries.push({ id: stored.record.id, mode: 'keyboard', startedAt: stored.record.startedAt, endedAt: stored.record.updatedAt,
       offsetMinutes: stored.record.offsetMinutes, turtle: null, shoulder: null,
       score: keyboardSummary(stored.counts, stored.record.nearbyCredit).score, rate: null,
-      interrupted: stored.record.status === 'interrupted' });
+      interrupted: stored.record.status === 'interrupted', source: { mode: 'keyboard', stored } });
   }
   return entries.sort((a, b) => a.startedAt - b.startedAt);
 }
@@ -156,30 +211,20 @@ function deviationHours(rows: StatisticsRow[]): DeviationHour[] {
 
 export function buildDashboard(input: DashboardInput): DashboardSummary {
   const dates = dashboardDates(input.today);
-  const posture = input.posture ?? [];
-  const turtle = latestGroup(posture.filter(row => row.mode === 'turtle'), statisticsKey);
-  const shoulder = latestGroup(posture.filter(row => row.mode === 'shoulder'), statisticsKey);
-  const eye = latestGroup(input.eye ?? [], row => row.policyVersion);
-  const keyboard = latestKeyboard(input.keyboard ?? []);
-  const days = dates.map((date): DashboardDay => {
-    const upper = upperDay(turtle, shoulder, date);
-    const typing = keyboardDay(keyboard, date);
-    const eyes = eyeDay(eye, date);
-    return { date, upper, keyboard: typing, eye: eyes, totalMs: upper.runMs + typing.runMs + eyes.runMs,
-      hasRecords: upper.sessions > 0 || typing.present || eyes.present };
-  });
+  const groups = latestPolicyGroups(input);
+  const days = dates.map(date => dayValues(groups, date));
   const scores = days.flatMap(day => [day.upper.turtle, day.upper.shoulder, day.keyboard.score])
     .filter((value): value is number => value !== null);
   return {
     dates, days, today: days[days.length - 1],
-    timeline: timelineEntries(input.history ?? [], keyboard, input.today, {
-      turtle: turtle[0] ? statisticsKey(turtle[0]) : null,
-      shoulder: shoulder[0] ? statisticsKey(shoulder[0]) : null,
-      eye: eye[0]?.policyVersion ?? null,
+    timeline: dayEntries(input.history ?? [], groups.keyboard, input.today, {
+      turtle: groups.turtle[0] ? statisticsKey(groups.turtle[0]) : null,
+      shoulder: groups.shoulder[0] ? statisticsKey(groups.shoulder[0]) : null,
+      eye: groups.eye[0]?.policyVersion ?? null,
     }),
-    deviationHours: deviationHours([...turtle, ...shoulder]),
-    chartFloor: scores.length ? Math.min(90, Math.max(0, Math.floor(Math.min(...scores) / 10) * 10)) : 0,
+    deviationHours: deviationHours([...groups.turtle, ...groups.shoulder]),
+    chartFloor: scoreFloor(scores),
     hasScores: scores.length > 0,
-    recent: { upper: turtle.length + shoulder.length > 0, keyboard: keyboard.length > 0, eye: eye.length > 0 },
+    recent: { upper: groups.turtle.length + groups.shoulder.length > 0, keyboard: groups.keyboard.length > 0, eye: groups.eye.length > 0 },
   };
 }

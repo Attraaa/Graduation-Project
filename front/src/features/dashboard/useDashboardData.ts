@@ -8,8 +8,8 @@ import { todayDateKey } from '../records/views';
 import type { SourceStatus } from './SourceState';
 import { buildDashboard, dashboardDates } from './summary';
 
-const LOGIN_REQUIRED = '로그인하면 이 계정의 기록을 볼 수 있어요.';
-const statusOf = (query: { loading: boolean; error: string | null }): SourceStatus =>
+export const LOGIN_REQUIRED = '로그인하면 이 계정의 기록을 볼 수 있어요.';
+export const statusOf = (query: { loading: boolean; error: string | null }): SourceStatus =>
   query.loading ? 'loading' : query.error ? 'error' : 'ready';
 
 /** Loads the four dashboard sources in parallel; summary.ts does all calculation. */
