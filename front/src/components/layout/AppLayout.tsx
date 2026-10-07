@@ -2,9 +2,11 @@ import { Outlet, useLocation } from 'react-router-dom';
 import Sidebar from '../Sidebar';
 
 // App routes share one shell; each page owns only the content inside Outlet.
-// The data-widget dashboard needs a wider canvas; other pages keep their reading width.
+// Data-widget pages (dashboard, statistics, history) need a wider canvas; other pages keep their reading width.
+const WIDE_PAGES = ['/dashboard', '/statistics', '/history'];
+
 const AppLayout = () => {
-  const wide = useLocation().pathname === '/dashboard';
+  const wide = WIDE_PAGES.includes(useLocation().pathname);
   return (
     <div className="flex h-screen w-screen bg-background">
       <Sidebar />

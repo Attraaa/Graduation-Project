@@ -14,8 +14,8 @@ function Row({ dotClass, name, value, extra }: { dotClass: string; name: string;
 
 const sessionText = (sessions: number, runMs: number) => (sessions > 0 ? `${sessions}회 · ${minutesText(runMs)}` : '');
 
-/** Hover box for one chart day: only modes recorded that day, plus total observation. */
-export default function DayDetail({ day }: { day: DashboardDay }) {
+/** Hover box for one chart day: only modes recorded that day, plus total observation and an optional hint. */
+export default function DayDetail({ day, hint }: { day: DashboardDay; hint?: string }) {
   return (
     <div className="w-72 rounded-xl border border-border bg-surface p-3 text-sm shadow-lg">
       <p className="mb-2 font-bold text-heading">{longDate(day.date)}</p>
@@ -34,6 +34,7 @@ export default function DayDetail({ day }: { day: DashboardDay }) {
         )}
       </ul>
       <p className="mt-2 border-t border-border pt-2 text-muted">{`총 관찰 ${minutesText(day.totalMs)}`}</p>
+      {hint && <p className="mt-1 text-xs font-semibold text-secondary">{hint}</p>}
     </div>
   );
 }
