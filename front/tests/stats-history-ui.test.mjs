@@ -4,6 +4,8 @@ import { build } from 'esbuild';
 import { createRequire } from 'node:module';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { entriesByDate } from '../src/features/history/calendar.ts';
+import { CURRENT_POLICIES } from '../src/features/history/currentPolicies.ts';
 
 async function load(entry) {
   const bundle = await build({ entryPoints: [entry], bundle: true, write: false,
@@ -14,6 +16,8 @@ async function load(entry) {
 }
 const StatTile = await load('src/features/statistics/StatTile.tsx');
 const KeyboardStatistics = await load('src/features/keyboard/KeyboardStatistics.tsx');
+const DayRecords = await load('src/features/history/DayRecords.tsx');
+const EmptyDay = await load('src/features/history/EmptyDay.tsx');
 const html = (component, props) => renderToStaticMarkup(createElement(component, props));
 
 test('number tiles keep missing apart from zero and show comparison chips', () => {
@@ -49,4 +53,42 @@ test('keyboard tab keeps its own terms, drops the session list and links to hist
   assert.doesNotMatch(out, /세션 기록/);
   assert.match(out, /측정 기록은 학습이력에서 보기 →/);
   assert.match(html(KeyboardStatistics, { ...props, data: [] }), /선택한 기간의 키보드 집계가 없습니다/);
+});
+
+const posture = (over = {}) => ({ id: 's1:turtle', owner: '7', mode: 'turtle',
+  startedAt: Date.parse('2026-10-02T01:05:00Z'), updatedAt: Date.parse('2026-10-02T01:23:00Z'), offsetMinutes: -540,
+  scorePolicyVersion: CURRENT_POLICIES.turtle, habitPolicyVersion: CURRENT_POLICIES.habit,
+  longestContinuousMs: 0, status: 'finished',
+  runMs: 18 * 60_000, validMs: 18 * 60_000, scoreTimeSum: 18 * 60_000 * 70, deviationMs: 0, deviationEpisodeCount: 1, ...over });
+
+test('record rows show the upper line, local times, and the interrupted and legacy tags', () => {
+  const old = posture({ id: 'old:turtle', scorePolicyVersion: 'reference-similarity-turtle-v1', status: 'interrupted',
+    startedAt: Date.parse('2026-10-02T00:00:00Z'), updatedAt: Date.parse('2026-10-02T00:05:00Z'),
+    runMs: 5 * 60_000, validMs: 5 * 60_000, scoreTimeSum: 5 * 60_000 * 60 });
+  const shoulder = posture({ id: 's1:shoulder', mode: 'shoulder', scorePolicyVersion: CURRENT_POLICIES.shoulder, scoreTimeSum: 18 * 60_000 * 86 });
+  const entries = entriesByDate([posture(), shoulder, old], [], ['2026-10-02']).get('2026-10-02');
+  const out = html(DayRecords, { date: '2026-10-02', entries, selectedKey: 'upper:s1', onSelect: () => {} });
+  assert.match(out, /10월 2일 \(금\) 기록/);
+  assert.match(out, /2회 · 23분/);
+  assert.match(out, /상체<\/b> · 목 70 · 어깨 86/);
+  assert.match(out, /10:05 – 10:23 \(18분\)/);
+  assert.match(out, />중단됨</);
+  assert.match(out, />이전 기준</);
+  assert.match(out, /지금과 다른 점수 기준으로 측정한 기록이에요/);
+  const current = html(DayRecords, { date: '2026-10-02', entries: entries.filter(entry => !entry.legacy), selectedKey: null, onSelect: () => {} });
+  assert.doesNotMatch(current, /이전 기준/);
+});
+
+test('empty days: today offers the three starts and the latest record, past days offer only existing neighbours', () => {
+  const none = () => {};
+  const today = html(EmptyDay, { date: '2026-10-07', isToday: true, previous: '2026-10-05', next: null, onSelect: none, onStart: none });
+  assert.match(today, /오늘은 아직 측정하지 않았어요/);
+  for (const name of ['상체', '키보드', '안구']) assert.match(today, new RegExp(`${name}</button>`));
+  assert.match(today, /가장 최근 기록: 10월 5일 \(월\) 보기/);
+  const past = html(EmptyDay, { date: '2026-10-03', isToday: false, previous: '2026-10-02', next: '2026-10-04', onSelect: none, onStart: none });
+  assert.match(past, /이 날은 측정 기록이 없어요/);
+  assert.match(past, /← 10월 2일 \(금\) 기록 보기/);
+  assert.match(past, /10월 4일 \(일\) 기록 보기 →/);
+  const alone = html(EmptyDay, { date: '2026-10-03', isToday: false, previous: null, next: null, onSelect: none, onStart: none });
+  assert.doesNotMatch(alone, /기록 보기/);
 });
