@@ -13,6 +13,7 @@ async function load(entry) {
   return compiled.exports.default;
 }
 const StatTile = await load('src/features/statistics/StatTile.tsx');
+const KeyboardStatistics = await load('src/features/keyboard/KeyboardStatistics.tsx');
 const html = (component, props) => renderToStaticMarkup(createElement(component, props));
 
 test('number tiles keep missing apart from zero and show comparison chips', () => {
@@ -27,4 +28,25 @@ test('number tiles keep missing apart from zero and show comparison chips', () =
     /직전 7일보다 \+3/);
   assert.match(html(StatTile, { label: '깜빡임 빈도', value: '14', unit: '회/분', chip: { text: '직전 7일 13회/분', tone: 'neutral' } }),
     /직전 7일 13회\/분/);
+});
+
+const keyboardStored = () => ({
+  record: { id: 'k1', owner: '7', startedAt: Date.parse('2026-10-02T02:00:00Z'), updatedAt: Date.parse('2026-10-02T02:20:00Z'),
+    offsetMinutes: -540, status: 'finished', policyVersion: 'ansi-qwerty-touch:2.0.0',
+    recognitionVersion: 'hands-label-distance-v2', nearbyCredit: 70, total: 10 },
+  counts: [
+    { date: '2026-10-02', code: 'KeyA', context: 'plain', finger: 'left:pinky', verdict: 'preferred', reason: 'preferred-finger', count: 8 },
+    { date: '2026-10-02', code: 'KeyA', context: 'plain', finger: 'left:ring', verdict: 'nearby', reason: 'neighboring-finger', count: 2 },
+  ] });
+
+test('keyboard tab keeps its own terms, drops the session list and links to history', () => {
+  const props = { date: '2026-10-02', days: 7, today: '2026-10-07', detail: () => null, onSelectDate: () => {}, onOpenHistory: () => {} };
+  const out = html(KeyboardStatistics, { ...props, data: [keyboardStored()] });
+  for (const term of ['훈련 점수', '기본표 일치율', '판정 가능 비율', '사용 일관성', '키별 히트맵', '기본표와 자주 다른 키', '보류·제외 원인']) {
+    assert.match(out, new RegExp(term));
+  }
+  assert.match(out, /94\.0점/);
+  assert.doesNotMatch(out, /세션 기록/);
+  assert.match(out, /측정 기록은 학습이력에서 보기 →/);
+  assert.match(html(KeyboardStatistics, { ...props, data: [] }), /선택한 기간의 키보드 집계가 없습니다/);
 });
