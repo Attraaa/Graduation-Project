@@ -1,5 +1,6 @@
 import { recordText } from './contracts.ts';
 import type { PostureRecord, RecordStatus } from './contracts.ts';
+import type { KeyboardHistoryRecord } from './keyboard.ts';
 
 export const eyeFields = ['runMs', 'validMs', 'blinks', 'breaks', 'nearReminders', 'openReminders'] as const;
 export const emptyEyeTotals = () => ({ runMs: 0, validMs: 0, blinks: 0, breaks: 0, nearReminders: 0, openReminders: 0 });
@@ -12,7 +13,8 @@ export interface EyeBucket extends EyeTotals { minute: number }
 export interface EyeBatch { schemaVersion: 1; generation: number; sequence: number; record: EyeRecord; buckets: EyeBucket[] }
 export interface EyeDetail { record: EyeRecord; buckets: EyeBucket[] }
 export interface EyeStatisticsRow extends EyeTotals { date: string; hour: string; policyVersion: string; sessionCount: number }
-export interface HistoryPage { counts: Record<string, number>; records: (PostureRecord | EyeRecord)[]; hasMore: boolean }
+export type HistoryRecord = PostureRecord | EyeRecord | KeyboardHistoryRecord;
+export interface HistoryPage { counts: Record<string, number>; records: HistoryRecord[]; hasMore: boolean }
 // Same minimum observation time as eye-habits-v2; missing observation is not zero.
 export const eyeRate = (value: Pick<EyeTotals, 'validMs' | 'blinks'>) => value.validMs >= 30000 ? value.blinks * 60000 / value.validMs : null;
 

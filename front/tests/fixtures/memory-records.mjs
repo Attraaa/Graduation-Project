@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { parseBatch, parseQuery, localDateKey } from '../../../database/contracts.ts';
-import { parseKeyboardBatch, keyboardCountKey } from '../../../database/keyboard.ts';
+import { parseKeyboardBatch, keyboardCountKey, keyboardSummary } from '../../../database/keyboard.ts';
 import { parseEyeBatch, eyeFields, emptyEyeTotals } from '../../../database/eye.ts';
 
 const fields = ['runMs', 'validMs', 'scoreTimeSum', 'deviationMs', 'deviationEpisodeCount'];
@@ -152,7 +152,11 @@ export class MemoryRecords {
   history(input) {
     const { owner, from, to, mode, offset } = parseQuery(input);
     if (mode) throw new Error('학습이력에는 모드 조건을 사용할 수 없습니다.');
-    const records = [...this.posture.values(), ...this.eye.values()].map(({ record }) => record)
+    const records = [...[...this.posture.values(), ...this.eye.values()].map(({ record }) => record),
+      ...[...this.keyboard.values()].map(({ record, counts }) => {
+        const { score, coverage, valid } = keyboardSummary([...counts.values()], record.nearbyCredit);
+        return { ...record, mode: 'keyboard', summary: { score, coverage, valid } };
+      })]
       .filter(record => record.owner === owner
         && localDateKey(record.startedAt, record.offsetMinutes) >= from && localDateKey(record.startedAt, record.offsetMinutes) <= to)
       .sort((a, b) => b.startedAt - a.startedAt || a.mode.localeCompare(b.mode) || a.id.localeCompare(b.id));

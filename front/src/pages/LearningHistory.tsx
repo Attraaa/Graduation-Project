@@ -17,6 +17,7 @@ import { recordsApi, recordValue } from '../features/records/api';
 import { getCurrentUser } from '../utils/authStore';
 import Button from '../components/Button';
 import { EyeDetailData } from '../features/eye/EyeRecordData';
+import KeyboardRecordDetail from '../features/keyboard/KeyboardRecordDetail';
 
 const calendarViews = [
   { id: 'day', label: '일간' },
@@ -80,9 +81,9 @@ const getCalendarTitle = (view: CalendarView, selectedDate: string) => {
 
 const getDayColor = (date: string) => {
   const day = toDate(date).getDay();
-  if (day === 0) return 'text-[#ff4b4b]';
-  if (day === 6) return 'text-[#1cb0f6]';
-  return 'text-gray-800';
+  if (day === 0) return 'text-mode-eye';
+  if (day === 6) return 'text-mode-keyboard';
+  return 'text-heading';
 };
 
 const LearningHistory = () => {
@@ -108,12 +109,15 @@ const LearningHistory = () => {
   const sessionsByDate = query.data?.day.records.map(historyView) ?? [];
   const counts = query.data?.calendar.counts ?? {};
   const selectedId = selectedSession?.id ?? '';
-  const loadDetail = useCallback(async () => selectedId && selectedSession?.mode !== 'eye' ? recordValue(recordsApi().detail(owner, selectedId)) : null, [owner, selectedId, selectedSession?.mode]);
+  const loadDetail = useCallback(async () => selectedId && (selectedSession?.mode === 'turtle' || selectedSession?.mode === 'shoulder') ? recordValue(recordsApi().detail(owner, selectedId)) : null, [owner, selectedId, selectedSession?.mode]);
   const detail = useRecordQuery(owner + ':' + selectedSession?.mode + ':' + selectedId, loadDetail);
   const graph = historyGraph(detail.data);
   const loadEyeDetail = useCallback(async () => selectedId && selectedSession?.mode === 'eye'
     ? recordValue(recordsApi().eyeDetail(owner, selectedId)) : null, [owner, selectedId, selectedSession?.mode]);
   const eyeDetail = useRecordQuery(owner + ':' + selectedSession?.mode + ':' + selectedId, loadEyeDetail);
+  const loadKeyboardDetail = useCallback(async () => selectedId && selectedSession?.mode === 'keyboard'
+    ? recordValue(recordsApi().keyboardDetail(owner, selectedId)) : null, [owner, selectedId, selectedSession?.mode]);
+  const keyboardDetail = useRecordQuery(owner + ':' + selectedSession?.mode + ':' + selectedId, loadKeyboardDetail);
 
   const handleDateClick = (date: string) => {
     setSelectedDate(date);
@@ -141,6 +145,13 @@ const LearningHistory = () => {
   };
 
   if (selectedSession) {
+    if (selectedSession.mode === 'keyboard') return <>
+      {keyboardDetail.data ? <KeyboardRecordDetail key={owner + ':' + selectedId} detail={keyboardDetail.data} onBack={() => setSelectedSession(null)} /> : <div className="space-y-4">
+        <button type="button" onClick={() => setSelectedSession(null)} className="flex items-center gap-1 text-sm font-semibold text-muted hover:text-heading"><ArrowLeft size={16} />학습이력으로 돌아가기</button>
+        {keyboardDetail.loading && <p role="status" className="rounded-2xl border border-border bg-surface p-6 text-muted">키보드 상세 기록을 불러오는 중입니다.</p>}
+        {keyboardDetail.error && <div role="alert" className="rounded-2xl border border-border bg-surface p-6 text-muted"><p>{keyboardDetail.error}</p><Button variant="outline" onClick={keyboardDetail.retry} className="mt-3">다시 불러오기</Button></div>}
+      </div>}
+    </>;
     const mode = getLearningMode(selectedSession.mode);
     return (
       <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -211,28 +222,29 @@ const LearningHistory = () => {
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <header className="mb-8">
-        <h1 className="text-3xl font-black text-gray-700">학습이력</h1>
-        <p className="mt-2 font-bold text-gray-600">로그인한 계정의 서버에 저장한 상체 자세·안구 관찰 기록을 시작일별로 확인합니다. 상체 측정은 목·어깨 기록 2개, 안구 측정은 기록 1개로 표시합니다. 안구 상세에서는 깜빡임·유효 시간·휴식 기록을 확인할 수 있습니다.</p>
+      <header>
+        <h1 className="text-2xl font-extrabold text-heading">학습이력</h1>
+        <p className="mt-2 text-muted">저장한 상체·키보드·안구 학습을 날짜별로 확인해요. 기록을 선택하면 세션의 상세 결과를 볼 수 있습니다.</p>
+        <p className="mt-1 text-xs text-muted">상체 학습 1회는 목·어깨 기록 2개로 표시합니다.</p>
       </header>
 
-      <div className="card-duo">
+      <div className="rounded-2xl border border-border bg-surface p-5">
         <div className="mb-5 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div className="flex flex-wrap items-center gap-3">
-            <CalendarDays className="text-[#1cb0f6]" />
+            <CalendarDays className="text-mode-keyboard" />
             <button
               type="button"
               onClick={() => handlePeriodMove(-1)}
-              className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-gray-200 bg-white text-gray-600 transition hover:bg-gray-50"
+              className="flex h-9 w-9 items-center justify-center rounded-xl border border-border bg-surface text-muted transition hover:bg-surface-muted"
               aria-label="이전 기간"
             >
               <ChevronLeft size={18} />
             </button>
-            <h2 className="min-w-0 text-xl font-black text-gray-700">{getCalendarTitle(calendarView, selectedDate)}</h2>
+            <h2 className="min-w-0 text-base font-bold text-heading">{getCalendarTitle(calendarView, selectedDate)}</h2>
             <button
               type="button"
               onClick={() => handlePeriodMove(1)}
-              className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-gray-200 bg-white text-gray-600 transition hover:bg-gray-50"
+              className="flex h-9 w-9 items-center justify-center rounded-xl border border-border bg-surface text-muted transition hover:bg-surface-muted"
               aria-label="다음 기간"
             >
               <ChevronRight size={18} />
@@ -242,11 +254,11 @@ const LearningHistory = () => {
             <button
               type="button"
               onClick={handleTodayClick}
-              className="rounded-2xl border-2 border-gray-200 bg-white px-4 py-2 text-sm font-black text-gray-700 transition hover:bg-gray-50"
+              className="rounded-xl border border-border bg-surface px-4 py-2 text-sm font-semibold text-heading transition hover:bg-surface-muted"
             >
               오늘
             </button>
-            <div className="grid grid-cols-3 rounded-2xl border-2 border-gray-200 bg-gray-50 p-1">
+            <div className="grid grid-cols-3 rounded-xl bg-surface-muted p-1">
               {calendarViews.map((view) => {
                 const isActive = calendarView === view.id;
                 return (
@@ -254,8 +266,8 @@ const LearningHistory = () => {
                     key={view.id}
                     type="button"
                     onClick={() => setCalendarView(view.id)}
-                    className={`rounded-xl px-4 py-2 text-sm font-black transition ${
-                      isActive ? 'bg-white text-[#1cb0f6] shadow-sm' : 'text-gray-600 hover:text-gray-800'
+                    className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${
+                      isActive ? 'bg-surface text-mode-keyboard shadow-sm' : 'text-muted hover:text-heading'
                     }`}
                   >
                     {view.label}
@@ -271,7 +283,7 @@ const LearningHistory = () => {
               <div
                 key={weekday}
                 className={`px-3 text-center text-sm font-black ${
-                  index === 0 ? 'text-[#ff4b4b]' : index === 6 ? 'text-[#1cb0f6]' : 'text-gray-500'
+                  index === 0 ? 'text-mode-eye' : index === 6 ? 'text-mode-keyboard' : 'text-muted'
                 }`}
               >
                 {weekday}
@@ -290,15 +302,15 @@ const LearningHistory = () => {
               <button
                 key={date}
                 onClick={() => handleDateClick(date)}
-                className={`min-h-24 rounded-2xl border-2 p-3 text-left transition ${
-                  isActive ? 'border-[#1cb0f6] bg-blue-50' : 'border-gray-200 bg-gray-50 hover:border-gray-300 hover:bg-white'
+                className={`min-h-24 rounded-xl border p-3 text-left transition ${
+                  isActive ? 'border-mode-keyboard bg-mode-keyboard-soft' : 'border-border bg-surface-muted hover:border-border-strong hover:bg-surface'
                 }`}
               >
                 <div className="flex items-start justify-between gap-2">
                   <span className={`font-black ${getDayColor(date)}`}>{Number(date.slice(-2))}</span>
                   <span className={`text-xs font-black md:hidden ${getDayColor(date)}`}>{weekdays[toDate(date).getDay()]}</span>
                   {count > 0 && (
-                    <span className="rounded-full bg-white px-2 py-0.5 text-xs font-black text-gray-600">
+                    <span className="rounded-full bg-surface px-2 py-0.5 text-xs font-semibold text-muted">
                       {count}
                     </span>
                   )}
@@ -312,8 +324,8 @@ const LearningHistory = () => {
         </div>
       </div>
 
-      <div className="card-duo">
-        <h2 className="mb-4 text-xl font-black text-gray-700">{selectedDate} 관찰 기록</h2>
+      <div className="rounded-2xl border border-border bg-surface p-5">
+        <h2 className="mb-4 text-base font-bold text-heading">{selectedDate} 관찰 기록</h2>
         {query.loading && <p role="status">기록을 불러오는 중입니다.</p>}
         {query.error && <div role="alert"><p>{query.error}</p><Button variant="outline" onClick={query.retry}>다시 불러오기</Button></div>}
         <div className="mb-4 flex gap-2">
@@ -331,15 +343,15 @@ const LearningHistory = () => {
                 <button
                   key={session.mode + ':' + session.id}
                   onClick={() => setSelectedSession(session)}
-                  className="flex w-full items-center justify-between rounded-2xl border-2 border-gray-100 bg-white p-4 text-left transition hover:border-blue-200 hover:bg-blue-50"
+                  className="flex w-full flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-surface p-4 text-left transition hover:border-mode-keyboard hover:bg-surface-muted"
                 >
                   <div className="flex items-center gap-3">
                     <div className={`flex h-12 w-12 items-center justify-center rounded-2xl ${mode.bgClass} text-white`}>
                       {mode.icon}
                     </div>
                     <div>
-                      <p className="font-black text-gray-700">{session.title}</p>
-                      <p className="text-sm font-bold text-gray-500">{session.startedAt} · {session.duration}</p>
+                      <p className="font-bold text-heading">{session.title}</p>
+                      <p className="text-sm text-muted">{session.startedAt} · {session.duration}{session.mode === 'keyboard' ? ` · 입력 ${session.total.toLocaleString()}회` : ''}</p>
                     </div>
                   </div>
                   <span className={`text-2xl font-black ${mode.textClass}`}>{session.mode === 'eye' ? session.blinks + '회 깜빡임' : session.score === null ? '자료 없음' : session.score.toFixed(1) + '점'}</span>

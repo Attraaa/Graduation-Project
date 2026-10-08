@@ -2,7 +2,7 @@ import { averageScore, localDateKey } from '../../../../database/contracts.ts';
 import type { PostureRecord, StatisticsRow } from '../../../../database/contracts.ts';
 import { statisticsKey } from '../../../../database/aggregation.ts';
 import { eyeRate } from '../../../../database/eye.ts';
-import type { EyeRecord, EyeStatisticsRow } from '../../../../database/eye.ts';
+import type { EyeStatisticsRow, HistoryRecord } from '../../../../database/eye.ts';
 import { keyboardSummary } from '../../../../database/keyboard.ts';
 import type { KeyboardStored } from '../../../../database/keyboard.ts';
 
@@ -25,7 +25,7 @@ export interface DashboardInput {
   posture: StatisticsRow[] | null;
   eye: EyeStatisticsRow[] | null;
   keyboard: KeyboardStored[] | null;
-  history: (PostureRecord | EyeRecord)[] | null;
+  history: HistoryRecord[] | null;
 }
 export interface DashboardSummary {
   dates: string[];
@@ -103,13 +103,15 @@ function eyeDay(rows: EyeStatisticsRow[], date: string): EyeDay {
 interface TimelineFilter { turtle: string | null; shoulder: string | null; eye: string | null }
 
 /** Today's sessions in start order. A null filter means "no statistics loaded, accept all". */
-function timelineEntries(history: (PostureRecord | EyeRecord)[], keyboard: KeyboardStored[], today: string,
+function timelineEntries(history: HistoryRecord[], keyboard: KeyboardStored[], today: string,
   accept: TimelineFilter): TimelineEntry[] {
   const startsToday = (record: { startedAt: number; offsetMinutes: number }) =>
     localDateKey(record.startedAt, record.offsetMinutes) === today;
   const entries: TimelineEntry[] = [];
   const upper = new Map<string, PostureRecord[]>();
   for (const record of history) {
+    // Keyboard timelines still use the policy-filtered statistics source once.
+    if (record.mode === 'keyboard') continue;
     if (!startsToday(record)) continue;
     if (record.mode === 'eye') {
       if (accept.eye !== null && record.policyVersion !== accept.eye) continue;

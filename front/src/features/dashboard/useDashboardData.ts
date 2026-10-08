@@ -1,6 +1,5 @@
 import { useCallback, useMemo } from 'react';
-import type { PostureRecord } from '../../../../database/contracts';
-import type { EyeRecord } from '../../../../database/eye';
+import type { HistoryRecord } from '../../../../database/eye';
 import { getCurrentUser } from '../../utils/authStore';
 import { recordsApi, recordValue } from '../records/api';
 import { useRecordQuery } from '../records/useRecordQuery';
@@ -32,7 +31,7 @@ export function useDashboardData() {
   }, [owner, from, today]);
   const loadHistory = useCallback(async () => {
     if (!owner) throw new Error(LOGIN_REQUIRED);
-    const records: (PostureRecord | EyeRecord)[] = [];
+    const records: HistoryRecord[] = [];
     for (;;) {
       const page = await recordValue(recordsApi().history({ owner, from: today, to: today, offset: records.length }));
       records.push(...page.records);

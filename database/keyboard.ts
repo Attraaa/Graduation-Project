@@ -16,6 +16,10 @@ export interface KeyboardBatch {
   schemaVersion: 1; generation: number; sequence: number; record: KeyboardRecord; counts: KeyboardCount[];
 }
 export interface KeyboardStored { record: KeyboardRecord; counts: KeyboardCount[] }
+/** Calendar entries carry a summary, never the full per-key count payload. */
+export interface KeyboardHistoryRecord extends KeyboardRecord {
+  mode: 'keyboard'; summary: { score: number | null; coverage: number | null; valid: number };
+}
 export interface KeyboardQuery { owner: string; from: string; to: string }
 export const RECOGNITION_VERSION = 'hands-label-distance-v2';
 export const KEYBOARD_CODES = new Set([
@@ -82,10 +86,19 @@ export function parseKeyboardQuery(input: unknown): KeyboardQuery {
   const row = object(input, ['owner', 'from', 'to']);
   return parseQuery(row);
 }
+export interface KeyboardTotals { preferred: number; acceptable: number; nearby: number; mismatch: number; unknown: number; unsupported: number }
+/** Shared by per-key summaries and the server's compact calendar aggregates. */
+export function keyboardTotalsSummary(totals: KeyboardTotals, nearbyCredit = 70) {
+  const { preferred, acceptable, nearby, mismatch, unknown } = totals;
+  const valid = preferred + acceptable + nearby + mismatch;
+  return { ...totals, valid,
+    score: valid ? ((preferred + acceptable) * 100 + nearby * nearbyCredit) / valid : null,
+    agreement: valid ? (preferred + acceptable) * 100 / valid : null,
+    coverage: valid + unknown ? valid * 100 / (valid + unknown) : null };
+}
 export function keyboardSummary(counts: KeyboardCount[], nearbyCredit = 70) {
   const sum = (verdict: KeyboardVerdict) => counts.filter(row => row.verdict === verdict).reduce((value, row) => value + row.count, 0);
   const preferred = sum('preferred'), acceptable = sum('acceptable'), nearby = sum('nearby'), mismatch = sum('mismatch');
-  const valid = preferred + acceptable + nearby + mismatch;
   const unsupported = counts.filter(row => row.reason === 'unsupported-key' || row.reason === 'shortcut').reduce((value, row) => value + row.count, 0);
   const unknown = sum('unknown') - unsupported;
   const byKey = new Map<string, Map<string, number>>();
@@ -100,9 +113,6 @@ export function keyboardSummary(counts: KeyboardCount[], nearbyCredit = 70) {
     const n = [...distribution.values()].reduce((a, b) => a + b, 0);
     if (n >= 10) { consistencyTotal += n; consistent += Math.max(...distribution.values()); }
   }
-  return { preferred, acceptable, nearby, mismatch, valid, unknown, unsupported,
-    score: valid ? ((preferred + acceptable) * 100 + nearby * nearbyCredit) / valid : null,
-    agreement: valid ? (preferred + acceptable) * 100 / valid : null,
-    coverage: valid + unknown ? valid * 100 / (valid + unknown) : null,
+  return { ...keyboardTotalsSummary({ preferred, acceptable, nearby, mismatch, unknown, unsupported }, nearbyCredit),
     consistency: consistencyTotal ? consistent * 100 / consistencyTotal : null, consistencyTotal };
 }

@@ -222,20 +222,32 @@ test('MySQL record repository', { skip: url ? false : 'set MOTI_TEST_MYSQL_URL t
     assert.equal(separated.length, 2); assert.equal(separated[0].sessionCount, 1); assert.equal(separated[1].sessionCount, 1);
   });
 
-  await t.test('mixed history pages include all posture and eye counts with stable ordering', async t => {
+  await t.test('mixed history pages include all modes with stable ordering and compact keyboard summaries', async t => {
     const db = await database(t);
     for (let index = 0; index < 102; index++) {
-      if (index % 2) await db.writeEye(DEMO, measuredEye('page-' + index));
-      else await db.write(DEMO, measured('page-' + index));
+      if (index % 3 === 1) await db.writeEye(DEMO, measuredEye('page-' + index));
+      else if (index % 3 === 2) {
+        const value = keyboard();
+        value.record = { ...value.record, id: 'page-' + index, startedAt: measured().record.startedAt, updatedAt: measured().record.updatedAt };
+        value.counts = value.counts.map(row => ({ ...row, date: '2027-01-15' }));
+        await db.writeKeyboard(DEMO, value);
+      } else await db.write(DEMO, measured('page-' + index));
     }
     await db.writeEye(OTHER, measuredEye('foreign', String(OTHER)));
+    const foreign = keyboard(); foreign.record = { ...foreign.record, id: 'foreign-keyboard', owner: String(OTHER), startedAt: measured().record.startedAt, updatedAt: measured().record.updatedAt };
+    foreign.counts = foreign.counts.map(row => ({ ...row, date: '2027-01-15' }));
+    await db.writeKeyboard(OTHER, foreign);
     const date = new Date(measuredEye().record.startedAt + 540 * 60000).toISOString().slice(0, 10);
     const query = { owner: String(DEMO), from: date, to: date };
     const first = await db.history(DEMO, query), second = await db.history(DEMO, { ...query, offset: 100 });
     assert.equal(first.records.length, 100); assert.equal(first.hasMore, true); assert.equal(first.counts[date], 102);
     assert.equal(second.records.length, 2); assert.equal(second.hasMore, false);
     assert.equal(new Set([...first.records, ...second.records].map(record => record.id)).size, 102);
-    assert.equal(first.records.filter(record => record.mode === 'eye').length, 51);
+    assert.equal(first.records.filter(record => record.mode === 'eye').length, 34);
+    const typing = first.records.filter(record => record.mode === 'keyboard');
+    assert.equal(typing.length, 34);
+    assert.deepEqual(typing[0].summary, { score: 94, coverage: 100, valid: 10 });
+    assert.equal('counts' in typing[0], false);
   });
 
   await t.test('003 adds eye storage while preserving existing posture rows', async t => {
@@ -312,5 +324,40 @@ test('eye and mixed-history MySQL reads use authorized owner and preserve typed 
   assert.deepEqual(await store.db.eyeStatistics(DEMO, range), [{ date: '2026-10-01', hour: '09', policyVersion: value.record.policyVersion,
     sessionCount: 1, runMs: 1000, validMs: 500, blinks: 2, breaks: 0, nearReminders: 0, openReminders: 0 }]);
   assert.deepEqual(await store.db.history(DEMO, { ...range, offset: 100 }), { records: [value.record, posture.record], hasMore: false, counts: { '2026-10-01': 102 } });
+  store.done();
+});
+
+test('keyboard calendar pages aggregate the full session with saved credit, exclude shortcuts from coverage, and scope counts to the token owner', async () => {
+  const value = keyboard(); value.record.nearbyCredit = 50; value.record.total = 25;
+  const store = scriptedStore([
+    { sql: /CAST\(JSON_UNQUOTE\(JSON_EXTRACT\(data, '\$\.startedAt'\)\) AS UNSIGNED\).*FROM keyboard_records.*ORDER BY started_at DESC, mode, id LIMIT 101 OFFSET \?/, values: [DEMO, '2026-10-01', '2026-10-01', 0],
+      rows: [{ mode: 'keyboard', data: JSON.stringify(value.record) }] },
+    { sql: /COUNT\(\*\).*FROM keyboard_records.*GROUP BY start_date/, values: [DEMO, '2026-10-01', '2026-10-01'], rows: [{ start_date: '2026-10-01', count: '1' }] },
+    { sql: /SUM\(CAST.*JOIN keyboard_records.*WHERE r.user_id = \? AND c.record_id IN \(\?\) GROUP BY c.record_id, verdict, reason/,
+      values: [DEMO, [value.record.id]], rows: [
+        { record_id: value.record.id, verdict: 'preferred', reason: 'preferred-finger', count: '8' },
+        { record_id: value.record.id, verdict: 'nearby', reason: 'neighboring-finger', count: '2' },
+        { record_id: value.record.id, verdict: 'unknown', reason: 'ambiguous-candidates', count: '10' },
+        { record_id: value.record.id, verdict: 'unknown', reason: 'shortcut', count: '5' },
+      ] },
+  ]);
+  const page = await store.db.history(DEMO, { owner: String(DEMO), from: '2026-10-01', to: '2026-10-01' });
+  assert.deepEqual(page, { records: [{ ...value.record, mode: 'keyboard', summary: { score: 90, coverage: 50, valid: 10 } }], counts: { '2026-10-01': 1 }, hasMore: false });
+  store.done();
+});
+
+test('keyboard calendar summaries only load counts for the visible page and distinguish empty data from zero scores', async () => {
+  const value = keyboard(); value.record.total = 0;
+  const sentinel = { ...value.record, id: 'next-page' };
+  const rows = Array.from({ length: 100 }, (_, i) => ({ mode: 'keyboard', data: JSON.stringify({ ...value.record, id: 'page-' + i }) }));
+  const ids = Array.from({ length: 100 }, (_, i) => 'page-' + i);
+  const store = scriptedStore([
+    { sql: /LIMIT 101 OFFSET/, rows: [...rows, { mode: 'keyboard', data: JSON.stringify(sentinel) }] },
+    { sql: /COUNT\(\*\)/, rows: [{ start_date: '2026-10-01', count: '101' }] },
+    { sql: /c.record_id IN \(\?\)/, values: [DEMO, ids], rows: [] },
+  ]);
+  const page = await store.db.history(DEMO, { owner: String(DEMO), from: '2026-10-01', to: '2026-10-01' });
+  assert.equal(page.records.length, 100); assert.equal(page.hasMore, true);
+  assert.deepEqual(page.records[0].mode === 'keyboard' && page.records[0].summary, { score: null, coverage: null, valid: 0 });
   store.done();
 });

@@ -24,6 +24,16 @@ const keyboardStored = (over = {}) => ({
     { date: TODAY, code: 'KeyA', context: 'plain', finger: 'left:ring', verdict: 'nearby', reason: 'neighboring-finger', count: 2 },
   ] });
 
+test('a keyboard entry in mixed history does not duplicate the keyboard statistics timeline', () => {
+  const stored = keyboardStored();
+  const history = { ...stored.record, mode: 'keyboard', summary: keyboardSummary(stored.counts, stored.record.nearbyCredit) };
+  const summary = build({ history: [history], keyboard: [stored] });
+  assert.equal(summary.timeline.length, 1);
+  assert.equal(summary.timeline[0].mode, 'keyboard');
+  assert.equal(summary.timeline[0].score, 94);
+  assert.equal(summary.today.keyboard.sessions, 1);
+});
+
 test('dashboardDates covers six days back to today across month and year boundaries', () => {
   assert.deepEqual(dashboardDates('2026-10-06'),
     ['2026-09-30', '2026-10-01', '2026-10-02', '2026-10-03', '2026-10-04', '2026-10-05', '2026-10-06']);

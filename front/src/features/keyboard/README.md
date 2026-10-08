@@ -3,8 +3,17 @@
 This directory contains Moti's versioned coaching policy and pure evaluation
 logic, plus keyboard presentation, camera transform, and aggregate recording.
 `evaluatePress.ts`, `types.ts`, and `fingerPolicy.ts` remain pure policy modules.
-`KeyboardMonitor` owns the stream/service lifecycle. SQLite operations remain in
-the root `database/` and Electron main.
+`KeyboardMonitor` owns the stream/service lifecycle. Current records use the shared `database/` contracts
+and the authenticated HTTP/MySQL repository, not Electron SQLite.
+
+`KeyboardRecordDetail` presents a single saved session from LearningHistory.
+`KeyboardKeyExploration` shares the score/count heatmap and selected-key finger
+distribution with Statistics. `keyExploration.ts` owns pure key grouping and a
+display-only practice ranking (at least 10 valid observations, up to three keys,
+descending nearby/mismatch ratio). Unknown and excluded input never becomes a
+practice mistake. Only an exact supported stored policy supplies a recommended
+finger table. Saved sessions appear in mixed history on their local start day;
+history carries compact summaries and the existing detail API carries counts.
 
 ## Evidence and product interpretation
 

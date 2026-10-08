@@ -1,0 +1,32 @@
+.keyboard-record-detail { container-type: inline-size; word-break: keep-all; }
+.keyboard-record-card { min-width: 0; border: 1px solid var(--color-border); border-radius: 16px; padding: 20px; background: var(--color-surface); }
+.keyboard-record-exploration { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+.keyboard-record-summary, .keyboard-record-secondary { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+.keyboard-record-keys { display: grid; gap: 5px; }
+.keyboard-record-key-row { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 4px; }
+.keyboard-record-key-row:nth-child(2) { margin-left: 10px; }
+.keyboard-record-key-row:nth-child(3) { margin-left: 20px; }
+.keyboard-record-key-row:last-child { display: flex; justify-content: center; }
+.keyboard-record-key { min-width: 0; min-height: 48px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; padding: 5px; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-surface-muted); color: var(--color-heading); font-size: 13px; cursor: pointer; }
+.keyboard-record-key span { font-size: 10px; font-variant-numeric: tabular-nums; opacity: .8; }
+.keyboard-record-key small { margin-left: 2px; font-size: 9px; }
+.keyboard-record-key[data-band="high"] { background: var(--color-mode-upper-soft); }
+.keyboard-record-key[data-band="middle"] { background: var(--color-mode-shoulder-soft); }
+.keyboard-record-key[data-band="low"] { background: var(--color-mode-eye-soft); }
+.keyboard-record-key[aria-pressed="true"] { outline: 2px solid var(--color-mode-keyboard); outline-offset: 0; }
+.keyboard-record-key:hover { border-color: var(--color-mode-keyboard); }
+.keyboard-record-key:focus-visible { outline: 3px solid var(--color-mode-keyboard); outline-offset: 2px; }
+.keyboard-record-key-row:last-child .keyboard-record-key { width: 45%; }
+.keyboard-record-dot { display: inline-block; width: 7px; height: 7px; margin-right: 5px; border-radius: 50%; }
+@container (min-width: 760px) {
+  .keyboard-record-exploration { grid-template-columns: minmax(0, 1.65fr) minmax(260px, 1fr); }
+}
+@container (min-width: 640px) {
+  .keyboard-record-summary { grid-template-columns: minmax(0, 1.2fr) repeat(2, minmax(0, 1fr)); }
+  .keyboard-record-secondary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@container (max-width: 450px) {
+  .keyboard-record-card { padding: 16px; }
+  .keyboard-record-key-row { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  .keyboard-record-key-row:nth-child(2), .keyboard-record-key-row:nth-child(3) { margin-left: 0; }
+}

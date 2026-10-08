@@ -63,7 +63,8 @@ Electron 개발 앱의 키보드 모드는 로컬 Python 프로세스를 자동 
 | `front/src/utils/apiClient.ts`, `authStore.ts` | API 주소·JWT 세션 보관·401 처리, 서버 회원가입/로그인/계정 변경 |
 | `database/contracts.ts`, `keyboard.ts`, `eye.ts`, `eyeRecorder.ts`, `recorder.ts`, `aggregation.ts` | 자세·키보드 직렬화 계약·순수 집계. 프론트와 서버가 같은 검증기를 사용 |
 | `front/src/features/records/` | 저장 배치/실패 재시도·HTTP 기록 API·조회 상태·목/어깨 표시 어댑터. AI/의학 예시는 별도 컴포넌트 |
-| `front/src/pages/Statistics.tsx`, `LearningHistory.tsx` | 서버에 저장된 실제 통계와 시작일별 달력·페이지 목록·분 그래프 |
+| `front/src/pages/Statistics.tsx`, `LearningHistory.tsx` | 서버에 저장된 실제 통계와 전체 모드의 시작일별 달력·페이지 목록·상세. 키보드는 집계 히트맵/손가락 분포, 자세·안구는 분 집계 |
+| `front/src/features/keyboard/KeyboardRecordDetail.tsx`, `KeyboardKeyExploration.tsx`, `keyExploration.ts` | 키보드 세션 상세 표시, 통계/이력 공용 히트맵·선택 키 표시, DOM 없는 키별 집계·연습 순위. 카메라/실시간 점수 정책을 소유하지 않음 |
 | `server/src/server.ts`, `config.ts` | 환경 검증 후 서버 시작. JWT 비밀값 자동 기본값 없음 |
 | `server/src/app.ts`, `http.ts` | API 조립과 공통 비동기 오류 응답 |
 | `server/src/validation.ts` | HTTP 입력을 런타임에서 검사 |
@@ -88,7 +89,7 @@ Electron 개발 앱의 키보드 모드는 로컬 Python 프로세스를 자동 
 
 키보드는 `LearningSession → KeyboardSession → KeyboardMonitor → loopback Python service → runtime adapter → finger policy → aggregate recording` 순서입니다. Electron main은 빈 로컬 포트와 세션 토큰으로 `.venv` Python을 실행합니다. 기본 입력은 현재 화면의 물리 `code`이며, 사용자가 설정에서 일반 앱을 승인하고 시작 시 체크한 경우에만 Windows Raw Input 경로를 추가합니다. 승인 경로·foreground 권한을 확인하고 미승인·관리자·확인 불가 앱을 제외합니다. 알려진 게임 실행 파일/디렉터리는 승인도 거절하지만 모든 게임의 자동 식별이나 제재 방지는 보장할 수 없습니다.
 
-Python은 손끝 후보와 프레임 시간차를 반환하고 앱의 `ansi-qwerty-touch:2.0.0` 정책이 100·70·0/보류를 결정합니다. 손 가림을 직접 감지하는 모델은 없으며 관측 부족·가까운 후보·시간 차이를 보류 근거로 사용합니다. 손가락 일관성은 별도 지표이며 가산점이 아닙니다. 원문·입력 순서·영상은 저장하지 않고 날짜·키·상황·손가락·판정 횟수만 서버에 저장합니다. 정책별 통계·히트맵·세션 상세는 Statistics의 키보드 모드에 있습니다. 집계만 서버에 저장합니다. crop·자유 회전·필터는 미리보기와 분석에 동일하게 적용하고 변경 시 기존 맵과 프레임을 폐기합니다. 세부 산식/품질 한계는 [키보드 계약](../front/src/features/keyboard/README.md), 저장은 [database](../database/README.md)를 따릅니다.
+Python은 손끝 후보와 프레임 시간차를 반환하고 앱의 `ansi-qwerty-touch:2.0.0` 정책이 100·70·0/보류를 결정합니다. 손 가림을 직접 감지하는 모델은 없으며 관측 부족·가까운 후보·시간 차이를 보류 근거로 사용합니다. 손가락 일관성은 별도 지표이며 가산점이 아닙니다. 원문·입력 순서·영상은 저장하지 않고 날짜·키·상황·손가락·판정 횟수만 서버에 저장합니다. 기간별 통계는 Statistics의 키보드 모드, 세션별 키 탐색 상세는 LearningHistory에서 제공합니다. 두 화면은 히트맵/선택 키 컴포넌트를 공유합니다. 학습이력에 키보드 요약이 추가되어도 홈 타임라인은 정책별 키보드 통계 출처를 한 번만 사용합니다. crop·자유 회전·필터는 미리보기와 분석에 동일하게 적용하고 변경 시 기존 맵과 프레임을 폐기합니다. 세부 산식/품질 한계는 [키보드 계약](../front/src/features/keyboard/README.md), 저장은 [database](../database/README.md)를 따릅니다.
 
 `MonitorSnapshot`은 준비/수집/관찰/관찰 불가/오류 상태와 수집 진행률, 부위별 편차, 유효 관찰 시간, 목·어깨 각각의 현재/평균 점수와 보호 상태·습관 집계·정책 버전을 전달합니다. 사용자의 자세가 의학적으로 올바른지 판단하는 타입이 아닙니다.
 

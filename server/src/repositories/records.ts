@@ -4,8 +4,8 @@ import type { RowDataPacket } from 'mysql2';
 import { HttpError } from '../http.js';
 import { localDateKey, parseRecord } from '../../../database/contracts.ts';
 import type { MinuteBucket, RecordBatch, RecordDetail, RecordMode, RecordPage, RecordQuery, StatisticsRow, Totals } from '../../../database/contracts.ts';
-import { keyboardCountKey, parseKeyboardRecord } from '../../../database/keyboard.ts';
-import type { KeyboardBatch, KeyboardCount, KeyboardQuery, KeyboardStored } from '../../../database/keyboard.ts';
+import { keyboardCountKey, keyboardTotalsSummary, parseKeyboardRecord } from '../../../database/keyboard.ts';
+import type { KeyboardBatch, KeyboardCount, KeyboardHistoryRecord, KeyboardQuery, KeyboardStored, KeyboardTotals } from '../../../database/keyboard.ts';
 import { eyeFields, parseEyeRecord } from '../../../database/eye.ts';
 import type { EyeBatch, EyeBucket, EyeDetail, EyeStatisticsRow, EyeTotals, HistoryPage } from '../../../database/eye.ts';
 
@@ -323,11 +323,13 @@ export class MysqlRecordRepository {
       sessionCount: Number(row.session_count), ...eyeTotalsOf(row) }));
   }
 
-  /** Order all posture and eye rows together before applying the calendar page limit. */
+  /** Order all modes together before applying the calendar page limit. */
   async history(userId: number, query: RecordQuery): Promise<HistoryPage> {
     if (query.mode) throw new HttpError(400, '학습이력에는 모드 조건을 사용할 수 없습니다.');
     const source = `(SELECT id, user_id, start_date, started_at, data, mode FROM posture_records
-      UNION ALL SELECT id, user_id, start_date, started_at, data, 'eye' AS mode FROM eye_records) AS history_records`;
+      UNION ALL SELECT id, user_id, start_date, started_at, data, 'eye' AS mode FROM eye_records
+      UNION ALL SELECT id, user_id, start_date, CAST(JSON_UNQUOTE(JSON_EXTRACT(data, '$.startedAt')) AS UNSIGNED) AS started_at,
+        data, 'keyboard' AS mode FROM keyboard_records) AS history_records`;
     const [rows] = await this.pool.query<RowDataPacket[]>(
       `SELECT data, mode FROM ${source} WHERE user_id = ? AND start_date BETWEEN ? AND ?
        ORDER BY started_at DESC, mode, id LIMIT 101 OFFSET ?`,
@@ -337,7 +339,34 @@ export class MysqlRecordRepository {
       `SELECT start_date, COUNT(*) AS count FROM ${source} WHERE user_id = ? AND start_date BETWEEN ? AND ? GROUP BY start_date`,
       [userId, query.from, query.to],
     );
-    return { records: rows.slice(0, 100).map(row => row.mode === 'eye' ? parseEyeRecord(JSON.parse(String(row.data))) : parseRecord(JSON.parse(String(row.data)))),
+    const page = rows.slice(0, 100);
+    const keyboardIds = page.filter(row => row.mode === 'keyboard').map(row => parseKeyboardRecord(JSON.parse(String(row.data))).id);
+    const keyboardTotals = new Map<string, KeyboardTotals>();
+    if (keyboardIds.length) {
+      const [groups] = await this.pool.query<RowDataPacket[]>(
+        `SELECT c.record_id, JSON_UNQUOTE(JSON_EXTRACT(c.data, '$.verdict')) AS verdict,
+          JSON_UNQUOTE(JSON_EXTRACT(c.data, '$.reason')) AS reason,
+          SUM(CAST(JSON_UNQUOTE(JSON_EXTRACT(c.data, '$.count')) AS UNSIGNED)) AS count
+         FROM keyboard_counts c JOIN keyboard_records r ON r.id = c.record_id
+         WHERE r.user_id = ? AND c.record_id IN (?) GROUP BY c.record_id, verdict, reason`, [userId, keyboardIds],
+      );
+      for (const group of groups) {
+        const id = String(group.record_id);
+        const totals = keyboardTotals.get(id) ?? { preferred: 0, acceptable: 0, nearby: 0, mismatch: 0, unknown: 0, unsupported: 0 };
+        const field = group.verdict === 'unknown' && (group.reason === 'unsupported-key' || group.reason === 'shortcut') ? 'unsupported' : String(group.verdict);
+        if (field in totals) totals[field as keyof KeyboardTotals] += Number(group.count);
+        keyboardTotals.set(id, totals);
+      }
+    }
+    return { records: page.map(row => {
+      const data: unknown = JSON.parse(String(row.data));
+      if (row.mode === 'eye') return parseEyeRecord(data);
+      if (row.mode !== 'keyboard') return parseRecord(data);
+      const record = parseKeyboardRecord(data);
+      const { score, coverage, valid } = keyboardTotalsSummary(keyboardTotals.get(record.id)
+        ?? { preferred: 0, acceptable: 0, nearby: 0, mismatch: 0, unknown: 0, unsupported: 0 }, record.nearbyCredit);
+      return { ...record, mode: 'keyboard', summary: { score, coverage, valid } } satisfies KeyboardHistoryRecord;
+    }),
       hasMore: rows.length > 100, counts: Object.fromEntries(counts.map(row => [String(row.start_date), Number(row.count)])) };
   }
 }
