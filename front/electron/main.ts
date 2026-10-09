@@ -7,6 +7,8 @@ import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { trustedRecordUrl } from './recordHandlers'
 import { readKeyboardSettings, chooseKeyboardApp, updateKeyboardSettings } from './keyboardSettings'
+import { cameraSettingsUrl, canOpenCameraSettings } from './cameraWindow'
+import { windowAppearance } from './windowAppearance'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -34,6 +36,8 @@ const recordsPageUrl = process.env.VITE_DEV_SERVER_URL || pathToFileURL(path.joi
 
 let win: BrowserWindow | null
 let splash: BrowserWindow | null
+let cameraWindow: BrowserWindow | null = null
+let windowTheme: 'light' | 'dark' = 'light'
 let keyboardProcess: ChildProcessWithoutNullStreams | null = null
 let keyboardService: { origin: string; token: string } | null = null
 let keyboardStarting: Promise<{ origin: string; token: string }> | null = null
@@ -164,19 +168,29 @@ const startKeyboardService = async (external: boolean) => {
   })
 }
 
-const trustedKeyboard = (event: Electron.IpcMainInvokeEvent) => {
+const trustedAppWindow = (event: Electron.IpcMainInvokeEvent) => {
   if (!win || event.sender !== win.webContents || event.senderFrame !== win.webContents.mainFrame
-    || !trustedRecordUrl(event.senderFrame.url, recordsPageUrl)) throw new Error('허용되지 않은 키보드 요청입니다.')
+    || !trustedRecordUrl(event.senderFrame.url, recordsPageUrl)) throw new Error('허용되지 않은 앱 요청입니다.')
 }
 ipcMain.handle('keyboard-service:start', async (event, external: unknown = false) => {
-  trustedKeyboard(event)
+  trustedAppWindow(event)
   if (typeof external !== 'boolean') throw new Error('잘못된 관찰 설정입니다.')
   try { return await startKeyboardService(external) } catch (error) { stopKeyboardService(); throw error }
 })
-ipcMain.handle('keyboard-service:stop', event => { trustedKeyboard(event); stopKeyboardService() })
-ipcMain.handle('keyboard-settings:read', event => { trustedKeyboard(event); return readKeyboardSettings() })
-ipcMain.handle('keyboard-settings:choose', event => { trustedKeyboard(event); return chooseKeyboardApp(win!) })
-ipcMain.handle('keyboard-settings:update', (event, input: unknown) => { trustedKeyboard(event); return updateKeyboardSettings(input) })
+ipcMain.handle('keyboard-service:stop', event => { trustedAppWindow(event); stopKeyboardService() })
+ipcMain.handle('keyboard-settings:read', event => { trustedAppWindow(event); return readKeyboardSettings() })
+ipcMain.handle('keyboard-settings:choose', event => { trustedAppWindow(event); return chooseKeyboardApp(win!) })
+ipcMain.handle('keyboard-settings:update', (event, input: unknown) => { trustedAppWindow(event); return updateKeyboardSettings(input) })
+ipcMain.handle('window:set-theme', (event, theme: unknown) => {
+  trustedAppWindow(event)
+  const appearance = windowAppearance(theme)
+  windowTheme = theme as 'light' | 'dark'
+  for (const window of [win, cameraWindow]) {
+    if (!window || window.isDestroyed()) continue
+    window.setBackgroundColor(appearance.backgroundColor)
+    window.setTitleBarOverlay(appearance.titleBarOverlay)
+  }
+})
 
 function createWindow() {
   // Create Splash Screen
@@ -196,6 +210,8 @@ function createWindow() {
     minWidth: 800,
     minHeight: 600,
     autoHideMenuBar: true,
+    titleBarStyle: 'hidden',
+    ...windowAppearance(windowTheme),
     show: false, // Don't show until ready
     icon: path.join(publicDirectory, 'icon.png'),
     webPreferences: {
@@ -208,7 +224,18 @@ function createWindow() {
 
   // Test active push message to Renderer-process.
   win.webContents.on('will-navigate', (event, url) => { if (!trustedRecordUrl(url, recordsPageUrl)) event.preventDefault() })
-  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+  win.webContents.setWindowOpenHandler(({ url, frameName }) => canOpenCameraSettings(url, frameName, recordsPageUrl)
+    ? { action: 'allow', overrideBrowserWindowOptions: { parent: win!, minWidth: 800, minHeight: 480,
+      autoHideMenuBar: true, title: '카메라 설정 · Moti', titleBarStyle: 'hidden', ...windowAppearance(windowTheme),
+      webPreferences: { contextIsolation: true, nodeIntegration: false, backgroundThrottling: false, preload: undefined } } }
+    : { action: 'deny' })
+  win.webContents.on('did-create-window', child => {
+    cameraWindow = child
+    child.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+    child.webContents.on('will-navigate', (event, url) => { if (url !== cameraSettingsUrl(recordsPageUrl)) event.preventDefault() })
+    child.on('closed', () => { if (cameraWindow === child) cameraWindow = null })
+  })
+  win.on('closed', () => { cameraWindow?.destroy(); cameraWindow = null })
   win.on('close', event => {
     if (allowClose) return
     event.preventDefault()
@@ -261,7 +288,7 @@ app.on('activate', () => {
 
 if (ownsInstance) app.whenReady().then(() => {
   createWindow()
-  const halt = () => { stopKeyboardService(); win?.webContents.send('keyboard-service:halt') }
+  const halt = () => { cameraWindow?.close(); stopKeyboardService(); win?.webContents.send('keyboard-service:halt') }
   powerMonitor.on('suspend', halt)
   powerMonitor.on('lock-screen', halt)
 })

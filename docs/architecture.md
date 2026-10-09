@@ -36,9 +36,10 @@ Electron 개발 앱의 키보드 모드는 로컬 Python 프로세스를 자동 
 | `toolchain.json`, `scripts/setup.ps1`, `scripts/toolchain.ps1` | 정확한 도구 버전, 검증된 다운로드, 프로젝트 전용 환경 설치 |
 | `scripts/moti.ps1` | 앱/API/Python 실행과 검사 명령 묶음 |
 | `front/electron/main.ts` | 창·스플래시, Python 키보드 프로세스, 신뢰 창 IPC·종료 전 기록 flush 요청 |
-| `front/electron/preload.ts` | 키보드 시작·중지 및 motiRecords 종료 flush IPC 경계 |
+| `front/electron/preload.ts` | 키보드 시작·중지, motiRecords 종료 flush 및 주 창 전용 테마 IPC 경계 |
 | `front/vite.config.ts` | UI와 Electron 빌드, CommonJS preload 출력, 브라우저 검증 모드 |
-| `front/src/App.tsx` | 라우트 정의. 인증 보호 라우트는 아직 없음 |
+| `front/src/App.tsx` | 라우트 정의와 네이티브 제목 표시줄 테마 동기화. 인증 보호 라우트는 아직 없음 |
+| `front/src/components/layout/WindowTitleBar.tsx`, `front/electron/windowAppearance.ts` | 테마 제목 표시줄과 Windows 기본 창 버튼 overlay. 브라우저에는 자체 표시줄을 추가하지 않음 |
 | `front/src/components/layout/AppLayout.tsx` | 사이드바와 공통 화면 틀/Outlet |
 | `front/src/styles/tokens.css` | 공통 색상, 의미별 CSS 변수, 다크 테마, 대시보드 모드 색(`mode-*`)·`track`·`nav-active` |
 | `front/src/components/Button.tsx`, `Sidebar.tsx`, `ModeSelector.tsx` | 공유 UI. 새 화면은 공통 토큰/컴포넌트부터 사용. `ModeSelector`는 2026-10-06 대시보드 개편 뒤 쓰지 않지만 되돌리기용으로 남김 |
@@ -47,6 +48,7 @@ Electron 개발 앱의 키보드 모드는 로컬 Python 프로세스를 자동 
 | `front/src/components/dialog/dialogContext.ts`, `useDialog.ts` | 대화상자 타입/상태 계약과 호출 훅 |
 | `front/src/pages/LearningSession.tsx` | 상체 단일 모드 / 키보드 / 안구 화면 선택. 모드 변경 시 이전 상태 폐기 |
 | `front/src/features/session/` | 공통 화면 틀·장치 선택·시작/중지 타이머·지표 카드 |
+| `front/src/features/camera/`, `front/electron/cameraWindow.ts` | 모드·실제 카메라별 구도 자동 저장, 확대·이동까지 공통 변환 영상으로 분석, 동일 스트림의 별도 설정 창, 수동 키보드 외곽/방향 UI. [계약](camera-settings.md) |
 | `front/src/features/posture/PostureSession.tsx` | 상체 단일 모드의 시작/중지/기준 재수집과 두 부위 결과 상태 |
 | `front/src/features/posture/PostureMetrics.tsx` | 점수와 관찰 습관 카드 표시. 점수 산식·임계값을 소유하지 않음 |
 | `front/src/features/posture/monitorTypes.ts` | 카메라와 독립된 상태·점수·습관 표시 계약 |

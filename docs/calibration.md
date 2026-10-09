@@ -57,7 +57,7 @@ const frame = {
   landmarks: results.poseLandmarks,
   widthPx: video.videoWidth,
   heightPx: video.videoHeight,
-  sourceId: activeVideoTrack.id,
+  sourceId: `${activeVideoTrack.id}:${cameraTransformGeneration}`,
   timestampMs: capturedAtMs,
 };
 calibration = advanceCalibration(calibration, frame);
@@ -69,7 +69,7 @@ const current = extractFrontalMeasurement(frame);
 - 가시성이 낮아진 **측정 중** 상태와 이미 저장된 기준값은 구분합니다. `ready` 상태에서는 기준값이 유지되므로, 실시간 관측의 유효성은 반드시 `extractFrontalMeasurement()`로 별도 확인해야 합니다.
 - 콜백이 더 이상 오지 않는 스트림 종료·권한 철회·화면 이탈은 UI/카메라 계층에서 처리해야 합니다. 모듈 자체는 타이머나 카메라를 소유하지 않습니다.
 - React 리렌더 때문에 수집기를 다시 만들지 않습니다. 세션 단위 `useRef` 또는 reducer에 보관하고, 화면 이탈 시 카메라·추론 작업을 정리합니다.
-- CSS 미러링은 미리보기 표현에만 적용합니다. 귀 중점의 화면 오른쪽 이동과 사용자가 보는 오른쪽을 설명할 때는 미러링 여부를 고려합니다.
+- 공통 카메라 설정의 영상 반전·회전·필터·확대·이동을 적용한 같은 캔버스를 미리보기와 추론에 사용합니다. 상체의 기본 좌우 반전은 이전 셀프 미리보기 방향을 유지합니다. `sourceId`는 트랙 ID와 설정 세대를 포함하며 영상 구도가 바뀌면 기준을 다시 수집합니다. 픽셀/정규화 단위, 기준 스키마 v2, 점수/습관 v3 산식은 유지합니다. [카메라 설정 계약](camera-settings.md)을 따릅니다.
 - 키보드 손캠은 별도 입력입니다. 키보드 평면 매핑과 손가락 판정에 이 상체 기준값을 재사용하지 않습니다.
 
 ## 검증 범위와 다음 작업

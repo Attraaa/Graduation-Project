@@ -42,8 +42,8 @@ export function evaluatePress(
   const rule = policy.keys[observation.code];
   if (!rule) return unknown(observation, policy, 'unsupported-key');
 
-  if (!Number.isFinite(observation.keyboardConfidence)
-      || observation.keyboardConfidence < options.minKeyboardConfidence) {
+  if (!observation.manualGeometryValidated && (!Number.isFinite(observation.keyboardConfidence)
+      || observation.keyboardConfidence < options.minKeyboardConfidence)) {
     return unknown(
       observation,
       policy,
@@ -89,7 +89,7 @@ export function evaluatePress(
   }
 
   const observed = fingerId(best);
-  const confidence = Math.min(observation.keyboardConfidence, best.confidence);
+  const confidence = observation.manualGeometryValidated ? best.confidence : Math.min(observation.keyboardConfidence, best.confidence);
   if (rule.preferred.includes(observed)) {
     return {
       code: observation.code,

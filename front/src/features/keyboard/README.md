@@ -72,10 +72,34 @@ history carries compact summaries and the existing detail API carries counts.
 Camera crop uses normalized bounds, 1-degree rotation, cover scaling without
 black corners, brightness/contrast filters, and requested resolution. Output
 dimensions stay equal to the actual camera frame; cover scaling trims edges.
-The displayed canvas and the JPEG sent to Python are the same transformed frame.
+The displayed canvas and the JPEG sent to Python use the same transformed image;
+analysis preserves the aspect ratio and is capped at 960 pixels wide.
 Changing the transform invalidates buffered frames and the frozen keyboard map.
-Resolution changes apply at the next start. Hardware exposure/focus controls are
-not implemented; software filters cannot recover clipped camera information.
+Wheel zoom (1–5×) and normalized drag panning change this actual analysis canvas
+and save automatically per mode/device. They restore after closing the settings
+window or restarting a session, and never start the camera themselves.
+Resolution changes request constraints on the active track. Hardware exposure is
+offered only when that track advertises supported modes/ranges; focus is not
+implemented. Software filters cannot recover clipped camera information.
+
+The common native settings window opens beside the learning-page device selector,
+shares the parent preview, and never starts a camera. Profiles save automatically
+per mode and actual device. Four outer-boundary handles, whole-grid dragging, and
+grid-only flips/rotation work before automatic recognition succeeds; key names
+are always shown. The normalized 61-key layout is the same JSON used by Python.
+Editing pauses attribution and manual geometry freezes the real analyzer map.
+Saved `grid.quad` coordinates refer to the oriented/cropped image before zoom/pan.
+Display edits and detected corners are inversely projected before saving. The
+local `manual_keyboard` payload contains this quad plus `framing: {zoom, panX,
+panY}`; Python projects the same 61-key map onto the actual JPEG coordinates,
+including boundaries partly outside the cropped view. The final analysis map
+retains the minimum 1.5% area gate; stored small source boundaries survive zoom-out.
+Manual geometry is explicitly validated, not assigned fabricated AI confidence;
+all hand/timing/distance/ambiguity gates remain. Recognition metadata is
+`hands-camera-manual-v3`; the coaching policy and server schema are unchanged.
+Preview RAF is independent of the one-in-flight asynchronous binary JPEG pipeline
+(up to 20Hz opportunities); old fingertips expire after 500ms. See the full
+[camera contract](../../../../docs/camera-settings.md) and its validation limits.
 
 External observation is off by default. Settings approves exact executable paths
 through the Electron file picker and chooses Ctrl+Alt+F1~F12 for stopping. Start

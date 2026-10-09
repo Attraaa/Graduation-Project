@@ -15,6 +15,8 @@ Object.defineProperty(navigator.mediaDevices, 'getUserMedia', { configurable: tr
   const stream = canvas.captureStream(freeze ? 0 : 30);
   activeTracks++; opens++;
   const track = stream.getVideoTracks()[0];
+  const getSettings = track.getSettings.bind(track);
+  track.getSettings = () => ({ ...getSettings(), deviceId: 'eye-test-canvas' });
   const draw = window.setInterval(() => {
     if (track.readyState === 'ended') { clearInterval(draw); activeTracks--; return; }
     if (freeze) return;

@@ -1,4 +1,4 @@
-import { keyboardCountKey, KEYBOARD_CODES, RECOGNITION_VERSION } from '../../../../database/keyboard';
+import { keyboardCountKey, KEYBOARD_CODES } from '../../../../database/keyboard';
 import type { KeyboardBatch, KeyboardCount, KeyboardRecord } from '../../../../database/keyboard';
 import { localDateKey } from '../../../../database/contracts';
 import { recordsApi, recordValue } from '../records/api';
@@ -73,7 +73,7 @@ export function beginKeyboardRecording() {
   const collector = new KeyboardCollector({ id: crypto.randomUUID(), owner, startedAt: epoch, updatedAt: epoch,
     offsetMinutes: new Date(epoch).getTimezoneOffset(), status: 'running',
     policyVersion: `${ANSI_QWERTY_TOUCH_POLICY_V1.id}:${ANSI_QWERTY_TOUCH_POLICY_V1.version}`,
-    recognitionVersion: RECOGNITION_VERSION, nearbyCredit: 70, total: 0 });
+    recognitionVersion: 'hands-camera-manual-v3', nearbyCredit: 70, total: 0 });
   const generation = recordValue(recordsApi().generation(owner)); void generation.catch(() => {});
   const entry: Active = { collector, generation, saving: null, error: null, now,
     timer: setInterval(() => { void save(entry).catch(() => {}); }, 5000) };

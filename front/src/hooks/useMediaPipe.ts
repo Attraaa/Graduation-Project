@@ -112,7 +112,7 @@ export function createMediaPipeController(
     }
   };
 
-  const startProcessing = (video: HTMLVideoElement) => {
+  const startProcessing = (video: HTMLVideoElement, image?: () => HTMLCanvasElement | HTMLVideoElement) => {
     const run = active;
     if (!run || run.pending || run.processing) return;
     run.processing = true;
@@ -124,7 +124,7 @@ export function createMediaPipeController(
         // Keep capture time, not callback arrival time, for calibration and session ordering.
         run.capturedAtMs = performance.now();
         try {
-          run.pending = run.pose.send({ image: video });
+          run.pending = run.pose.send({ image: image?.() ?? video });
           await run.pending;
         } catch (error) {
           if (active === run) {
@@ -160,7 +160,7 @@ export const useMediaPipe = () => {
   }, []);
   const initMediaPipe = useCallback((onResults: PoseResultsCallback, signal?: AbortSignal) =>
     controller.current?.initMediaPipe(onResults, signal) ?? Promise.resolve(null), []);
-  const startProcessing = useCallback((video: HTMLVideoElement) => controller.current?.startProcessing(video), []);
+  const startProcessing = useCallback((video: HTMLVideoElement, image?: () => HTMLCanvasElement | HTMLVideoElement) => controller.current?.startProcessing(video, image), []);
   const stopProcessing = useCallback(() => controller.current?.stopProcessing() ?? Promise.resolve(), []);
   return { canvasRef, initMediaPipe, startProcessing, stopProcessing, aiError, isLoaded };
 };

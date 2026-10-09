@@ -1,5 +1,9 @@
 import { ipcRenderer, contextBridge } from 'electron'
 
+contextBridge.exposeInMainWorld('motiWindow', {
+  setTheme: (theme: 'light' | 'dark') => ipcRenderer.invoke('window:set-theme', theme),
+})
+
 // --------- Expose some API to the Renderer process ---------
 contextBridge.exposeInMainWorld('motiKeyboard', {
   start: (external = false) => ipcRenderer.invoke('keyboard-service:start', external),

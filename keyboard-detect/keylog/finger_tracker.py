@@ -57,7 +57,7 @@ class MediaPipeFingerTracker:
         with self._lock:
             self._hands.close()
 
-    def detect(self, frame_bgr) -> List[FingerPoint]:
+    def detect(self, frame_bgr, input_is_mirrored: Optional[bool] = None) -> List[FingerPoint]:
         h, w = frame_bgr.shape[:2]
         rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
         rgb.flags.writeable = False
@@ -73,7 +73,8 @@ class MediaPipeFingerTracker:
             hand_label = _hand_label(handedness, hand_index)
             # MediaPipe Hands labels assume a mirrored selfie image. Browser
             # camera frames are sent unmirrored so the physical labels swap.
-            if not self._input_is_mirrored:
+            mirrored = self._input_is_mirrored if input_is_mirrored is None else input_is_mirrored
+            if not mirrored:
                 hand_label = {"Left": "Right", "Right": "Left"}.get(hand_label, hand_label)
             for landmark_id, finger_name in TIP_LANDMARKS.items():
                 lm = landmarks.landmark[landmark_id]

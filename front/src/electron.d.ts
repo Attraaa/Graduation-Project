@@ -2,6 +2,7 @@ export {}
 
 declare global {
   interface Window {
+    motiWindow?: { setTheme: (theme: 'light' | 'dark') => Promise<void> }
     motiKeyboard?: {
       start: (external?: boolean) => Promise<{ origin: string; token: string }>
       stop: () => Promise<void>

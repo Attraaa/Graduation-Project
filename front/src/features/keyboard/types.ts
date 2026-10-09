@@ -29,6 +29,8 @@ export interface KeyboardPressObservation {
   /** Physical KeyboardEvent.code, such as KeyQ, independent of input language. */
   code: string;
   keyboardConfidence: number;
+  /** User placed geometry, checked for finite/convex/in-frame bounds; not AI confidence. */
+  manualGeometryValidated?: boolean;
   frameDeltaMs: number | null;
   candidates: readonly FingerCandidate[];
 }

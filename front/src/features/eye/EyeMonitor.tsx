@@ -8,6 +8,8 @@ import { createEyeRunner } from './runner';
 import { eyeCameraChanged, eyeStreamIssue } from './streamStatus';
 import type { EyeCameraSignature } from './streamStatus';
 import { initializeMediaPipe } from '../session/mediaPipeInitialization';
+import { useCameraSettings } from '../camera/context';
+import { imageSignature } from '../camera/profile';
 
 export type EyeUpdate = { measurement: EyeSnapshot; phase: 'loading' | 'calibrating' | 'observing' | 'unavailable' | 'error'; message: string };
 
@@ -16,6 +18,8 @@ export default function EyeMonitor({ active, deviceId, reference, onUpdate, onSa
   active: boolean; deviceId: string; reference: number; onUpdate: (update: EyeUpdate) => void;
 }) {
   const { videoRef, startWebcam, stopWebcam, webcamError } = useWebcam();
+  const previewRef = useRef<HTMLCanvasElement>(null);
+  const { connect, detach, runtime } = useCameraSettings();
   const measurement = useRef(createEyeMeasurement());
   const lastReference = useRef(reference);
   const cameraSignature = useRef<EyeCameraSignature | null>(null);
@@ -38,6 +42,7 @@ export default function EyeMonitor({ active, deviceId, reference, onUpdate, onSa
     let cameraChanged = false;
     let lastVideoTime = -1;
     let lastPublished = 0;
+    let removeTrackListener = () => {};
     const invalidate = (message: string, phase: EyeUpdate['phase'] = 'unavailable') => {
       const at = performance.now(), snapshot = engine.sample(at, null);
       onSample(at, snapshot);
@@ -53,9 +58,16 @@ export default function EyeMonitor({ active, deviceId, reference, onUpdate, onSa
       camera: async () => {
         const stream = await startWebcam(deviceId || undefined);
         activeDeviceId = stream?.getVideoTracks()[0]?.getSettings().deviceId ?? deviceId;
+        const track = stream?.getVideoTracks()[0];
+        if (track) {
+          const ended = () => { if (!cancelled) { runner.stop(); fail(new Error('카메라 연결이 중단되었습니다. 다시 연결한 뒤 시작해 주세요.')); } };
+          track.addEventListener('ended', ended);
+          removeTrackListener = () => track.removeEventListener('ended', ended);
+        }
+        if (!cancelled && stream && videoRef.current && previewRef.current) await connect(videoRef.current, stream, previewRef.current);
         return stream;
       },
-      stopCamera: stopWebcam,
+      stopCamera: () => { stopWebcam(); detach(); },
       model: async () => {
         const { FaceLandmarker, FilesetResolver } = await import('@mediapipe/tasks-vision');
         const base = new URL(import.meta.env.BASE_URL, document.baseURI);
@@ -76,13 +88,13 @@ export default function EyeMonitor({ active, deviceId, reference, onUpdate, onSa
           if (cancelled) return;
           try {
             if (!document.hidden && video.readyState >= 2 && video.currentTime !== lastVideoTime && (lastFrameAt === null || now - lastFrameAt >= 30)) {
-              const signature = { deviceId: activeDeviceId, width: video.videoWidth, height: video.videoHeight };
+              const signature = { deviceId: `${activeDeviceId}:${imageSignature(runtime.current.profile)}:${runtime.current.profile.resolution}:${runtime.current.profile.exposureMode}:${runtime.current.profile.exposure}`, width: video.videoWidth, height: video.videoHeight };
               if (eyeCameraChanged(cameraSignature.current, signature)) {
                 engine.recalibrate();
                 cameraChanged = true;
               }
               cameraSignature.current = signature;
-              const result = model.detectForVideo(video, now);
+              const result = model.detectForVideo(previewRef.current ?? video, now);
               const { observation, reason } = readEyes(result, video.videoWidth, video.videoHeight);
               const current = engine.sample(now, observation);
               onSample(now, current);
@@ -118,14 +130,15 @@ export default function EyeMonitor({ active, deviceId, reference, onUpdate, onSa
       window.clearInterval(watchdog);
       document.removeEventListener('visibilitychange', onVisibility);
       cancelAnimationFrame(frameId);
+      removeTrackListener();
       engine.sample(performance.now(), null);
       runner.stop();
     };
-  }, [active, deviceId, onUpdate, onSample, startWebcam, stopWebcam, videoRef]);
+  }, [active, deviceId, onUpdate, onSample, startWebcam, stopWebcam, videoRef, connect, detach, runtime]);
   return (
     <div className="relative overflow-hidden rounded-2xl bg-surface-muted">
-      <video ref={videoRef} muted playsInline aria-label="안구 모드 카메라 미리보기"
-        className="h-[min(40vh,360px)] min-h-56 w-full -scale-x-100 object-contain" />
+      <video ref={videoRef} muted playsInline className="hidden" />
+      <canvas ref={previewRef} aria-label="안구 모드 카메라 미리보기" className="h-[min(40vh,360px)] min-h-56 w-full object-contain" />
       {!active && <div className="absolute inset-0 flex items-center justify-center text-sm font-bold text-muted">카메라 꺼짐 · 시작하거나 휴식에서 복귀하면 연결합니다.</div>}
       {webcamError && active && <p role="alert" className="p-3 text-sm text-danger">카메라 오류: {webcamError}</p>}
     </div>

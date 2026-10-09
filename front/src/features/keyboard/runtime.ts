@@ -28,6 +28,8 @@ export interface RuntimeKeyboardMapping {
   quality?: { min_confidence?: number }
   size?: [number, number]
   mode?: string
+  source?: 'automatic' | 'manual'
+  geometry_validated?: boolean
 }
 
 export interface RuntimePressPayload {
@@ -102,6 +104,7 @@ export function adaptRuntimePress(payload: RuntimePressPayload): KeyboardLiveRes
   const evaluation = evaluatePress({
     code,
     keyboardConfidence: payload.keyboard?.quality?.min_confidence ?? 0,
+    manualGeometryValidated: payload.keyboard?.source === 'manual' && payload.keyboard.geometry_validated === true,
     frameDeltaMs: payload.frame_delta_ms ?? null,
     candidates,
   }, ANSI_QWERTY_TOUCH_POLICY_V1, PROVISIONAL_KEYBOARD_THRESHOLDS)

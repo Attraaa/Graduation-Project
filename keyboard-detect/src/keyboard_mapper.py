@@ -60,6 +60,8 @@ class KeyboardMappingResult:
     missing: List[str] = field(default_factory=list)
     quality: Dict[str, float] = field(default_factory=dict)
     detection_info: Dict = field(default_factory=dict)
+    source: str = 'automatic'
+    geometry_validated: bool = False
 
     def key_at(self, x: float, y: float) -> Optional[str]:
         """Return the key at image coordinate (x, y), or None."""
@@ -79,6 +81,8 @@ class KeyboardMappingResult:
             "missing": self.missing,
             "quality": self.quality,
             "detection_info": self.detection_info,
+            "source": self.source,
+            "geometry_validated": self.geometry_validated,
         }
 
 

@@ -11,32 +11,44 @@ import AppLayout from './components/layout/AppLayout';
 import LearningSession from './pages/LearningSession';
 import LearningHistory from './pages/LearningHistory';
 import { DialogProvider } from './components/AppDialog';
+import WindowTitleBar from './components/layout/WindowTitleBar';
 
 function App() {
   useEffect(() => {
     const theme = localStorage.getItem('postureAI.theme') ?? 'light';
     document.documentElement.classList.toggle('dark-theme', theme === 'dark');
+    const syncTheme = () => {
+      void window.motiWindow?.setTheme(document.documentElement.classList.contains('dark-theme') ? 'dark' : 'light')
+        .catch(error => console.error('창 테마 적용 실패', error));
+    };
+    syncTheme();
+    const observer = new MutationObserver(syncTheme);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+    return () => observer.disconnect();
   }, []);
 
   return (
-    <DialogProvider>
-      <HashRouter>
-        <Routes>
-          <Route path="/" element={<Navigate to="/login" replace />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
-          <Route path="/find-id" element={<FindId />} />
-          <Route path="/find-password" element={<FindPassword />} />
-          <Route element={<AppLayout />}>
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/learn/:modeId" element={<LearningSession />} />
-            <Route path="/statistics" element={<Statistics />} />
-            <Route path="/history" element={<LearningHistory />} />
-            <Route path="/settings" element={<Settings />} />
-          </Route>
-        </Routes>
-      </HashRouter>
-    </DialogProvider>
+    <div className={window.motiWindow ? 'desktop-window' : undefined}>
+      <WindowTitleBar />
+      <DialogProvider>
+        <HashRouter>
+          <Routes>
+            <Route path="/" element={<Navigate to="/login" replace />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
+            <Route path="/find-id" element={<FindId />} />
+            <Route path="/find-password" element={<FindPassword />} />
+            <Route element={<AppLayout />}>
+              <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/learn/:modeId" element={<LearningSession />} />
+              <Route path="/statistics" element={<Statistics />} />
+              <Route path="/history" element={<LearningHistory />} />
+              <Route path="/settings" element={<Settings />} />
+            </Route>
+          </Routes>
+        </HashRouter>
+      </DialogProvider>
+    </div>
   );
 }
 

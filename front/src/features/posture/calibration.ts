@@ -10,7 +10,7 @@ export interface CalibrationFrame {
   landmarks?: readonly PoseLandmark[];
   widthPx: number;
   heightPx: number;
-  /** Use the active video track ID; a replacement stream needs a new identity. */
+  /** Active track plus acquisition revision; stream/transform changes need a new identity. */
   sourceId: string;
   /** Monotonic capture time, e.g. performance.now(); not a wall-clock date. */
   timestampMs: number;

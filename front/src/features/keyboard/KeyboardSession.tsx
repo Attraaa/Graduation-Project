@@ -8,8 +8,6 @@ import { useSessionControls } from '../session/useSessionControls';
 import { initialKeyboardSnapshot } from './monitorTypes';
 import type { KeyboardMonitorSnapshot } from './monitorTypes';
 import type { FingerVerdict } from './types';
-import CameraSettings from './CameraSettings';
-import { readKeyboardCamera } from './camera';
 import { keyboardSummary } from '../../../../database/keyboard';
 import RecordingStatus from '../records/RecordingStatus';
 import { fingerText, percentText, reasonText, scoreText } from './labels';
@@ -28,7 +26,6 @@ export default function KeyboardSession() {
   const { isRunning, elapsedSeconds, deviceId } = controls;
   const [snapshot, setSnapshot] = useState<KeyboardMonitorSnapshot>(initialKeyboardSnapshot);
   const [remapRequest, setRemapRequest] = useState(0);
-  const [camera, setCamera] = useState(readKeyboardCamera);
   const [external, setExternal] = useState(false);
   const stop = () => { controls.stop(); setSnapshot(value => ({ ...value, latest: null, recent: [] })); };
   useEffect(() => {
@@ -81,7 +78,6 @@ export default function KeyboardSession() {
             deviceId={deviceId}
             remapRequest={remapRequest}
             onUpdate={setSnapshot}
-            camera={camera}
             external={external}
           />
         </div>
@@ -110,7 +106,6 @@ export default function KeyboardSession() {
           원문·입력 순서·영상은 저장하지 않고 키·손가락·판정 횟수만 서버에 저장합니다.
         </p>
       </section>
-      <CameraSettings value={camera} onChange={value => { setCamera(value); localStorage.setItem('moti.keyboard.camera', JSON.stringify(value)); setRemapRequest(value => value + 1); }} />
     </SessionFrame>
   );
 }

@@ -10,6 +10,7 @@ import type { MonitorSnapshot } from '../features/posture/monitorTypes';
 import { turtleScorePolicy } from '../features/posture/modes/turtle';
 import { shoulderScorePolicy } from '../features/posture/modes/shoulder';
 import type { CaptureSink, CaptureStart } from '../features/records/recording';
+import { useCameraSettings } from '../features/camera/context';
 
 interface PostureMonitorProps {
   isRunning: boolean;
@@ -26,6 +27,8 @@ const PostureMonitor = ({ isRunning, deviceId, onUpdate, recordCapture }: Postur
   }, [onUpdate]);
   const { videoRef, startWebcam, stopWebcam, webcamError } = useWebcam();
   const { canvasRef, initMediaPipe, startProcessing, stopProcessing, aiError, isLoaded } = useMediaPipe();
+  const previewRef = useRef<HTMLCanvasElement>(null);
+  const { connect, detach, runtime } = useCameraSettings();
 
   useEffect(() => {
     if (!isRunning) return;
@@ -50,6 +53,7 @@ const PostureMonitor = ({ isRunning, deviceId, onUpdate, recordCapture }: Postur
     let removeTrackListener = () => {};
     let watchdog: ReturnType<typeof setInterval> | undefined;
     let lastFrameAt: number | null = null;
+    let capturedGeneration = 0;
     const setup = async () => {
       const stream = await startWebcam(deviceId || undefined);
       if (abort.signal.aborted) return;
@@ -58,6 +62,10 @@ const PostureMonitor = ({ isRunning, deviceId, onUpdate, recordCapture }: Postur
         return;
       }
       const track = stream.getVideoTracks()[0];
+      const video = videoRef.current;
+      if (!video || !previewRef.current) throw new Error('카메라 미리보기를 찾지 못했습니다.');
+      await connect(video, stream, previewRef.current, canvasRef.current);
+      if (abort.signal.aborted) return;
       const ended = () => {
         if (abort.signal.aborted) return;
         observation = interruptObservation(observation);
@@ -65,6 +73,7 @@ const PostureMonitor = ({ isRunning, deviceId, onUpdate, recordCapture }: Postur
         shoulder = interruptEvaluation(shoulder);
         publish({ ...latest.current, phase: 'error', reason: 'interrupted', delta: null, neck, shoulder });
         stopWebcam();
+        detach();
         void stopProcessing();
       };
       track.addEventListener('ended', ended);
@@ -72,7 +81,7 @@ const PostureMonitor = ({ isRunning, deviceId, onUpdate, recordCapture }: Postur
       const pose = await initMediaPipe((results, capturedAtMs) => {
         const video = videoRef.current;
         const canvas = canvasRef.current;
-        if (abort.signal.aborted || !video || !canvas) return;
+        if (abort.signal.aborted || !video || !canvas || capturedGeneration !== runtime.current.generation) return;
         const receivedAtMs = performance.now();
         lastFrameAt = receivedAtMs;
         if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
@@ -106,7 +115,7 @@ const PostureMonitor = ({ isRunning, deviceId, onUpdate, recordCapture }: Postur
 
         const frame = {
           landmarks: results.poseLandmarks, widthPx: video.videoWidth, heightPx: video.videoHeight,
-          sourceId: track.id, timestampMs: capturedAtMs,
+          sourceId: `${track.id}:${capturedGeneration}`, timestampMs: capturedAtMs,
         };
         calibration = advanceCalibration(calibration, frame);
         observation = advanceObservation(observation, calibration.reference, frame);
@@ -144,16 +153,17 @@ const PostureMonitor = ({ isRunning, deviceId, onUpdate, recordCapture }: Postur
         shoulder = interruptEvaluation(shoulder);
         publish({ phase: 'error', progress: 0, reason: null, observedSeconds: observation.observedSeconds, delta: null, neck, shoulder });
         stopWebcam();
+        detach();
         return;
       }
-      const video = videoRef.current;
       if (video) {
         await video.play();
         if (!abort.signal.aborted) {
           lastFrameAt = performance.now();
-          startProcessing(video);
+          startProcessing(video, () => { capturedGeneration = runtime.current.generation; return previewRef.current ?? video; });
           watchdog = setInterval(() => {
             if (!abort.signal.aborted && lastFrameAt !== null && performance.now() - lastFrameAt > 1500 && latest.current.phase !== 'error') {
+              canvasRef.current?.getContext('2d')?.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
               observation = interruptObservation(observation);
               neck = interruptEvaluation(neck);
               shoulder = interruptEvaluation(shoulder);
@@ -169,6 +179,7 @@ const PostureMonitor = ({ isRunning, deviceId, onUpdate, recordCapture }: Postur
         shoulder = interruptEvaluation(shoulder);
         publish({ phase: 'error', progress: 0, reason: null, observedSeconds: observation.observedSeconds, delta: null, neck, shoulder });
         stopWebcam();
+        detach();
         void stopProcessing();
       }
     });
@@ -179,9 +190,10 @@ const PostureMonitor = ({ isRunning, deviceId, onUpdate, recordCapture }: Postur
       clearInterval(watchdog);
       removeTrackListener();
       stopWebcam();
+      detach();
       void stopProcessing();
     };
-  }, [isRunning, deviceId, publish, videoRef, canvasRef, startWebcam, stopWebcam, initMediaPipe, startProcessing, stopProcessing, recordCapture]);
+  }, [isRunning, deviceId, publish, videoRef, canvasRef, startWebcam, stopWebcam, initMediaPipe, startProcessing, stopProcessing, recordCapture, connect, detach, runtime]);
 
   useEffect(() => {
     // Flush the last computed interval on stop, but never publish from an old keyed session's cleanup.
@@ -198,15 +210,17 @@ const PostureMonitor = ({ isRunning, deviceId, onUpdate, recordCapture }: Postur
         neck: { ...latest.current.neck, currentScore: null, currentDeviation: null, continuousMs: 0, deviationState: 'unknown', protection: 'none' },
         shoulder: { ...latest.current.shoulder, currentScore: null, currentDeviation: null, continuousMs: 0, deviationState: 'unknown', protection: 'none' } });
       stopWebcam();
+      detach();
       void stopProcessing();
     }
-  }, [isRunning, aiError, webcamError, publish, stopWebcam, stopProcessing]);
+  }, [isRunning, aiError, webcamError, publish, stopWebcam, stopProcessing, detach]);
 
   const error = webcamError || aiError;
   return (
     <div className="relative min-h-[260px] flex-1 overflow-hidden rounded-2xl bg-slate-950">
-      <video ref={videoRef} autoPlay playsInline muted className="absolute inset-0 h-full w-full scale-x-[-1] object-contain" />
-      <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 h-full w-full scale-x-[-1] object-contain" />
+      <video ref={videoRef} autoPlay playsInline muted className="hidden" />
+      <canvas ref={previewRef} className="absolute inset-0 h-full w-full object-contain" />
+      <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 h-full w-full object-contain" />
       {!isRunning && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center text-slate-300">
           <CameraOff size={32} />

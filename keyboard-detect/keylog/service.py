@@ -30,12 +30,17 @@ from .frame_buffer import FrameBuffer
 from .key_capture import RealTimeKeyLogger
 from .secure_channel import LocalSessionSecurity
 from .raw_input import RawInputObserver, key_label, SCAN_CODES, EXTENDED_CODES
+from .manual_mapping import manual_mapping
 
 
 ROOT = Path(__file__).resolve().parent.parent
 
 
 def decode_data_url(data_url: str):
+    if isinstance(data_url, (bytes, bytearray)):
+        if not data_url or len(data_url) > 4_000_000:
+            return None
+        return cv2.imdecode(np.frombuffer(data_url, dtype=np.uint8), cv2.IMREAD_COLOR)
     if not isinstance(data_url, str) or len(data_url) > 4_000_000 or not data_url.startswith('data:image/jpeg;base64,'):
         return None
     _, b64 = data_url.split(",", 1)
@@ -73,6 +78,7 @@ class RealtimeAttributionService:
         self.expose_test_page = expose_test_page
         self.event_queue: "queue.Queue[KeyEvent]" = queue.Queue(maxsize=64)
         self._privacy_generation = 0
+        self._state_lock = threading.RLock()
         self._mapping_ready = False
         self._client = None
         self.observer = None
@@ -222,8 +228,9 @@ class RealtimeAttributionService:
         @self.socketio.on('reset_analysis')
         def reset_analysis(payload):
             if not self.security.require_token((payload or {}).get('token')): return {'ok': False}
-            self._mapping_ready = False
-            self._clear_transient(); self.analyzer.unfreeze_mapping()
+            with self._state_lock:
+                self._mapping_ready = False
+                self._clear_transient(); self.analyzer.unfreeze_mapping()
             return {'ok': True}
 
         @self.socketio.on("frame")
@@ -231,6 +238,7 @@ class RealtimeAttributionService:
             if not self.security.require_token((payload or {}).get("token")):
                 return {"ok": False, "error": "unauthorized"}
             generation = self._privacy_generation
+            received_ns = time.perf_counter_ns()
             try:
                 img = decode_data_url(payload.get('image'))
             except (ValueError, TypeError):
@@ -240,10 +248,14 @@ class RealtimeAttributionService:
             if img.shape[0] > 2160 or img.shape[1] > 3840:
                 return {'ok': False, 'error': 'frame_too_large'}
             self._frame_sequence += 1
-            fingers = self.analyzer.finger_tracker.detect(img) if self.analyzer.finger_tracker else []
+            mirrored = payload.get('input_is_mirrored', False)
+            if type(mirrored) is not bool: return {'ok': False, 'error': 'invalid_image_direction'}
+            inference_started = time.perf_counter_ns()
+            fingers = self.analyzer.finger_tracker.detect(img, input_is_mirrored=mirrored) if self.analyzer.finger_tracker else []
+            inference_ms = (time.perf_counter_ns() - inference_started) / 1_000_000
             snapshot = FrameSnapshot(
                 frame=img,
-                perf_counter_ns=time.perf_counter_ns(),
+                perf_counter_ns=received_ns,
                 wall_time_ns=time.time_ns(),
                 sequence=self._frame_sequence,
                 browser_perf_ms=_optional_float(payload.get("browser_perf_ms")),
@@ -256,6 +268,7 @@ class RealtimeAttributionService:
                 "ok": True,
                 "frame": snapshot.to_jsonable(),
                 "buffered_frames": len(self.frame_buffer),
+                "timing": {"inference_ms": inference_ms},
             }
 
         @self.socketio.on("browser_key")
@@ -293,15 +306,17 @@ class RealtimeAttributionService:
             if snapshot is None:
                 return {"ok": False, "error": "no_frame_available"}
 
-            self.analyzer.unfreeze_mapping()
-            self._mapping_ready = False
-            generation = self._privacy_generation
+            with self._state_lock:
+                self.analyzer.unfreeze_mapping()
+                self._mapping_ready = False
+                generation = self._privacy_generation
             mapping = self.analyzer.map_keyboard(snapshot.frame)
-            if generation != self._privacy_generation:
-                return {'ok': False, 'error': 'analysis_reset'}
-            if mapping.ok:
-                self.analyzer.freeze_mapping(mapping)
-                self._mapping_ready = True
+            with self._state_lock:
+                if generation != self._privacy_generation:
+                    return {'ok': False, 'error': 'analysis_reset'}
+                if mapping.ok:
+                    self.analyzer.freeze_mapping(mapping)
+                    self._mapping_ready = True
             response_mapping = mapping.to_jsonable()
             response_mapping["size"] = [snapshot.width, snapshot.height]
             response_mapping["mode"] = "frozen" if mapping.ok else "live"
@@ -310,6 +325,23 @@ class RealtimeAttributionService:
                 "error": None if mapping.ok else (mapping.reason or "keyboard_mapping_failed"),
                 "mapping": response_mapping,
             }
+
+        @self.socketio.on('manual_keyboard')
+        def manual_keyboard(payload):
+            if not self.security.require_token((payload or {}).get('token')) or request.sid != self._client:
+                return {'ok': False, 'error': 'unauthorized'}
+            with self._state_lock:
+                snapshot = self.frame_buffer.latest()
+                if snapshot is None: return {'ok': False, 'error': 'no_frame_available'}
+                try:
+                    mapping = manual_mapping(payload.get('grid'), snapshot.width, snapshot.height)
+                except (ValueError, TypeError):
+                    return {'ok': False, 'error': 'invalid_manual_geometry'}
+                self.analyzer.freeze_mapping(mapping)
+                self._mapping_ready = True
+                response = mapping.to_jsonable()
+                response.update(size=[snapshot.width, snapshot.height], mode='frozen')
+                return {'ok': True, 'mapping': response}
 
     def _authorized_request(self) -> bool:
         token = request.headers.get("X-Keylog-Token") or request.args.get("token")
