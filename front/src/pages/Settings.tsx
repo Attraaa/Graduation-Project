@@ -1,9 +1,60 @@
 import { useState } from 'react';
-import Button from '../components/Button';
-import { Bell, Moon, User, Shield, SlidersHorizontal, Trash2 } from 'lucide-react';
+import { Activity, Bell, Check, Database, KeyRound, Palette, Trash2, User } from 'lucide-react';
 import { changePassword, clearStatistics, getCurrentUser, updateCurrentUser } from '../utils/authStore';
 import { useDialog } from '../components/dialog/useDialog';
 import KeyboardSettings from '../features/keyboard/KeyboardSettings';
+import { BUTTON, BUTTON_DANGER, BUTTON_STRONG, Field, INPUT, Segmented, SettingsCard, Slider, Switch } from '../features/settings/parts';
+
+type Theme = 'light' | 'dark';
+// Each tile always shows its own theme, so it carries that theme's colors instead of the current tokens.
+const THEMES: Record<Theme, { name: string; page: string; card: string; line: string; ink: string }> = {
+  light: { name: '라이트', page: '#f3f5f8', card: '#ffffff', line: '#e3e7ee', ink: '#1d2433' },
+  dark: { name: '다크', page: '#0f1218', card: '#171b23', line: '#252b36', ink: '#e6e9ef' },
+};
+const FREQUENCIES = [{ id: '0', name: '즉시' }, { id: '5', name: '5분' }, { id: '10', name: '10분' }, { id: '30', name: '30분' }];
+const STRENGTHS = [{ id: 'soft', name: '약함' }, { id: 'normal', name: '보통' }, { id: 'strong', name: '강함' }];
+const MODE_DOTS = ['bg-mode-upper', 'bg-mode-keyboard', 'bg-mode-eye'];
+const keep = (key: string, value: string) => localStorage.setItem(`postureAI.${key}`, value);
+
+/** A small picture of the dashboard in one theme; the whole tile is the button. */
+function ThemeTile({ theme, selected, onSelect }: { theme: Theme; selected: boolean; onSelect: (theme: Theme) => void }) {
+  const look = THEMES[theme];
+  return (
+    <button type="button" aria-pressed={selected} aria-label={`${look.name} 테마`} onClick={() => onSelect(theme)}
+      className={`flex flex-col gap-2 rounded-xl border p-2 text-left transition ${selected ? 'border-transparent ring-2 ring-heading' : 'border-border hover:bg-nav-active'}`}>
+      <span aria-hidden="true" className="flex min-h-24 w-full flex-1 gap-1.5 rounded-lg p-1.5" style={{ background: look.page, boxShadow: `inset 0 0 0 1px ${look.line}` }}>
+        <span className="flex w-1/5 flex-col gap-1 rounded p-1" style={{ background: look.card }}>
+          <span className="h-1 w-3/4 rounded-full" style={{ background: look.ink }} />
+          <span className="mt-1 h-1 rounded-full" style={{ background: look.line }} />
+          <span className="h-1 rounded-full" style={{ background: look.line }} />
+          <span className="h-1 rounded-full" style={{ background: look.line }} />
+        </span>
+        <span className="flex flex-1 flex-col gap-1.5">
+          <span className="flex gap-1.5">
+            {MODE_DOTS.map(dot => (
+              <span key={dot} className="flex h-6 flex-1 items-center gap-1 rounded px-1" style={{ background: look.card }}>
+                <span className={`h-2.5 w-2.5 rounded-full ${dot}`} />
+                <span className="h-1 flex-1 rounded-full" style={{ background: look.line }} />
+              </span>
+            ))}
+          </span>
+          <span className="flex flex-1 rounded p-1" style={{ background: look.card }}>
+            <svg viewBox="0 0 60 20" preserveAspectRatio="none" className="h-full w-full" fill="none" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="2,7 14,8 26,6 38,5 50,6 58,4" stroke="var(--color-mode-shoulder)" vectorEffect="non-scaling-stroke" />
+              <polyline points="2,15 14,13 26,16 38,11 50,12 58,9" stroke="var(--color-mode-upper)" vectorEffect="non-scaling-stroke" />
+            </svg>
+          </span>
+        </span>
+      </span>
+      <span className="flex items-center justify-between px-1 text-sm font-semibold text-heading">
+        {look.name}
+        <span className={`flex h-5 w-5 items-center justify-center rounded-full ${selected ? 'bg-heading text-surface' : 'border border-border-strong'}`}>
+          {selected && <Check size={12} strokeWidth={3} />}
+        </span>
+      </span>
+    </button>
+  );
+}
 
 const Settings = () => {
   const { notify, confirm } = useDialog();
@@ -12,6 +63,7 @@ const Settings = () => {
   const [notificationsEnabled, setNotificationsEnabled] = useState(localStorage.getItem('postureAI.notifications') !== 'off');
   const [darkMode, setDarkMode] = useState(localStorage.getItem('postureAI.theme') === 'dark');
   const [nickname, setNickname] = useState(currentUser?.nickname ?? '');
+  const [savedNickname, setSavedNickname] = useState(nickname);
   const [currentPassword, setCurrentPassword] = useState('');
   const [nextPassword, setNextPassword] = useState('');
   const [alertFrequency, setAlertFrequency] = useState(localStorage.getItem('postureAI.alertFrequency') ?? '10');
@@ -19,26 +71,15 @@ const Settings = () => {
   const [scoreThreshold, setScoreThreshold] = useState(Number(localStorage.getItem('postureAI.scoreThreshold') ?? 70));
   const [collapseSensitivity, setCollapseSensitivity] = useState(Number(localStorage.getItem('postureAI.collapseSensitivity') ?? 50));
 
-  const handleSave = async () => {
-    localStorage.setItem('postureAI.notifications', notificationsEnabled ? 'on' : 'off');
-    localStorage.setItem('postureAI.alertFrequency', alertFrequency);
-    localStorage.setItem('postureAI.alertStrength', alertStrength);
-    localStorage.setItem('postureAI.scoreThreshold', String(scoreThreshold));
-    localStorage.setItem('postureAI.collapseSensitivity', String(collapseSensitivity));
-    await notify({ title: '저장 완료', message: '설정이 저장되었습니다.', tone: 'success' });
-  };
-
-  const handleThemeToggle = () => {
-    setDarkMode((prev) => {
-      const next = !prev;
-      localStorage.setItem('postureAI.theme', next ? 'dark' : 'light');
-      document.documentElement.classList.toggle('dark-theme', next);
-      return next;
-    });
+  const handleTheme = (theme: Theme) => {
+    setDarkMode(theme === 'dark');
+    keep('theme', theme);
+    document.documentElement.classList.toggle('dark-theme', theme === 'dark');
   };
 
   const handleAccountSave = async () => {
     const result = await updateCurrentUser(nickname);
+    if (result.ok) setSavedNickname(nickname.trim());
     await notify({ title: result.ok ? '변경 완료' : '변경 실패', message: result.message, tone: result.ok ? 'success' : 'warning' });
   };
 
@@ -75,136 +116,93 @@ const Settings = () => {
   };
 
   return (
-    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <header className="mb-8">
-        <h1 className="text-3xl font-black text-gray-700">설정</h1>
-        <p className="text-gray-500 font-bold mt-2">앱 환경 및 계정 정보를 관리하세요.</p>
+    <div className="space-y-4 pb-4">
+      <header>
+        <h1 className="text-2xl font-extrabold text-heading">설정</h1>
+        <p className="mt-1 text-sm text-muted">계정과 앱 환경을 관리해요 · 화면·알림·자세 기준은 바꾸면 이 기기에 바로 저장돼요</p>
       </header>
 
-      <div className="space-y-6">
-        <KeyboardSettings />
-        {/* Account Section */}
-        <div className="card-duo">
-          <h2 className="text-xl font-black text-gray-700 mb-4 flex items-center">
-            <User className="mr-2 text-[#1cb0f6]" /> 계정 정보
-          </h2>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-bold text-gray-500 mb-1">아이디</label>
-              <input type="text" value={currentUser?.username ?? ''} disabled className="w-full rounded-2xl border-2 border-gray-200 bg-gray-100 px-4 py-3 font-bold text-gray-600 outline-none" />
-            </div>
-            <div>
-              <label className="block text-sm font-bold text-gray-500 mb-1">닉네임</label>
-              <input type="text" value={nickname} onChange={(e) => setNickname(e.target.value)} className="w-full rounded-2xl border-2 border-gray-200 bg-gray-50 px-4 py-3 font-bold text-gray-700 outline-none transition focus:border-[#1cb0f6] focus:bg-white" />
-            </div>
-            <Button type="button" variant="secondary" onClick={handleAccountSave}>
-              계정정보 변경
-            </Button>
-          </div>
-        </div>
-
-        <div className="card-duo">
-          <h2 className="text-xl font-black text-gray-700 mb-4 flex items-center">
-            <User className="mr-2 text-[#ff4b4b]" /> 비밀번호 변경
-          </h2>
-          <div className="space-y-4">
-            <input type="password" placeholder="현재 비밀번호" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} className="w-full rounded-2xl border-2 border-gray-200 bg-gray-50 px-4 py-3 font-bold text-gray-700 outline-none transition focus:border-[#1cb0f6] focus:bg-white" />
-            <input type="password" placeholder="새 비밀번호" value={nextPassword} onChange={(e) => setNextPassword(e.target.value)} className="w-full rounded-2xl border-2 border-gray-200 bg-gray-50 px-4 py-3 font-bold text-gray-700 outline-none transition focus:border-[#1cb0f6] focus:bg-white" />
-            <Button type="button" variant="danger" onClick={handlePasswordChange}>
-              비밀번호 변경
-            </Button>
-          </div>
-        </div>
-
-        <div className="card-duo">
-          <h2 className="text-xl font-black text-gray-700 mb-4 flex items-center">
-            <Bell className="mr-2 text-[#58cc02]" /> 알림창 설정
-          </h2>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <div>
-              <label className="block text-sm font-bold text-gray-500 mb-1">알림 빈도</label>
-              <select value={alertFrequency} onChange={(e) => setAlertFrequency(e.target.value)} className="w-full rounded-2xl border-2 border-gray-200 bg-gray-50 px-4 py-3 font-bold text-gray-700 outline-none">
-                <option value="0">즉시</option>
-                <option value="5">5분</option>
-                <option value="10">10분</option>
-                <option value="30">30분</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-bold text-gray-500 mb-1">알림 세기</label>
-              <select value={alertStrength} onChange={(e) => setAlertStrength(e.target.value)} className="w-full rounded-2xl border-2 border-gray-200 bg-gray-50 px-4 py-3 font-bold text-gray-700 outline-none">
-                <option value="soft">약함</option>
-                <option value="normal">보통</option>
-                <option value="strong">강함</option>
-              </select>
+      <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
+        <SettingsCard title="계정" icon={<User size={18} />}>
+          <div className="flex items-center gap-3">
+            <span aria-hidden="true" className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-brand text-lg font-extrabold text-white">
+              {(savedNickname || currentUser?.username || '?').charAt(0).toUpperCase()}
+            </span>
+            <div className="min-w-0">
+              <p className="truncate text-lg font-extrabold leading-tight text-heading">{savedNickname || '닉네임 없음'}</p>
+              <p className="truncate text-sm text-muted">{`아이디 ${currentUser?.username ?? '—'}`}</p>
             </div>
           </div>
-        </div>
+          <Field label="닉네임" htmlFor="settings-nickname">
+            <input id="settings-nickname" type="text" value={nickname} onChange={event => setNickname(event.target.value)} className={INPUT} />
+          </Field>
+          <button type="button" onClick={handleAccountSave} className={`${BUTTON} mt-auto w-full`}>닉네임 변경</button>
+        </SettingsCard>
 
-        {/* Preferences Section */}
-        <div className="card-duo">
-          <h2 className="text-xl font-black text-gray-700 mb-4 flex items-center">
-            <Shield className="mr-2 text-[#ffc800]" /> 앱 설정
-          </h2>
-          <div className="space-y-4">
-            <div className="flex items-center justify-between p-2">
-              <div className="flex items-center">
-                <Bell className="mr-3 text-gray-500" />
-                <span className="font-bold text-gray-700">자세 경고 알림 (시스템 트레이)</span>
-              </div>
-              <button 
-                onClick={() => setNotificationsEnabled(!notificationsEnabled)}
-                className={`w-14 h-8 rounded-full transition-colors flex items-center px-1 ${notificationsEnabled ? 'bg-[#58cc02]' : 'bg-gray-300'}`}
-              >
-                <div className={`w-6 h-6 rounded-full bg-white transition-transform ${notificationsEnabled ? 'translate-x-6' : 'translate-x-0'}`} />
-              </button>
-            </div>
+        <SettingsCard title="비밀번호" icon={<KeyRound size={18} />}>
+          <Field label="현재 비밀번호" htmlFor="settings-current-password">
+            <input id="settings-current-password" type="password" value={currentPassword}
+              onChange={event => setCurrentPassword(event.target.value)} className={INPUT} />
+          </Field>
+          <Field label="새 비밀번호 (6자 이상)" htmlFor="settings-next-password">
+            <input id="settings-next-password" type="password" value={nextPassword}
+              onChange={event => setNextPassword(event.target.value)} className={INPUT} />
+          </Field>
+          <button type="button" onClick={handlePasswordChange} className={`${BUTTON_STRONG} mt-auto w-full`}>비밀번호 변경</button>
+        </SettingsCard>
 
-            <div className="flex items-center justify-between p-2">
-              <div className="flex items-center">
-                <Moon className="mr-3 text-gray-500" />
-                <span className="font-bold text-gray-700">다크 모드</span>
-              </div>
-              <button 
-                onClick={handleThemeToggle}
-                className={`w-14 h-8 rounded-full transition-colors flex items-center px-1 ${darkMode ? 'bg-[#1cb0f6]' : 'bg-gray-300'}`}
-              >
-                <div className={`w-6 h-6 rounded-full bg-white transition-transform ${darkMode ? 'translate-x-6' : 'translate-x-0'}`} />
-              </button>
-            </div>
+        <SettingsCard title="화면 테마" note="누르면 바로 바뀌어요" icon={<Palette size={18} />}>
+          <div role="group" aria-label="테마" className="grid flex-1 grid-cols-2 gap-3">
+            <ThemeTile theme="light" selected={!darkMode} onSelect={handleTheme} />
+            <ThemeTile theme="dark" selected={darkMode} onSelect={handleTheme} />
           </div>
-        </div>
+        </SettingsCard>
 
-        <div className="card-duo">
-          <h2 className="text-xl font-black text-gray-700 mb-4 flex items-center">
-            <SlidersHorizontal className="mr-2 text-[#1cb0f6]" /> 자세 교정 기준
-          </h2>
-          <div className="space-y-5">
-            <label className="block">
-              <span className="mb-2 block text-sm font-bold text-gray-500">경고 점수 기준: {scoreThreshold}점 이하</span>
-              <input type="range" min="40" max="95" value={scoreThreshold} onChange={(e) => setScoreThreshold(Number(e.target.value))} className="w-full" />
-            </label>
-            <label className="block">
-              <span className="mb-2 block text-sm font-bold text-gray-500">자세 무너짐 민감도: {collapseSensitivity}%</span>
-              <input type="range" min="10" max="100" value={collapseSensitivity} onChange={(e) => setCollapseSensitivity(Number(e.target.value))} className="w-full" />
-            </label>
+        <SettingsCard title="알림" icon={<Bell size={18} />} iconClass="bg-mode-shoulder-soft text-mode-shoulder">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm font-semibold text-heading">자세 경고 알림 (시스템 트레이)</p>
+            <Switch label="자세 경고 알림 (시스템 트레이)" checked={notificationsEnabled}
+              onChange={on => { setNotificationsEnabled(on); keep('notifications', on ? 'on' : 'off'); }} />
           </div>
-        </div>
+          <Field label="알림 빈도">
+            <Segmented label="알림 빈도" options={FREQUENCIES} value={alertFrequency}
+              onChange={value => { setAlertFrequency(value); keep('alertFrequency', value); }} />
+          </Field>
+          <Field label="알림 세기">
+            <Segmented label="알림 세기" options={STRENGTHS} value={alertStrength}
+              onChange={value => { setAlertStrength(value); keep('alertStrength', value); }} />
+          </Field>
+        </SettingsCard>
 
-        <div className="card-duo border-red-200 bg-red-50">
-          <h2 className="text-xl font-black text-gray-700 mb-4 flex items-center">
-            <Trash2 className="mr-2 text-[#ff4b4b]" /> 데이터 관리
-          </h2>
-          <Button type="button" variant="danger" disabled={clearing} onClick={handleClearStatistics}>
-            통계 삭제
-          </Button>
-        </div>
-        
-        <div className="pt-4 flex justify-end">
-          <Button onClick={handleSave} className="px-8">
-            변경사항 저장
-          </Button>
-        </div>
+        <SettingsCard title="자세 교정 기준" icon={<Activity size={18} />} iconClass="bg-mode-upper-soft text-mode-upper">
+          <Slider id="settings-score-threshold" label="경고 점수 기준" valueText={`${scoreThreshold}점 이하`}
+            min={40} max={95} minLabel="40점" maxLabel="95점" value={scoreThreshold}
+            onChange={value => { setScoreThreshold(value); keep('scoreThreshold', String(value)); }} />
+          <Slider id="settings-collapse-sensitivity" label="자세 무너짐 민감도" valueText={`${collapseSensitivity}%`}
+            min={10} max={100} minLabel="10%" maxLabel="100%" value={collapseSensitivity}
+            onChange={value => { setCollapseSensitivity(value); keep('collapseSensitivity', String(value)); }} />
+        </SettingsCard>
+
+        <SettingsCard title="데이터 관리" icon={<Database size={18} />} iconClass="bg-mode-eye-soft text-mode-eye">
+          <dl className="space-y-2 text-sm">
+            <div className="flex gap-3">
+              <dt className="w-14 shrink-0 font-semibold text-heading">지워져요</dt>
+              <dd className="text-muted">현재 계정으로 서버에 저장된 상체·키보드·안구 통계와 학습이력</dd>
+            </div>
+            <div className="flex gap-3">
+              <dt className="w-14 shrink-0 font-semibold text-heading">남아요</dt>
+              <dd className="text-muted">계정과 이 기기의 설정</dd>
+            </div>
+          </dl>
+          <div className="mt-auto flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs text-muted">삭제한 데이터는 되돌릴 수 없어요.</p>
+            <button type="button" disabled={clearing} onClick={handleClearStatistics} className={BUTTON_DANGER}>
+              <Trash2 aria-hidden="true" size={16} />통계 삭제
+            </button>
+          </div>
+        </SettingsCard>
+
+        <KeyboardSettings className="lg:col-span-2 xl:col-span-3" />
       </div>
     </div>
   );

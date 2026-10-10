@@ -2,8 +2,8 @@ import { Outlet, useLocation } from 'react-router-dom';
 import Sidebar from '../Sidebar';
 
 // App routes share one shell; each page owns only the content inside Outlet.
-// Data-widget pages (dashboard, statistics, history) need a wider canvas; other pages keep their reading width.
-const WIDE_PAGES = ['/dashboard', '/statistics', '/history'];
+// Widget pages (dashboard, statistics, history, settings) need a wider canvas; other pages keep their reading width.
+const WIDE_PAGES = ['/dashboard', '/statistics', '/history', '/settings'];
 
 const AppLayout = () => {
   const pathname = useLocation().pathname;
