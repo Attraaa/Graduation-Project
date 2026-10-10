@@ -1,5 +1,5 @@
 import type { EntrySource } from '../dashboard/summary.ts';
-import { eyePolicy } from '../eye/eyePolicy.ts';
+import { eyePolicy, isCurrentEyePolicy } from '../eye/eyePolicy.ts';
 import { ANSI_QWERTY_TOUCH_POLICY_V1 } from '../keyboard/fingerPolicy.ts';
 import { HABIT_POLICY } from '../posture/evaluation.ts';
 import { shoulderScorePolicy } from '../posture/modes/shoulder.ts';
@@ -18,7 +18,7 @@ export const CURRENT_POLICIES = {
 
 /** "이전 기준": the row was measured with a policy the app no longer writes. */
 export function isLegacy(source: EntrySource) {
-  if (source.mode === 'eye') return source.record.policyVersion !== CURRENT_POLICIES.eye;
+  if (source.mode === 'eye') return !isCurrentEyePolicy(source.record.policyVersion);
   if (source.mode === 'keyboard') {
     return source.stored.record.policyVersion !== CURRENT_POLICIES.keyboard
       || source.stored.record.recognitionVersion !== CURRENT_POLICIES.recognition;
