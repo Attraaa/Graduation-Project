@@ -7,6 +7,7 @@ import LiveScoreChart from '../session/LiveScoreChart';
 import { useMonitoring } from '../session/monitoringContext';
 import PostureMetrics from './PostureMetrics';
 import RecordingStatus from '../records/RecordingStatus';
+import EyeCalibrationGuide from '../eye/EyeCalibrationGuide';
 
 export default function PostureSession() {
   const { upper } = useMonitoring();
@@ -21,6 +22,7 @@ export default function PostureSession() {
       {controls.isRunning && snapshot.phase === 'unavailable' && !controls.isPaused && <p role="status" className="text-sm text-muted">얼굴과 양쪽 어깨가 화면에 보이도록 정면을 향해 주세요.</p>}
       {controls.isRunning && snapshot.phase === 'error' && <p role="alert" className="text-sm text-danger">카메라·분석 연결을 확인한 뒤 중지하고 다시 시작해 주세요.</p>}
       {controls.isRunning && upper.eye.phase === 'error' && <p role="alert" className="text-sm text-danger">깜빡임 분석: {upper.eye.message}</p>}
+      {controls.isRunning && !controls.isPaused && upper.eye.phase === 'calibrating' && <EyeCalibrationGuide measurement={upper.eye.measurement} />}
       <PostureMetrics snapshot={snapshot} eye={upper.eye.measurement} isRunning={controls.isRunning} />
     </section>
     <LiveScoreChart points={upper.trend} />

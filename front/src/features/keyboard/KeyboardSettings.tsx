@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import Button from '../../components/Button';
 
 type Settings = { apps: { name: string; path: string }[] };
-export default function KeyboardSettings() {
+export default function KeyboardSettings({ className = '' }: { className?: string }) {
   const [settings, setSettings] = useState<Settings | null>(null), [error, setError] = useState<string | null>(null);
   const perform = async (operation: () => Promise<Settings>) => {
     try { setSettings(await operation()); setError(null); } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
@@ -13,7 +13,7 @@ export default function KeyboardSettings() {
     void window.motiKeyboard.settings().then(data => { if (active) setSettings(data); }).catch(e => { if (active) setError(String(e)); });
     return () => { active = false; };
   }, []);
-  return <section className="card-duo space-y-4">
+  return <section aria-label="키보드 · 승인 앱 관찰" className={`card-duo space-y-4 ${className}`}>
     <h2 className="text-xl font-black text-heading">키보드 · 승인 앱 관찰</h2>
     <p className="text-sm text-muted">여기에 승인한 앱은 키보드 모드를 시작하면 함께 관찰합니다. 목록 밖 앱, 관리자 권한 앱, 권한을 확인할 수 없는 앱은 제외합니다. 게임을 추가하지 마세요.</p>
     {error && <p role="alert" className="text-red-700">{error}</p>}

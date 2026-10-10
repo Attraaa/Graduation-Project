@@ -6,6 +6,7 @@ import SessionActions from '../session/SessionActions';
 import SessionStatus from '../session/SessionStatus';
 import { useMonitoring, type MonitoringMode } from '../session/monitoringContext';
 import PostureMetrics from '../posture/PostureMetrics';
+import EyeCalibrationGuide from '../eye/EyeCalibrationGuide';
 import Metric from '../session/Metric';
 import { keyboardSummary } from '../../../../database/keyboard';
 import { percentText, scoreText } from '../keyboard/labels';
@@ -28,7 +29,11 @@ function LiveCard({ modeId, children, className }: { modeId: MonitoringMode; chi
 }
 export function UpperCard({ className }: { className?: string }) {
   const { upper } = useMonitoring();
-  return <LiveCard modeId="upper_body" className={className}><PostureMetrics snapshot={upper.snapshot} eye={upper.eye.measurement} isRunning={upper.controls.isRunning} /></LiveCard>;
+  return <LiveCard modeId="upper_body" className={className}>
+    {upper.controls.isRunning && !upper.controls.isPaused && upper.eye.phase === 'calibrating' && <EyeCalibrationGuide measurement={upper.eye.measurement} />}
+    {upper.controls.isRunning && upper.eye.phase === 'error' && <p role="alert" className="text-sm text-danger">깜빡임 분석: {upper.eye.message}</p>}
+    <PostureMetrics snapshot={upper.snapshot} eye={upper.eye.measurement} isRunning={upper.controls.isRunning} />
+  </LiveCard>;
 }
 export function KeyboardCard({ className }: { className?: string }) {
   const { keyboard } = useMonitoring();

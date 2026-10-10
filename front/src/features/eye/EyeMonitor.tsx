@@ -10,19 +10,21 @@ import type { EyeCameraSignature } from './streamStatus';
 import { initializeMediaPipe } from '../session/mediaPipeInitialization';
 import { useCameraSettings } from '../camera/context';
 import { imageSignature } from '../camera/profile';
+import type { EyeSensitivity } from './eyePolicy';
 
 export type EyeUpdate = { measurement: EyeSnapshot; phase: 'loading' | 'calibrating' | 'observing' | 'unavailable' | 'error'; message: string };
 
-export default function EyeMonitor({ active, deviceId, reference, onUpdate, onSample, shared = false, paused = false }: {
+export default function EyeMonitor({ active, deviceId, reference, eyeReference, sensitivity = 'normal', onUpdate, onSample, shared = false, paused = false }: {
   onSample: (at: number, snapshot: EyeSnapshot) => void;
-  active: boolean; deviceId: string; reference: number; onUpdate: (update: EyeUpdate) => void;
+  active: boolean; deviceId: string; reference: number; eyeReference: number; sensitivity?: EyeSensitivity; onUpdate: (update: EyeUpdate) => void;
   shared?: boolean; paused?: boolean;
 }) {
   const { videoRef, startWebcam, stopWebcam, webcamError } = useWebcam();
   const previewRef = useRef<HTMLCanvasElement>(null);
   const { connect, detach, runtime } = useCameraSettings();
-  const measurement = useRef(createEyeMeasurement());
+  const measurement = useRef(createEyeMeasurement(sensitivity));
   const lastReference = useRef(reference);
+  const lastEyeReference = useRef(eyeReference);
   const cameraSignature = useRef<EyeCameraSignature | null>(null);
   const pausedRef = useRef(paused);
   useEffect(() => {
@@ -35,8 +37,16 @@ export default function EyeMonitor({ active, deviceId, reference, onUpdate, onSa
     const snapshot = measurement.current.recalibrate();
     onSample(performance.now(), snapshot);
     onUpdate({ measurement: snapshot, phase: 'calibrating',
-      message: '새 거리 기준을 수집합니다. 지금까지의 깜빡임과 휴식 기록은 유지합니다.' });
+      message: '새 거리 기준을 수집합니다. 지금까지의 깜빡임 기록은 유지합니다.' });
   }, [reference, onUpdate, onSample]);
+  useEffect(() => {
+    if (lastEyeReference.current === eyeReference) return;
+    lastEyeReference.current = eyeReference;
+    const snapshot = measurement.current.recalibrateEyes();
+    onSample(performance.now(), snapshot);
+    onUpdate({ measurement: snapshot, phase: 'calibrating',
+      message: '눈과 거리 기준을 다시 수집합니다. 지금까지의 깜빡임 기록은 유지합니다.' });
+  }, [eyeReference, onUpdate, onSample]);
   useEffect(() => {
     if (!active) return;
     const engine = measurement.current;
@@ -97,7 +107,7 @@ export default function EyeMonitor({ active, deviceId, reference, onUpdate, onSa
             if (!pausedRef.current && !document.hidden && video.readyState >= 2 && video.currentTime !== lastVideoTime && (lastFrameAt === null || now - lastFrameAt >= 30)) {
               const signature = { deviceId: `${activeDeviceId}:${imageSignature(runtime.current.profile)}:${runtime.current.profile.resolution}:${runtime.current.profile.exposureMode}:${runtime.current.profile.exposure}`, width: video.videoWidth, height: video.videoHeight };
               if (eyeCameraChanged(cameraSignature.current, signature)) {
-                engine.recalibrate();
+                engine.recalibrateEyes();
                 cameraChanged = true;
               }
               cameraSignature.current = signature;
@@ -111,7 +121,10 @@ export default function EyeMonitor({ active, deviceId, reference, onUpdate, onSa
               if (now - lastPublished >= 100) {
                 onUpdate({ measurement: current,
                   phase: !observation ? 'unavailable' : current.calibrated ? 'observing' : 'calibrating',
-                  message: reason ?? (current.calibrated ? '정면에서 눈 깜빡임과 얼굴 크기 변화를 관찰합니다.' : cameraChanged ? '카메라 또는 해상도가 바뀌어 거리 기준을 다시 수집합니다. 기존 횟수는 유지합니다.' : '편안한 거리에서 정면을 보고 3초간 구도를 유지해 주세요.'),
+                  message: reason ?? (current.calibrated ? '개인 눈 기준으로 양쪽 눈 깜빡임과 얼굴 크기 변화를 관찰합니다.'
+                    : current.calibrationPhase === 'eyes' ? `개인 눈 기준을 수집합니다. 양쪽 눈을 3번 깜빡여 주세요. 확인 ${current.calibrationBlinks}/3회`
+                      : cameraChanged ? '카메라 구도가 바뀌어 눈과 거리 기준을 다시 수집합니다. 기존 횟수는 유지합니다.'
+                        : '양쪽 눈을 편안하게 뜨고 3초간 정면을 유지해 주세요. 가림과 조명을 확인해 주세요.'),
                 });
                 lastPublished = now;
               }
