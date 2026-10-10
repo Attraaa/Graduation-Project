@@ -27,3 +27,11 @@ test('normal stop closes the owned model only once', async () => {
   await runner.start(); runner.stop(); runner.stop();
   assert.equal(ready, 1); assert.equal(closed, 1);
 });
+test('cancelled shared-camera initialization does not stop the upper-body stream', async () => {
+  const d = deferred(); let stopped = 0;
+  const runner = createEyeRunner({ ownsCamera: false, camera: () => d.promise, stopCamera: () => {},
+    model: () => assert.fail('cancelled initialization must not load a model'), ready: () => assert.fail(), error: () => assert.fail() });
+  const pending = runner.start(); runner.stop();
+  d.resolve({ getTracks: () => [{ stop: () => stopped++ }] });
+  await pending; assert.equal(stopped, 0);
+});

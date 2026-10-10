@@ -6,6 +6,7 @@ import { calendarDays, canMoveForward, entryKey, leadingBlanks, movePeriod, neig
 import type { CalendarView } from '../features/history/calendar';
 import DayRecords from '../features/history/DayRecords';
 import EmptyDay from '../features/history/EmptyDay';
+import { useMonitoring } from '../features/session/monitoringContext';
 import HistoryCalendar from '../features/history/HistoryCalendar';
 import RecordDetail from '../features/history/RecordDetail';
 import { useHistoryData } from '../features/history/useHistoryData';
@@ -17,6 +18,7 @@ const VIEWS: { id: CalendarView; name: string }[] = [{ id: 'week', name: '주간
 const LearningHistory = () => {
   const [params] = useSearchParams();
   const navigate = useNavigate();
+  const monitoring = useMonitoring();
   const today = todayDateKey();
   const [date, setDate] = useState(() => pastDateOrNull(params.get('date'), today) ?? today);
   const [view, setView] = useState<CalendarView>('week');
@@ -78,7 +80,7 @@ const LearningHistory = () => {
             </div>
           ) : (
             <EmptyDay date={date} isToday={date === today} previous={previous} next={next}
-              onSelect={choose} onStart={mode => navigate(`/learn/${mode}`)} />
+              onSelect={choose} onStart={mode => { (mode === 'upper_body' ? monitoring.upper : monitoring.keyboard).start(); navigate('/dashboard'); }} />
           )}
         </>
       )}

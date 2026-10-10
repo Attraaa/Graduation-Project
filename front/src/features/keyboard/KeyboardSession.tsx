@@ -1,137 +1,42 @@
-import { useEffect, useState } from 'react';
-import { Play, RotateCcw, Square } from 'lucide-react';
-import Button from '../../components/Button';
-import KeyboardMonitor from '../../components/KeyboardMonitor';
+import { RotateCcw } from 'lucide-react';
 import Metric from '../session/Metric';
 import SessionFrame from '../session/SessionFrame';
-import { useSessionControls } from '../session/useSessionControls';
-import { initialKeyboardSnapshot } from './monitorTypes';
-import type { KeyboardMonitorSnapshot } from './monitorTypes';
-import type { FingerVerdict } from './types';
+import SessionActions from '../session/SessionActions';
+import SessionStatus from '../session/SessionStatus';
+import MonitoringPreview from '../session/MonitoringPreview';
+import LiveScoreChart from '../session/LiveScoreChart';
+import { useMonitoring } from '../session/monitoringContext';
 import { keyboardSummary } from '../../../../database/keyboard';
 import RecordingStatus from '../records/RecordingStatus';
 import { fingerText, percentText, reasonText, scoreText } from './labels';
-
-const formatTime = (seconds: number) =>
-  String(Math.floor(seconds / 60)).padStart(2, '0') + ':' + String(Math.floor(seconds % 60)).padStart(2, '0');
-const verdictText: Record<FingerVerdict, string> = {
-  preferred: '기본표 일치 · 100점', acceptable: '허용 손가락 · 100점', nearby: '인접 손가락 · 70점', mismatch: '다른 손가락 · 0점', unknown: '판정 보류',
-};
-const verdictClass: Record<FingerVerdict, string> = {
-  preferred: 'text-green-700', acceptable: 'text-sky-700', nearby: 'text-amber-700', mismatch: 'text-red-700', unknown: 'text-muted',
-};
+import { livePressScore } from './liveScore';
 
 export default function KeyboardSession() {
-  const controls = useSessionControls();
-  const { isRunning, elapsedSeconds, deviceId } = controls;
-  const [snapshot, setSnapshot] = useState<KeyboardMonitorSnapshot>(initialKeyboardSnapshot);
-  const [remapRequest, setRemapRequest] = useState(0);
-  const [external, setExternal] = useState(false);
-  const stop = () => { controls.stop(); setSnapshot(value => ({ ...value, latest: null, recent: [] })); };
-  useEffect(() => {
-    window.addEventListener('moti-stop-measurement', stop);
-    return () => window.removeEventListener('moti-stop-measurement', stop);
-  });
+  const { keyboard } = useMonitoring();
+  const { controls, snapshot } = keyboard;
   const totals = keyboardSummary(snapshot.counts);
-  const start = () => {
-    setSnapshot(initialKeyboardSnapshot);
-    controls.start();
-  };
-  const stateLabel = !isRunning ? (elapsedSeconds ? '측정 종료' : '시작 대기') : {
-    idle: '시작 대기', starting: '분석기 준비 중', mapping: '키보드 위치 인식 중',
-    ready: '실시간 입력 확인 중', error: '카메라·분석 오류',
-  }[snapshot.phase];
-  const latestPress = snapshot.latest;
-
-  return (
-    <SessionFrame
-      modeId="keyboard"
-      subtitle="카메라로 손가락 사용을 관찰하고 날짜·키별 집계로 연습 변화를 확인합니다."
-      controls={controls}
-    >
-      <section className="card-duo flex flex-col gap-4 p-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div aria-live="polite">
-            <p className="font-black text-heading">{stateLabel}</p>
-            <p className="mt-1 text-sm text-muted">
-              {snapshot.message ?? '키보드 전체가 보이도록 카메라를 고정해 주세요.'}
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {isRunning && (
-              <Button variant="outline" onClick={() => setRemapRequest(value => value + 1)}>
-                <RotateCcw size={16} className="mr-2 inline" />키보드 위치 다시 잡기
-              </Button>
-            )}
-            <Button variant={isRunning ? 'danger' : 'primary'} onClick={isRunning ? stop : start}>
-              {isRunning ? <Square size={16} className="mr-2 inline" /> : <Play size={16} className="mr-2 inline" />}
-              {isRunning ? '측정 중지' : '카메라 연결하고 시작'}
-            </Button>
-          </div>
-        </div>
-        <label className="text-sm font-bold text-heading"><input type="checkbox" checked={external} disabled={isRunning} onChange={event => setExternal(event.target.checked)} className="mr-2" />승인한 일반 앱도 관찰 · 설정에서 앱을 먼저 승인하세요</label>
-        {isRunning && external && <p role="status" className="text-sm text-muted">외부 관찰: {{ off: '준비 중', observing: '승인 앱 관찰 중', excluded: '대기 · 현재 앱 제외 (Moti 화면에서는 연습 가능)', error: '관찰 중지' }[snapshot.observationStatus]}</p>}
-
-        <div className="flex h-[min(48vh,440px)] min-h-[260px]">
-          <KeyboardMonitor
-            isRunning={isRunning}
-            deviceId={deviceId}
-            remapRequest={remapRequest}
-            onUpdate={setSnapshot}
-            external={external}
-          />
-        </div>
-
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <Metric label="세션 시간" value={formatTime(elapsedSeconds)} detail="카메라 연결 시간 포함" />
-          <Metric label="확인한 입력" value={String(snapshot.detectedPresses)} detail="자동 반복 입력 제외" />
-          <Metric label="최근 입력" value={latestPress?.pressedKey ?? '—'} detail={latestPress?.code ?? '아직 입력 없음'} />
-          <Metric
-            label="감지 손가락·판정"
-            value={latestPress?.observedFinger ? fingerText[latestPress.observedFinger] : '—'}
-            detail={latestPress ? verdictText[latestPress.evaluation.verdict] : '아직 판정 없음'}
-          />
-        </div>
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <Metric label="훈련 점수" value={scoreText(totals.score)} detail={`판정 가능한 ${totals.valid}회 기준 · 100/70/0`} />
-          <Metric label="기본표 일치율" value={percentText(totals.agreement)} detail="허용 대안 포함 · 점수와 별도" />
-          <Metric label="판정 가능 비율" value={percentText(totals.coverage)} detail={`보류 ${totals.unknown}회 · 미지원/단축키 ${totals.unsupported}회 별도`} />
-          <Metric label="손가락 사용 일관성" value={percentText(totals.consistency)} detail="키·Shift 상황별 10회 이상 · 가산점 없음" />
-        </div>
-        <RecordingStatus />
-        <KeyboardPressList snapshot={snapshot} />
-        <p className="text-xs leading-relaxed text-muted">
-          판정은 임시 ANSI QWERTY 권장 손가락표와 보수적인 신뢰도 기준을 사용합니다. 불확실하거나 서로 가까운 후보는 오답 대신 판정 보류로 표시합니다.
-          70점은 검증 전의 훈련 가중치이며, 반대 손과 엄지는 인접 손가락으로 처리하지 않습니다.
-          원문·입력 순서·영상은 저장하지 않고 키·손가락·판정 횟수만 서버에 저장합니다.
-        </p>
-      </section>
-    </SessionFrame>
-  );
-}
-
-function KeyboardPressList({ snapshot }: { snapshot: KeyboardMonitorSnapshot }) {
-  if (!snapshot.recent.length) {
-    return <div className="rounded-xl border border-border bg-surface-muted p-4 text-sm text-muted">키보드 위치 인식이 끝나면 이 화면에서 키를 눌러 실시간 결과를 확인할 수 있습니다.</div>;
-  }
-  return (
-    <div className="overflow-x-auto rounded-xl border border-border">
-      <table className="w-full min-w-[620px] text-left text-sm">
-        <thead className="bg-surface-muted text-xs text-muted">
-          <tr><th className="p-3">입력 키</th><th className="p-3">감지 손가락</th><th className="p-3">판정</th><th className="p-3">권장 손가락</th><th className="p-3">프레임 차이</th></tr>
-        </thead>
-        <tbody>
-          {snapshot.recent.map(result => (
-            <tr key={result.id} className="border-t border-border text-heading">
-              <td className="p-3 font-black">{result.pressedKey} <span className="font-normal text-muted">({result.code})</span></td>
-              <td className="p-3">{result.observedFinger ? fingerText[result.observedFinger] : '감지 불확실'}</td>
-              <td className={`p-3 font-bold ${verdictClass[result.evaluation.verdict]}`}>{verdictText[result.evaluation.verdict]}<span className="block text-xs font-normal">{reasonText[result.evaluation.reason]}</span></td>
-              <td className="p-3">{result.evaluation.preferred.map(id => fingerText[id]).join(' 또는 ') || '정책 없음'}</td>
-              <td className="p-3">{result.frameDeltaMs === null ? '—' : `${Math.abs(result.frameDeltaMs).toFixed(0)}ms`}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
+  return <SessionFrame modeId="keyboard" camera={keyboard.camera}
+    subtitle="손가락 사용과 입력별 판정을 확인하세요."
+    actions={<>{controls.isRunning && <button type="button" disabled={controls.isPaused} onClick={keyboard.remap} className="flex min-h-10 items-center gap-2 rounded-xl border border-border bg-surface px-3 py-2 text-sm font-bold text-heading disabled:opacity-50"><RotateCcw size={16} />위치 다시 잡기</button>}<SessionActions modeId="keyboard" /></>}>
+    <section className="space-y-4 rounded-2xl border border-border bg-surface p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="font-bold text-heading">키보드 카메라</h2><SessionStatus modeId="keyboard" /></div>
+      <div className="mx-auto w-full max-w-2xl"><MonitoringPreview modeId="keyboard" /></div>
+      {controls.isRunning && !controls.isPaused && snapshot.message && snapshot.phase !== 'ready' && <p role={snapshot.phase === 'error' ? 'alert' : 'status'} className={`text-sm ${snapshot.phase === 'error' ? 'text-danger' : 'text-muted'}`}>{snapshot.message}</p>}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <Metric compact label="현재 점수" value={scoreText(controls.isRunning ? livePressScore(snapshot.latest) : null)} detail={`세션 평균 ${scoreText(totals.score)}`} />
+        <Metric compact label="판정 가능 비율" value={percentText(totals.coverage)} detail={`보류 ${totals.unknown}회`} />
+        <Metric compact label="판정한 입력" value={`${totals.valid}회`} detail={`확인한 입력 ${snapshot.detectedPresses}회`} />
+        <Metric compact label="손가락 사용 일관성" value={percentText(totals.consistency)} detail="키·Shift 상황별" />
+      </div>
+    </section>
+    <LiveScoreChart points={keyboard.trend} keyboard />
+    <section className="overflow-hidden rounded-2xl border border-border bg-surface">
+      <h2 className="p-4 font-bold text-heading">최근 입력</h2>
+      {!snapshot.recent.length ? <p className="px-4 pb-4 text-sm text-muted">아직 입력이 없습니다</p> : <div className="overflow-x-auto"><table className="w-full min-w-[380px] table-fixed text-left text-sm">
+        <thead className="bg-surface-muted text-xs text-muted"><tr><th className="w-1/4 px-4 py-3">입력 키</th><th className="w-1/3 px-4 py-3">감지 손가락</th><th className="px-4 py-3">판정</th></tr></thead>
+        <tbody>{snapshot.recent.slice(0, 5).map(result => <tr key={result.id} className="border-t border-border text-heading"><td className="truncate px-4 py-3 font-bold">{result.pressedKey}</td><td className="truncate px-4 py-3">{result.observedFinger ? fingerText[result.observedFinger] : '—'}</td><td className="px-4 py-3"><p className={`truncate font-bold ${result.evaluation.verdict === 'unknown' ? 'text-muted' : result.evaluation.verdict === 'mismatch' ? 'text-danger' : 'text-mode-keyboard'}`}>{scoreText(livePressScore(result))}</p><p className="truncate text-xs text-muted" title={reasonText[result.evaluation.reason]}>{reasonText[result.evaluation.reason]}</p></td></tr>)}</tbody>
+      </table></div>}
+    </section>
+    <RecordingStatus errorsOnly />
+  </SessionFrame>;
 }

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, globalShortcut, powerMonitor } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, powerMonitor } from 'electron'
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
 import { existsSync } from 'node:fs'
@@ -70,7 +70,6 @@ const getFreeLocalPort = () => new Promise<number>((resolve, reject) => {
 })
 
 const stopKeyboardService = () => {
-  globalShortcut.unregisterAll()
   keyboardGeneration += 1
   const processToStop = keyboardProcess
   keyboardProcess = null
@@ -101,10 +100,7 @@ const startKeyboardService = async (external: boolean) => {
   const starting = (async () => {
     const generation = keyboardGeneration
     const settings = readKeyboardSettings()
-    if (external && !settings.apps.length) throw new Error('설정에서 관찰할 일반 앱을 먼저 승인해 주세요.')
-    if (external && !globalShortcut.register(settings.stopShortcut, () => {
-      stopKeyboardService(); win?.webContents.send('keyboard-service:halt')
-    })) throw new Error('관찰 중지 단축키를 등록할 수 없습니다. 설정에서 다른 단축키를 선택해 주세요.')
+    const observeApps = external && settings.apps.length > 0
     const port = await getFreeLocalPort()
     if (generation !== keyboardGeneration) throw new Error('키보드 분석 시작이 취소되었습니다.')
     const token = randomBytes(32).toString('base64url')
@@ -132,7 +128,7 @@ const startKeyboardService = async (external: boolean) => {
 
     const child = spawn(command, args, {
       cwd,
-      env: { ...process.env, MOTI_KEYBOARD_TOKEN: token, MOTI_APPROVED_APPS: JSON.stringify(external ? settings.apps.map(item => item.path) : []), PYTHONUNBUFFERED: '1' },
+      env: { ...process.env, MOTI_KEYBOARD_TOKEN: token, MOTI_APPROVED_APPS: JSON.stringify(observeApps ? settings.apps.map(item => item.path) : []), PYTHONUNBUFFERED: '1' },
       windowsHide: true,
     })
     if (generation !== keyboardGeneration) {
@@ -293,5 +289,4 @@ if (ownsInstance) app.whenReady().then(() => {
   powerMonitor.on('lock-screen', halt)
 })
 app.on('second-instance', () => { win?.restore(); win?.focus() })
-app.on('will-quit', () => { globalShortcut.unregisterAll() })
 app.on('before-quit', stopKeyboardService)

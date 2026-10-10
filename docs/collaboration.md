@@ -8,7 +8,11 @@ flowchart TD
   Route --> KS[KeyboardSession: 키보드 세션]
   PS --> Shared[SessionFrame / useSessionControls / Metric]
   KS --> Shared
-  PS --> Monitor[PostureMonitor: 카메라·모델 연결]
+  App[AppLayout] --> Runtime[MonitoringProvider: 두 세션 상태와 런타임]
+  Runtime --> Monitor[PostureMonitor: 카메라·모델 연결]
+  Runtime --> Eye[EyeMonitor: 같은 영상의 깜빡임]
+  Runtime --> Keys[KeyboardMonitor: 별도 카메라·분석기]
+  Runtime --> Shared
   Monitor --> Geometry[calibration / observation: 관측값]
   Geometry --> Eval[evaluation: 시간 평균·습관 집계]
   Policy[모드별 정책] --> Score[scoring: 유사도 산식]
@@ -27,14 +31,14 @@ flowchart TD
 | 기준 수집·좌표 정의 | `front/src/features/posture/calibration.ts`, `observation.ts` | 수집/관측 회귀 검사, 실제 촬영 검증 |
 | 시간 평균·연속 관찰·기준 이탈 | `front/src/features/posture/evaluation.ts` | `posture-evaluation.test.mjs` |
 | 점수·습관 카드의 문구·디자인 | `front/src/features/posture/PostureMetrics.tsx` | `posture-metrics.test.mjs`, 실제 화면 확인 |
-| 상체 시작/중지·재수집 화면 | `front/src/features/posture/PostureSession.tsx` | 상태 전환, 카메라 해제, 모드 이동 |
+| 홈/상세 시작·일시정지·재수집 | `front/src/features/session/MonitoringProvider.tsx`, `SessionActions.tsx`, `front/src/features/posture/PostureSession.tsx` | 두 모드 독립 상태, 이동 시 유지, 중지 시 해제 |
 | 키보드 화면 | `front/src/features/keyboard/KeyboardSession.tsx` | 기존 키보드 계약 유지 |
 | 카메라·모델 연결 | `front/src/components/PostureMonitor.tsx`, `front/src/hooks/` | 생명주기 검사와 실기기 검증 |
 | 공통 틀·타이머·장치 선택 | `front/src/features/session/` | 목·어깨·키보드 화면 모두 확인 |
 
 `LearningSession.tsx`는 모드 화면 선택만 합니다. 새 모드를 추가할 때 연결하고, 점수 산식이나 카드 문구를 바꿀 때는 수정하지 않습니다. 현재 목·어깨는 같은 카메라·랜드마크 추론과 상체 화면을 재사용합니다. 향후 전혀 다른 관측기가 필요할 때 해당 모드의 분석 모듈을 추가하면 됩니다.
 
-React 상태도 책임에 맞춰 둡니다. 모드별 세션이 시작/중지와 결과 상태를 소유하고 공통 컴포넌트에 props를 전달합니다. `key={mode.id}`와 재시작의 `key={run}`은 이전 세션을 폐기합니다. 상태 소유와 재설정 방식은 [React의 상태 공유](https://react.dev/learn/sharing-state-between-components), [상태 유지와 재설정](https://react.dev/learn/preserving-and-resetting-state) 계약을 따릅니다.
+React 상태도 책임에 맞춰 둡니다. 2026-10-10부터 `AppLayout`의 `MonitoringProvider`가 상체와 키보드의 시작/일시정지·결과 상태를 소유합니다. 홈과 상세는 같은 상태를 표시하며 화면 이동으로 세션을 폐기하지 않습니다. 각 분석기의 `key={run}`은 해당 모드의 새 실행만 초기화합니다. 카메라 Provider에 장치별 key를 두면 다른 모드까지 재설정될 수 있으므로 장치 선택은 내부 프로필을 갱신합니다. 상태 소유와 재설정 방식은 [React의 상태 공유](https://react.dev/learn/sharing-state-between-components), [상태 유지와 재설정](https://react.dev/learn/preserving-and-resetting-state) 계약을 따릅니다.
 
 ## 여러 사람이 AI로 작업할 때
 
@@ -62,7 +66,7 @@ README와 docs/collaboration.md, docs/evaluation.md를 읽어.
 
 ## 안구 모드 담당 경계
 
-안구 계산·정책·영상 처리는 `front/src/features/eye/`가 소유합니다. `EyeSession`은 기존 SessionFrame/Metric/useSessionControls를 재사용합니다. 기존 공통 훅과 다른 모드 알고리즘은 변경하지 않습니다. 공통 기록·서버 계약은 연결 담당자가 조정합니다. 안구 정책 변경은 `eyePolicy.ts`, 안구 테스트, [eye-mode.md](eye-mode.md)를 함께 갱신합니다. 안구 결과는 공통 MySQL/HTTP 경계에 저장하고 안구 통계·학습이력에서 조회합니다.
+안구 계산·정책·영상 처리는 `front/src/features/eye/`가 소유합니다. 2026-10-10부터 독립 `EyeSession` 화면은 제거하고 `EyeMonitor(shared)`가 상체의 기존 변환 영상과 스트림을 빌립니다. 카메라 시작/해제는 `PostureMonitor`가 소유하고 깜빡임은 `PostureMetrics`에서 빈도와 평균으로 표시합니다. 공통 기록·서버 계약은 연결 담당자가 조정합니다. 안구 정책 변경은 `eyePolicy.ts`, 안구 테스트, [eye-mode.md](eye-mode.md)를 함께 갱신합니다. 안구 결과는 공통 MySQL/HTTP 경계에 저장하고 기존 안구 통계·학습이력에서 조회합니다.
 
 ## 상체 통합 담당 경계 (2026-10-02)
 

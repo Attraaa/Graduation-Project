@@ -2,23 +2,20 @@ import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Settings2 } from 'lucide-react';
 import { getLearningMode } from '../../data/modes';
-import type { useSessionControls } from './useSessionControls';
-import CameraProvider from '../camera/CameraProvider';
-import { useCameraSettings } from '../camera/context';
+import type { CameraContextValue } from '../camera/context';
 
 interface SessionFrameProps {
   modeId: string;
   subtitle: string;
-  controls: ReturnType<typeof useSessionControls>;
   children: ReactNode;
+  camera: CameraContextValue;
+  actions?: ReactNode;
 }
 
-export default function SessionFrame({ modeId, subtitle, controls, children }: SessionFrameProps) {
+export default function SessionFrame({ modeId, subtitle, children, camera, actions }: SessionFrameProps) {
   const navigate = useNavigate();
   const mode = getLearningMode(modeId);
-  const { isRunning, deviceId, devices, setDeviceId } = controls;
-  return (
-    <CameraProvider key={`${modeId}:${deviceId}`} modeId={modeId} deviceId={deviceId} cameraLabel={devices.find(device => device.deviceId === deviceId)?.label || '기본 카메라'}><div className="flex min-h-full flex-col gap-5">
+  const content = <div className="flex min-h-full flex-col gap-4 pb-4">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <button onClick={() => navigate('/dashboard')} className="mb-3 flex items-center gap-1 text-sm font-bold text-muted">
@@ -27,22 +24,9 @@ export default function SessionFrame({ modeId, subtitle, controls, children }: S
           <h1 className="text-2xl font-black text-heading">{mode.title}</h1>
           <p className="mt-1 text-sm text-muted">{subtitle}</p>
         </div>
-        <div className="flex flex-wrap items-end gap-2"><label className="flex flex-col gap-1 text-sm font-bold text-muted">
-          사용할 카메라
-          <select value={deviceId} disabled={isRunning} onChange={event => setDeviceId(event.target.value)}
-            className="max-w-64 rounded-xl border-2 border-border bg-surface p-2 text-heading disabled:opacity-60">
-            <option value="">기본 카메라</option>
-            {devices.filter(device => device.deviceId).map((device, index) => (
-              <option key={device.deviceId} value={device.deviceId}>{device.label || '카메라 ' + (index + 1)}</option>
-            ))}
-          </select>
-        </label><CameraSettingsButton /></div>
+        <div className="flex flex-wrap items-center gap-2"><button type="button" onClick={camera.open} className="flex min-h-10 items-center gap-2 rounded-xl border border-border bg-surface px-3 py-2 text-sm font-bold text-heading"><Settings2 size={17} />카메라 설정</button>{actions}</div>
       </header>
       {children}
-    </div></CameraProvider>
-  );
-}
-function CameraSettingsButton() {
-  const { open } = useCameraSettings();
-  return <button type="button" onClick={open} className="flex items-center gap-2 rounded-xl border-2 border-border bg-surface px-3 py-2 text-sm font-bold text-heading"><Settings2 size={17} />카메라 설정</button>;
+    </div>;
+  return content;
 }

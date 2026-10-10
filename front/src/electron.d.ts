@@ -6,9 +6,9 @@ declare global {
     motiKeyboard?: {
       start: (external?: boolean) => Promise<{ origin: string; token: string }>
       stop: () => Promise<void>
-      settings: () => Promise<{ apps: { name: string; path: string }[]; stopShortcut: string }>
-      chooseApp: () => Promise<{ apps: { name: string; path: string }[]; stopShortcut: string }>
-      updateSettings: (input: { removePath?: string; stopShortcut?: string }) => Promise<{ apps: { name: string; path: string }[]; stopShortcut: string }>
+      settings: () => Promise<{ apps: { name: string; path: string }[] }>
+      chooseApp: () => Promise<{ apps: { name: string; path: string }[] }>
+      updateSettings: (input: { removePath?: string }) => Promise<{ apps: { name: string; path: string }[] }>
       onHalt: (listener: () => void) => () => void
     }
   }

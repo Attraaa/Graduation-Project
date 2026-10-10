@@ -13,9 +13,10 @@ import { imageSignature } from '../camera/profile';
 
 export type EyeUpdate = { measurement: EyeSnapshot; phase: 'loading' | 'calibrating' | 'observing' | 'unavailable' | 'error'; message: string };
 
-export default function EyeMonitor({ active, deviceId, reference, onUpdate, onSample }: {
+export default function EyeMonitor({ active, deviceId, reference, onUpdate, onSample, shared = false, paused = false }: {
   onSample: (at: number, snapshot: EyeSnapshot) => void;
   active: boolean; deviceId: string; reference: number; onUpdate: (update: EyeUpdate) => void;
+  shared?: boolean; paused?: boolean;
 }) {
   const { videoRef, startWebcam, stopWebcam, webcamError } = useWebcam();
   const previewRef = useRef<HTMLCanvasElement>(null);
@@ -23,6 +24,11 @@ export default function EyeMonitor({ active, deviceId, reference, onUpdate, onSa
   const measurement = useRef(createEyeMeasurement());
   const lastReference = useRef(reference);
   const cameraSignature = useRef<EyeCameraSignature | null>(null);
+  const pausedRef = useRef(paused);
+  useEffect(() => {
+    pausedRef.current = paused;
+    onSample(performance.now(), measurement.current.sample(performance.now(), null));
+  }, [paused, onSample]);
   useEffect(() => {
     if (lastReference.current === reference) return;
     lastReference.current = reference;
@@ -56,7 +62,7 @@ export default function EyeMonitor({ active, deviceId, reference, onUpdate, onSa
     };
     const runner = createEyeRunner<FaceLandmarker>({
       camera: async () => {
-        const stream = await startWebcam(deviceId || undefined);
+        const stream = shared ? runtime.current.stream : await startWebcam(deviceId || undefined);
         activeDeviceId = stream?.getVideoTracks()[0]?.getSettings().deviceId ?? deviceId;
         const track = stream?.getVideoTracks()[0];
         if (track) {
@@ -64,10 +70,11 @@ export default function EyeMonitor({ active, deviceId, reference, onUpdate, onSa
           track.addEventListener('ended', ended);
           removeTrackListener = () => track.removeEventListener('ended', ended);
         }
-        if (!cancelled && stream && videoRef.current && previewRef.current) await connect(videoRef.current, stream, previewRef.current);
+        if (!shared && !cancelled && stream && videoRef.current && previewRef.current) await connect(videoRef.current, stream, previewRef.current);
         return stream;
       },
-      stopCamera: () => { stopWebcam(); detach(); },
+      stopCamera: () => { if (!shared) { stopWebcam(); detach(); } },
+      ownsCamera: !shared,
       model: async () => {
         const { FaceLandmarker, FilesetResolver } = await import('@mediapipe/tasks-vision');
         const base = new URL(import.meta.env.BASE_URL, document.baseURI);
@@ -79,7 +86,7 @@ export default function EyeMonitor({ active, deviceId, reference, onUpdate, onSa
         }), true);
       },
       ready: async model => {
-        const video = videoRef.current;
+        const video = shared ? runtime.current.video : videoRef.current;
         if (!video) throw new Error('카메라 미리보기를 찾지 못했습니다.');
         readyAt = performance.now();
         await video.play();
@@ -87,14 +94,14 @@ export default function EyeMonitor({ active, deviceId, reference, onUpdate, onSa
         const process = (now: number) => {
           if (cancelled) return;
           try {
-            if (!document.hidden && video.readyState >= 2 && video.currentTime !== lastVideoTime && (lastFrameAt === null || now - lastFrameAt >= 30)) {
+            if (!pausedRef.current && !document.hidden && video.readyState >= 2 && video.currentTime !== lastVideoTime && (lastFrameAt === null || now - lastFrameAt >= 30)) {
               const signature = { deviceId: `${activeDeviceId}:${imageSignature(runtime.current.profile)}:${runtime.current.profile.resolution}:${runtime.current.profile.exposureMode}:${runtime.current.profile.exposure}`, width: video.videoWidth, height: video.videoHeight };
               if (eyeCameraChanged(cameraSignature.current, signature)) {
                 engine.recalibrate();
                 cameraChanged = true;
               }
               cameraSignature.current = signature;
-              const result = model.detectForVideo(previewRef.current ?? video, now);
+              const result = model.detectForVideo((shared ? runtime.current.canvas : previewRef.current) ?? video, now);
               const { observation, reason } = readEyes(result, video.videoWidth, video.videoHeight);
               const current = engine.sample(now, observation);
               onSample(now, current);
@@ -118,7 +125,7 @@ export default function EyeMonitor({ active, deviceId, reference, onUpdate, onSa
     });
     // Clears stale indicators even if the camera freezes without an ended event.
     const watchdog = window.setInterval(() => {
-      if (cancelled) return;
+      if (cancelled || pausedRef.current) return;
       const issue = eyeStreamIssue(performance.now(), readyAt, lastFrameAt, document.hidden);
       if (issue) invalidate(issue);
     }, 500);
@@ -134,7 +141,8 @@ export default function EyeMonitor({ active, deviceId, reference, onUpdate, onSa
       engine.sample(performance.now(), null);
       runner.stop();
     };
-  }, [active, deviceId, onUpdate, onSample, startWebcam, stopWebcam, videoRef, connect, detach, runtime]);
+  }, [active, shared, deviceId, onUpdate, onSample, startWebcam, stopWebcam, videoRef, connect, detach, runtime]);
+  if (shared) return null;
   return (
     <div className="relative overflow-hidden rounded-2xl bg-surface-muted">
       <video ref={videoRef} muted playsInline className="hidden" />

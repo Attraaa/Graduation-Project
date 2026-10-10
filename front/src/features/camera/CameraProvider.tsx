@@ -6,20 +6,29 @@ import { imageSignature, normalizeProfile, readProfile, resolveProfile, writePro
 import { unframePoint } from './framing';
 import CameraSettingsPanel from './CameraSettingsPanel';
 import './cameraSettings.css';
+import { useCameraWindow } from './useCameraWindow';
 
-export default function CameraProvider({ modeId, deviceId, cameraLabel, children }: {
+export default function CameraProvider({ modeId, deviceId, cameraLabel, children, paused = false, onOpen }: {
   modeId: string; deviceId: string; cameraLabel: string; children: ReactNode;
+  paused?: boolean; onOpen?: (modeId: string, ratio: number) => void;
 }) {
   const [profile, setProfile] = useState(() => readProfile(localStorage, modeId, deviceId));
   const [connected, setConnected] = useState(false);
   const [exposureError, setExposureError] = useState<string | null>(null);
   const [activeLabel, setActiveLabel] = useState(cameraLabel);
-  const [portal, setPortal] = useState<HTMLElement | null>(null);
-  const popup = useRef<Window | null>(null);
-  const runtime = useRef<CameraRuntime>({ profile, canvas: null, overlay: null, track: null, deviceId, editing: false, generation: 0, frameAt: null, videoTime: -1, metrics: null, invalidate: null });
+  const { portal, open: openWindow, error: windowError } = useCameraWindow();
+  const runtime = useRef<CameraRuntime>({ profile, canvas: null, overlay: null, track: null, video: null, stream: null, paused, deviceId, editing: false, generation: 0, frameAt: null, videoTime: -1, metrics: null, invalidate: null });
+  useEffect(() => { runtime.current.paused = paused; }, [paused]);
   const animation = useRef(0);
   const removeEnded = useRef<() => void>(() => {});
   const pendingChanges = useRef<Partial<CameraProfile>>({});
+  useEffect(() => {
+    if (runtime.current.track) return;
+    const next = readProfile(localStorage, modeId, deviceId);
+    runtime.current.profile = next; runtime.current.deviceId = deviceId;
+    pendingChanges.current = {};
+    setProfile(next); setActiveLabel(cameraLabel);
+  }, [modeId, deviceId, cameraLabel]);
   const applyQueue = useRef(Promise.resolve());
   const update = useCallback((change: Partial<CameraProfile>) => {
     const state = runtime.current;
@@ -51,7 +60,7 @@ export default function CameraProvider({ modeId, deviceId, cameraLabel, children
     state.generation++;
     if (state.canvas) { state.canvas.width = 0; state.canvas.height = 0; }
     if (state.overlay) { state.overlay.width = 0; state.overlay.height = 0; }
-    state.canvas = null; state.overlay = null; state.track = null; state.editing = false; state.metrics = null; state.frameAt = null; state.videoTime = -1;
+    state.canvas = null; state.overlay = null; state.track = null; state.video = null; state.stream = null; state.editing = false; state.metrics = null; state.frameAt = null; state.videoTime = -1;
     setConnected(false);
   }, []);
   const connect = useCallback(async (video: HTMLVideoElement, stream: MediaStream, canvas: HTMLCanvasElement, overlay?: HTMLCanvasElement | null) => {
@@ -67,7 +76,7 @@ export default function CameraProvider({ modeId, deviceId, cameraLabel, children
     setActiveLabel(track.label || '선택한 카메라');
     writeProfile(localStorage, modeId, actualDevice, next);
     setProfile(next);
-    state.canvas = canvas; state.overlay = overlay ?? null; state.track = track;
+    state.canvas = canvas; state.overlay = overlay ?? null; state.track = track; state.video = video; state.stream = stream;
     state.frameAt = null; state.videoTime = -1;
     removeEnded.current();
     const ended = () => { if (state.track === track) detach(); };
@@ -78,7 +87,7 @@ export default function CameraProvider({ modeId, deviceId, cameraLabel, children
     if (state.track !== track || track.readyState === 'ended') return;
     const draw = () => {
       if (state.track !== track || track.readyState === 'ended') return;
-      if (video.readyState >= 2) {
+      if (video.readyState >= 2 && !state.paused) {
         if (video.currentTime !== state.videoTime) { state.videoTime = video.currentTime; state.frameAt = performance.now(); }
         drawKeyboardFrame(canvas, video, state.profile);
       }
@@ -105,44 +114,11 @@ export default function CameraProvider({ modeId, deviceId, cameraLabel, children
     });
   }, [connected, profile.resolution, profile.exposureMode, profile.exposure]);
   const open = useCallback(() => {
-    if (popup.current && !popup.current.closed) { popup.current.focus(); return; }
-    const state = runtime.current;
-    const ratio = state.canvas?.width && state.canvas.height ? state.canvas.width / state.canvas.height : 16 / 9;
-    const width = Math.min(1100, screen.availWidth - 40);
-    const height = Math.min(screen.availHeight - 80, Math.max(540, (width - 300 - 48) / ratio + 48 + 88 + (window.motiWindow ? 36 : 0)));
-    const url = new URL('camera-settings.html', document.baseURI).href;
-    const child = window.open(url, 'moti-camera-settings', `width=${width},height=${Math.round(height)}`);
-    if (!child) { setExposureError('카메라 설정 창을 열지 못했습니다. 팝업 허용 설정을 확인해 주세요.'); return; }
-    popup.current = child;
-    const prepare = () => {
-      if (child.closed) return;
-      const root = child.document.getElementById('camera-settings-root');
-      if (!root) return;
-      child.document.documentElement.className = document.documentElement.className;
-      child.document.body.className = 'camera-window';
-      document.querySelectorAll('style, link[rel="stylesheet"]').forEach(style => child.document.head.appendChild(style.cloneNode(true)));
-      setPortal(root);
-    };
-    child.addEventListener('load', prepare, { once: true });
-    if (child.document.readyState === 'complete' && child.document.getElementById('camera-settings-root')) prepare();
-  }, []);
-  useEffect(() => {
-    if (!portal) return;
-    const observer = new MutationObserver(() => {
-      const child = popup.current;
-      if (child && !child.closed) child.document.documentElement.className = document.documentElement.className;
-    });
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
-    const timer = window.setInterval(() => {
-      if (popup.current?.closed) { popup.current = null; setPortal(null); runtime.current.editing = false; }
-    }, 200);
-    return () => { window.clearInterval(timer); observer.disconnect(); };
-  }, [portal]);
-  useEffect(() => () => { cancelAnimationFrame(animation.current); popup.current?.close(); }, []);
-  useEffect(() => window.motiKeyboard?.onHalt(() => {
-    popup.current?.close();
-    window.dispatchEvent(new Event('moti-stop-measurement'));
-  }), []);
-  const value = { modeId, cameraLabel: activeLabel, profile, connected, runtime, update, setGrid, setEditing, reportMetrics, setInvalidator, connect, detach, open, exposureError };
+    const canvas = runtime.current.canvas;
+    const ratio = canvas?.width && canvas.height ? canvas.width / canvas.height : 16 / 9;
+    if (onOpen) onOpen(modeId, ratio); else openWindow(ratio);
+  }, [onOpen, modeId, openWindow]);
+  useEffect(() => () => cancelAnimationFrame(animation.current), []);
+  const value = { modeId, cameraLabel: activeLabel, profile, connected, runtime, update, setGrid, setEditing, reportMetrics, setInvalidator, connect, detach, open, exposureError: exposureError ?? windowError };
   return <CameraContext.Provider value={value}>{children}{portal && createPortal(<CameraSettingsPanel />, portal)}</CameraContext.Provider>;
 }

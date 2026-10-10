@@ -79,11 +79,12 @@ test('record rows show the upper line, local times, and the interrupted and lega
   assert.doesNotMatch(current, /이전 기준/);
 });
 
-test('empty days: today offers the three starts and the latest record, past days offer only existing neighbours', () => {
+test('empty days: today offers the two starts and the latest record, past days offer only existing neighbours', () => {
   const none = () => {};
   const today = html(EmptyDay, { date: '2026-10-07', isToday: true, previous: '2026-10-05', next: null, onSelect: none, onStart: none });
   assert.match(today, /오늘은 아직 측정하지 않았어요/);
-  for (const name of ['상체', '키보드', '안구']) assert.match(today, new RegExp(`${name}</button>`));
+  for (const name of ['상체', '키보드']) assert.match(today, new RegExp(`${name}</button>`));
+  assert.doesNotMatch(today, /안구<\/button>/);
   assert.match(today, /가장 최근 기록: 10월 5일 \(월\) 보기/);
   const past = html(EmptyDay, { date: '2026-10-03', isToday: false, previous: '2026-10-02', next: '2026-10-04', onSelect: none, onStart: none });
   assert.match(past, /이 날은 측정 기록이 없어요/);

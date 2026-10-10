@@ -1,78 +1,29 @@
-import { useEffect, useState } from 'react';
-import { Play, RotateCcw, Square } from 'lucide-react';
-import Button from '../../components/Button';
-import PostureMonitor from '../../components/PostureMonitor';
+import { RotateCcw } from 'lucide-react';
 import SessionFrame from '../session/SessionFrame';
-import { useSessionControls } from '../session/useSessionControls';
-import type { CalibrationReason } from './calibration';
-import { createMonitorSnapshot } from './monitorTypes';
+import SessionActions from '../session/SessionActions';
+import SessionStatus from '../session/SessionStatus';
+import MonitoringPreview from '../session/MonitoringPreview';
+import LiveScoreChart from '../session/LiveScoreChart';
+import { useMonitoring } from '../session/monitoringContext';
 import PostureMetrics from './PostureMetrics';
-import { beginPostureRecording } from '../records/recording';
 import RecordingStatus from '../records/RecordingStatus';
 
-const reasonText: Record<CalibrationReason, string> = {
-  'invalid-frame': '카메라 화면을 준비하고 있습니다.',
-  'missing-landmarks': '얼굴과 양쪽 어깨가 화면에 보이도록 앉아 주세요.',
-  'low-confidence': '얼굴과 양쪽 어깨를 가리지 말고 조명을 확인해 주세요.',
-  'out-of-frame': '얼굴과 양쪽 어깨를 화면 안에 맞춰 주세요.',
-  'shoulders-too-close': '몸을 정면으로 향하고 상체가 보이도록 거리를 조절해 주세요.',
-  moving: '움직임이 감지되어 기준 자세를 다시 수집합니다.',
-  interrupted: '관측이 끊겼습니다. 화면과 카메라 연결을 확인해 주세요.',
-  'camera-changed': '카메라 조건이 바뀌어 기준 자세를 다시 수집합니다.',
-  'invalid-time': '관측 시각을 확인하고 있습니다.',
-  'ears-too-close': '양쪽 귀가 보이도록 정면을 향해 주세요.',
-  'head-turned': '정면을 봐 주세요. 고개를 돌린 동안은 목·어깨 점수 판정을 보류합니다.',
-};
-
 export default function PostureSession() {
-  const controls = useSessionControls();
-  const [snapshot, setSnapshot] = useState(createMonitorSnapshot);
-  const { isRunning, elapsedSeconds, run, deviceId } = controls;
-  const stop = controls.stop;
-  useEffect(() => {
-    window.addEventListener('moti-stop-measurement', stop);
-    return () => window.removeEventListener('moti-stop-measurement', stop);
-  }, [stop]);
-  const start = () => {
-    setSnapshot(createMonitorSnapshot());
-    controls.start();
-  };
-  const stateLabel = !isRunning ? (elapsedSeconds ? '측정 종료' : '시작 대기') : {
-    loading: '모델 준비 중', calibrating: '기준 자세 수집', observing: '기준 자세와 비교 중',
-    unavailable: '관찰 일시 불가', error: '카메라·분석 오류',
-  }[snapshot.phase];
-  return (
-    <SessionFrame modeId="upper_body" controls={controls}
-      subtitle="한 카메라로 목과 어깨를 함께 관찰하고 각각의 점수를 확인합니다.">
-      <section className="card-duo flex flex-col gap-4 p-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div aria-live="polite">
-            <p className="font-black text-heading">{stateLabel}</p>
-            <p className="mt-1 text-sm text-muted">
-              {isRunning && snapshot.reason ? reasonText[snapshot.reason] : '카메라 위치가 바뀌면 기준 자세를 다시 잡아 주세요.'}
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {isRunning && <Button variant="outline" onClick={start}><RotateCcw size={16} className="mr-2 inline" />기준 다시 잡기</Button>}
-            <Button variant={isRunning ? 'danger' : 'primary'} onClick={isRunning ? controls.stop : start}>
-              {isRunning ? <Square size={16} className="mr-2 inline" /> : <Play size={16} className="mr-2 inline" />}
-              {isRunning ? '측정 중지' : '기준 자세 잡고 시작'}
-            </Button>
-          </div>
-        </div>
-        {isRunning && snapshot.phase === 'calibrating' && (
-          <div className="rounded-xl bg-surface-muted p-4">
-            <p className="mb-2 text-sm font-bold text-heading">정면을 보고 편안한 기준 자세를 잠시 유지해 주세요.</p>
-            <progress aria-label="기준 자세 수집 진행률" value={snapshot.progress} max={1} className="h-3 w-full accent-primary" />
-            <p className="mt-2 text-xs text-muted">현재 자세의 비교 기준을 수집합니다. 올바른 자세 여부를 자동으로 확정하지 않습니다.</p>
-          </div>
-        )}
-        <div className="flex h-[min(48vh,440px)] min-h-[260px]">
-          <PostureMonitor key={run} isRunning={isRunning} deviceId={deviceId} onUpdate={setSnapshot} recordCapture={beginPostureRecording} />
-        </div>
-        <PostureMetrics snapshot={snapshot} elapsedSeconds={elapsedSeconds} isRunning={isRunning} />
-        <RecordingStatus />
-      </section>
-    </SessionFrame>
-  );
+  const { upper } = useMonitoring();
+  const { controls, snapshot } = upper;
+  return <SessionFrame modeId="upper_body" camera={upper.camera}
+    subtitle="목·어깨 점수와 분당 깜빡임을 함께 확인하세요."
+    actions={<>{controls.isRunning && <button type="button" disabled={controls.isPaused} onClick={upper.recalibrate} className="flex min-h-10 items-center gap-2 rounded-xl border border-border bg-surface px-3 py-2 text-sm font-bold text-heading disabled:opacity-50"><RotateCcw size={16} />기준 다시 잡기</button>}<SessionActions modeId="upper_body" /></>}>
+    <section className="space-y-4 rounded-2xl border border-border bg-surface p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="font-bold text-heading">상체 카메라</h2><SessionStatus modeId="upper_body" /></div>
+      <div className="mx-auto w-full max-w-2xl"><MonitoringPreview modeId="upper_body" /></div>
+      {controls.isRunning && !controls.isPaused && snapshot.phase === 'calibrating' && <div className="rounded-xl bg-surface-muted p-3"><p className="mb-2 text-sm text-muted">얼굴과 양쪽 어깨가 보이도록 정면을 보고 기준 자세를 잠시 유지해 주세요.</p><progress aria-label="기준 자세 수집 진행률" value={snapshot.progress} max={1} className="h-2 w-full accent-primary" /></div>}
+      {controls.isRunning && snapshot.phase === 'unavailable' && !controls.isPaused && <p role="status" className="text-sm text-muted">얼굴과 양쪽 어깨가 화면에 보이도록 정면을 향해 주세요.</p>}
+      {controls.isRunning && snapshot.phase === 'error' && <p role="alert" className="text-sm text-danger">카메라·분석 연결을 확인한 뒤 중지하고 다시 시작해 주세요.</p>}
+      {controls.isRunning && upper.eye.phase === 'error' && <p role="alert" className="text-sm text-danger">깜빡임 분석: {upper.eye.message}</p>}
+      <PostureMetrics snapshot={snapshot} eye={upper.eye.measurement} isRunning={controls.isRunning} />
+    </section>
+    <LiveScoreChart points={upper.trend} />
+    <RecordingStatus errorsOnly />
+  </SessionFrame>;
 }

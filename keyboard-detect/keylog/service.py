@@ -233,6 +233,17 @@ class RealtimeAttributionService:
                 self._clear_transient(); self.analyzer.unfreeze_mapping()
             return {'ok': True}
 
+        @self.socketio.on('stop_observation')
+        def stop_observation(payload):
+            if not self.security.require_token((payload or {}).get('token')) or request.sid != self._client:
+                return {'ok': False}
+            if self.observer:
+                self.observer.stop()
+            with self._state_lock:
+                self._mapping_ready = False
+                self._clear_transient()
+            return {'ok': True, 'status': 'off'}
+
         @self.socketio.on("frame")
         def frame(payload):
             if not self.security.require_token((payload or {}).get("token")):

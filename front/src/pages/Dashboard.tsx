@@ -1,9 +1,10 @@
 import DeviationHours from '../features/dashboard/DeviationHours';
-import { EyeCard, KeyboardCard, UpperCard } from '../features/dashboard/ModeCards';
+import { KeyboardCard, UpperCard } from '../features/dashboard/ModeCards';
+import RecordingStatus from '../features/records/RecordingStatus';
 import { SourceError, SourceLoading } from '../features/dashboard/SourceState';
 import TodayTimeline from '../features/dashboard/TodayTimeline';
 import WeeklyScoreChart from '../features/dashboard/WeeklyScoreChart';
-import { headerDate, minutesText } from '../features/dashboard/format';
+import { headerDate } from '../features/dashboard/format';
 import { useDashboardData } from '../features/dashboard/useDashboardData';
 
 const CARD = 'rounded-2xl border border-border bg-surface p-4';
@@ -18,7 +19,6 @@ const Dashboard = () => {
   const scoresLoading = status.posture === 'loading' || status.keyboard === 'loading';
   const scoresFailed = status.posture === 'error' && status.keyboard === 'error';
   const scoresPartial = !scoresFailed && (status.posture === 'error' || status.keyboard === 'error');
-  const observedReady = status.posture === 'ready' && status.keyboard === 'ready' && status.eye === 'ready';
   const timelineLoading = status.history === 'loading' || status.keyboard === 'loading';
   const timelineFailed = status.history === 'error' || status.keyboard === 'error';
 
@@ -27,16 +27,15 @@ const Dashboard = () => {
       <header>
         <h1 className="text-2xl font-extrabold text-heading">무엇을 모니터링 할까요?</h1>
         <p className="mt-1 text-sm text-muted">
-          {observedReady ? `${headerDate(today)} · 오늘 관찰 ${minutesText(summary.today.totalMs)}` : headerDate(today)}
+          {headerDate(today)}
         </p>
       </header>
 
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <UpperCard className="col-span-2" summary={summary} status={status.posture} onRetry={retry} />
-        <KeyboardCard summary={summary} status={status.keyboard} onRetry={retry} />
-        <EyeCard summary={summary} status={status.eye} onRetry={retry} />
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">
+        <UpperCard className="lg:col-span-2" />
+        <KeyboardCard className="lg:col-span-2" />
 
-        <section aria-label="최근 7일 점수" className={`${CARD} col-span-2 flex flex-col gap-3 lg:col-span-4 xl:col-span-3 xl:row-span-2`}>
+        <section aria-label="최근 7일 점수" className={`${CARD} flex flex-col gap-3 lg:col-span-4 xl:col-span-3 xl:row-span-2`}>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className="font-bold text-heading">최근 7일 점수</h2>
             <ul className="flex flex-wrap items-center gap-3 text-xs text-muted">
@@ -45,7 +44,6 @@ const Dashboard = () => {
                   <span aria-hidden="true" className={`h-2 w-2 rounded-full ${item.dot}`} />{item.name}
                 </li>
               ))}
-              <li>안구는 점수가 없어 빠져요</li>
             </ul>
           </div>
           {scoresLoading ? <SourceLoading className="h-72" />
@@ -58,7 +56,7 @@ const Dashboard = () => {
           <p className="text-xs text-muted">점수는 기준 자세와의 화면상 유사도와 손가락 사용 점수예요. 의학적 진단이 아니에요.</p>
         </section>
 
-        <section aria-label="오늘 타임라인" className={`${CARD} col-span-1 space-y-3 lg:col-span-2 xl:col-span-1`}>
+        <section aria-label="오늘 타임라인" className={`${CARD} space-y-3 lg:col-span-2 xl:col-span-1`}>
           <h2 className="font-bold text-heading">오늘 타임라인</h2>
           {timelineLoading ? <SourceLoading className="h-24" />
             : timelineFailed && !summary.timeline.length ? <SourceError onRetry={retry} />
@@ -66,7 +64,7 @@ const Dashboard = () => {
           {!timelineLoading && timelineFailed && summary.timeline.length > 0 && <SourceError onRetry={retry} />}
         </section>
 
-        <section aria-label="기준 이탈이 잦은 시간" className={`${CARD} col-span-1 space-y-3 lg:col-span-2 xl:col-span-1`}>
+        <section aria-label="기준 이탈이 잦은 시간" className={`${CARD} space-y-3 lg:col-span-2 xl:col-span-1`}>
           <div>
             <h2 className="font-bold text-heading">기준 이탈이 잦은 시간</h2>
             <p className="text-xs text-muted">최근 7일 · 상체</p>
@@ -76,6 +74,7 @@ const Dashboard = () => {
             : <DeviationHours hours={summary.deviationHours} />}
         </section>
       </div>
+      <RecordingStatus />
     </div>
   );
 };

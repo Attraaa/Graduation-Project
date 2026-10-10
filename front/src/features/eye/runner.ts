@@ -5,6 +5,7 @@ export function createEyeRunner<T extends { close(): void }>(dependencies: {
   model: () => Promise<T>;
   ready: (model: T) => Promise<void>;
   error: (error: unknown) => void;
+  ownsCamera?: boolean;
 }) {
   let cancelled = false;
   let owned: T | null = null;
@@ -18,7 +19,7 @@ export function createEyeRunner<T extends { close(): void }>(dependencies: {
   const start = async () => {
     try {
       const stream = await dependencies.camera();
-      if (cancelled) { stream?.getTracks().forEach(track => track.stop()); return; }
+      if (cancelled) { if (dependencies.ownsCamera !== false) stream?.getTracks().forEach(track => track.stop()); return; }
       if (!stream) throw new Error('카메라를 열지 못했습니다. 권한과 다른 앱의 카메라 사용을 확인한 뒤 다시 시작해 주세요.');
       const model = await dependencies.model();
       if (cancelled) { model.close(); return; }

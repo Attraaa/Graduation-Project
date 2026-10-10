@@ -21,6 +21,7 @@ import { localDateKey } from '../../../database/contracts'
 
 interface KeyboardMonitorProps {
   isRunning: boolean
+  paused?: boolean
   deviceId: string
   remapRequest: number
   onUpdate: (snapshot: KeyboardMonitorSnapshot) => void
@@ -102,7 +103,10 @@ const drawOverlay = (
   }
 }
 
-export default function KeyboardMonitor({ isRunning, deviceId, remapRequest, onUpdate, external }: KeyboardMonitorProps) {
+export default function KeyboardMonitor({ isRunning, paused = false, deviceId, remapRequest, onUpdate, external }: KeyboardMonitorProps) {
+  const pausedRef = useRef(paused)
+  const pauseAnalysis = useRef<() => void>(() => {})
+  useEffect(() => { pausedRef.current = paused; pauseAnalysis.current() }, [paused])
   const { videoRef, startWebcam, stopWebcam, webcamError } = useWebcam()
   const overlayRef = useRef<HTMLCanvasElement>(null)
   const previewRef = useRef<HTMLCanvasElement>(null)
@@ -156,7 +160,7 @@ export default function KeyboardMonitor({ isRunning, deviceId, remapRequest, onU
     }
 
     const requestMapping = () => {
-      if (!socket?.connected || mappingInFlight || bufferedFrames < 2 || runtime.current.editing) return
+      if (pausedRef.current || !socket?.connected || mappingInFlight || bufferedFrames < 2 || runtime.current.editing) return
       mappingInFlight = true
       const requestedRevision = revision
       mapped = false
@@ -195,7 +199,7 @@ export default function KeyboardMonitor({ isRunning, deviceId, remapRequest, onU
 
     const sendFrame = () => {
       const video = videoRef.current
-      if (!socket?.connected || frameInFlight || !video || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return
+      if (pausedRef.current || !socket?.connected || frameInFlight || !video || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return
       const source = preview
       if (!source?.width || !source.height) return
       if (runtime.current.videoTime === lastVideoTime || runtime.current.frameAt === null) return
@@ -210,7 +214,7 @@ export default function KeyboardMonitor({ isRunning, deviceId, remapRequest, onU
       const sentRevision = revision
       frameInFlight = true
       canvas.toBlob(blob => {
-        if (abort.signal.aborted || sentRevision !== revision || !socket?.connected) { frameInFlight = false; return }
+        if (abort.signal.aborted || pausedRef.current || sentRevision !== revision || !socket?.connected) { frameInFlight = false; return }
         if (!blob) { frameInFlight = false; return }
         const encodedAt = performance.now()
         socket.timeout(5000).emit('frame', { token, image: blob, browser_perf_ms: capturedAt,
@@ -232,7 +236,7 @@ export default function KeyboardMonitor({ isRunning, deviceId, remapRequest, onU
 
     const keyDown = (event: KeyboardEvent) => {
       if (event.code === 'ShiftLeft' || event.code === 'ShiftRight') shifts.add(event.code)
-      if (event.repeat || !mapped || runtime.current.editing || !socket?.connected) return
+      if (pausedRef.current || event.repeat || !mapped || runtime.current.editing || !socket?.connected) return
       if (event.target instanceof Element && event.target.closest('button, select, input, [contenteditable="true"]')) return
       if (event.target instanceof HTMLInputElement && event.target.type === 'password') return
       const context = event.ctrlKey || event.altKey || event.metaKey ? 'shortcut'
@@ -247,6 +251,20 @@ export default function KeyboardMonitor({ isRunning, deviceId, remapRequest, onU
     }
     const keyUp = (event: KeyboardEvent) => shifts.delete(event.code)
     const blur = () => shifts.clear()
+    pauseAnalysis.current = () => {
+      shifts.clear(); revision += 1; mappingInFlight = false; frameInFlight = false
+      if (!socket?.connected) return
+      if (pausedRef.current) {
+        mapped = false
+        if (external) socket.emit('stop_observation', { token })
+        socket.emit('reset_analysis', { token })
+      } else {
+        remapRef.current()
+        if (external) socket.emit('start_observation', { token }, (response: { ok: boolean }) => {
+          if (!abort.signal.aborted && !pausedRef.current && !response?.ok) fail('승인 앱 관찰을 재개할 수 없습니다.')
+        })
+      }
+    }
 
     const setup = async () => {
       if (!window.motiKeyboard) throw new Error('키보드 실시간 분석은 Electron 앱에서 실행해 주세요.')
@@ -292,19 +310,19 @@ export default function KeyboardMonitor({ isRunning, deviceId, remapRequest, onU
           if (fingersRef.current.length && performance.now() - lastFingerAt > 500) { fingersRef.current = []; drawOverlay(overlayRef.current, mappingRef.current, [], latestRef.current) }
         }, 50)
         sendFrame()
-        if (external) socket?.emit('start_observation', { token }, (response: { ok: boolean }) => {
+        if (external && !pausedRef.current) socket?.emit('start_observation', { token }, (response: { ok: boolean }) => {
           if (!response?.ok) fail('승인 앱 관찰을 시작할 수 없습니다. 승인 앱 설정을 확인해 주세요.')
         })
       })
       socket.on('connect_error', error => fail(`로컬 키보드 분석 연결 실패: ${error.message}`))
       socket.on('disconnect', () => { if (!abort.signal.aborted && snapshotRef.current.phase !== 'error') fail('로컬 분석 연결이 끊어졌습니다.') })
       socket.on('observation_status', (payload: { status: KeyboardMonitorSnapshot['observationStatus'] }) => {
-        if (abort.signal.aborted) return
+        if (abort.signal.aborted || pausedRef.current) return
         publish({ observationStatus: payload.status, ...(payload.status !== 'observing' ? { latest: null, recent: [] } : {}) })
         if (payload.status === 'error') fail('승인 앱의 권한을 확인할 수 없어 관찰을 중지했습니다.')
       })
       socket.on('press_result', (payload: RuntimePressPayload) => {
-        if (abort.signal.aborted || !mapped || runtime.current.editing) return
+        if (abort.signal.aborted || pausedRef.current || !mapped || runtime.current.editing) return
         const result = adaptRuntimePress(payload)
         sink?.press(result)
         const row: KeyboardCount = { date: localDateKey(Date.now(), new Date().getTimezoneOffset()), code: result.code,
@@ -336,6 +354,7 @@ export default function KeyboardMonitor({ isRunning, deviceId, remapRequest, onU
 
     return () => {
       abort.abort()
+      pauseAnalysis.current = () => {}
       clearInterval(frameTimer)
       clearInterval(mappingTimer)
       clearInterval(settingsTimer)

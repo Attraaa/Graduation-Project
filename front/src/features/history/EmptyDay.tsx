@@ -1,16 +1,15 @@
 import { Play } from 'lucide-react';
 import { longDate } from '../dashboard/format';
 
-export type StartMode = 'upper_body' | 'keyboard' | 'eye';
+export type StartMode = 'upper_body' | 'keyboard';
 const STARTS: { id: StartMode; name: string; color: string }[] = [
   { id: 'upper_body', name: '상체', color: 'bg-mode-upper' },
   { id: 'keyboard', name: '키보드', color: 'bg-mode-keyboard' },
-  { id: 'eye', name: '안구', color: 'bg-mode-eye' },
 ];
 const LINK = 'text-sm font-semibold text-secondary hover:underline';
 const OUTLINE = 'rounded-full border border-border px-3 py-1.5 text-sm font-semibold text-heading hover:bg-nav-active';
 
-/** A selected day without rows. Today offers the three starts; a past day offers its closest recorded days. */
+/** Today offers the two monitoring starts; a past day offers its closest recorded days. */
 export default function EmptyDay({ date, isToday, previous, next, onSelect, onStart }: {
   date: string; isToday: boolean; previous: string | null; next: string | null;
   onSelect: (date: string) => void; onStart: (mode: StartMode) => void;

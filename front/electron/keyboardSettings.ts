@@ -2,19 +2,19 @@ import { existsSync, readFileSync, realpathSync, writeFileSync, renameSync } fro
 import path from 'node:path';
 import { app, dialog, type BrowserWindow } from 'electron';
 
-export interface KeyboardSettings { apps: { name: string; path: string }[]; stopShortcut: string }
+export interface KeyboardSettings { apps: { name: string; path: string }[] }
 const blocked = /(?:valorant|league of legends|cs2|overwatch|tslgame|fortnite|vgc|vgtray)\.exe$/i;
 const location = () => path.join(app.getPath('userData'), 'keyboard-settings.json');
 export function readKeyboardSettings(): KeyboardSettings {
   try {
     const data = JSON.parse(readFileSync(location(), 'utf8')) as KeyboardSettings;
-    if (!Array.isArray(data.apps) || data.apps.length > 32 || !/^Control\+Alt\+F(?:[1-9]|1[0-2])$/.test(data.stopShortcut)
+    if (!Array.isArray(data.apps) || data.apps.length > 32
       || data.apps.some(item => typeof item.path !== 'string' || !path.isAbsolute(item.path) || path.extname(item.path).toLowerCase() !== '.exe'
         || item.name !== path.basename(item.path) || blocked.test(item.name))) throw new Error('Invalid keyboard settings');
-    return data;
+    return { apps: data.apps };
   } catch (error) {
     if (existsSync(location())) throw new Error('키보드 관찰 설정을 읽을 수 없습니다. 설정 파일을 확인해 주세요.', { cause: error });
-    return { apps: [], stopShortcut: 'Control+Alt+F8' };
+    return { apps: [] };
   }
 }
 function save(settings: KeyboardSettings) {
@@ -37,15 +37,11 @@ export async function chooseKeyboardApp(window: BrowserWindow) {
 export function updateKeyboardSettings(input: unknown) {
   if (!input || typeof input !== 'object') throw new Error('잘못된 키보드 설정입니다.');
   const row = input as Record<string, unknown>;
-  if (Object.keys(row).some(key => !['removePath', 'stopShortcut'].includes(key))) throw new Error('지원하지 않는 설정입니다.');
+  if (Object.keys(row).some(key => key !== 'removePath')) throw new Error('지원하지 않는 설정입니다.');
   const settings = readKeyboardSettings();
   if (row.removePath !== undefined) {
     if (typeof row.removePath !== 'string') throw new Error('잘못된 승인 앱입니다.');
     settings.apps = settings.apps.filter(item => item.path !== row.removePath);
-  }
-  if (row.stopShortcut !== undefined) {
-    if (typeof row.stopShortcut !== 'string' || !/^Control\+Alt\+F(?:[1-9]|1[0-2])$/.test(row.stopShortcut)) throw new Error('단축키는 Ctrl+Alt+F1~F12 중에서 선택해 주세요.');
-    settings.stopShortcut = row.stopShortcut;
   }
   return save(settings);
 }

@@ -14,12 +14,22 @@ import { useCameraSettings } from '../features/camera/context';
 
 interface PostureMonitorProps {
   isRunning: boolean;
+  paused?: boolean;
+  referenceRequest?: number;
   deviceId: string;
   onUpdate: (snapshot: MonitorSnapshot) => void;
   recordCapture?: (start: CaptureStart) => CaptureSink;
 }
 
-const PostureMonitor = ({ isRunning, deviceId, onUpdate, recordCapture }: PostureMonitorProps) => {
+const PostureMonitor = ({ isRunning, paused = false, referenceRequest = 0, deviceId, onUpdate, recordCapture }: PostureMonitorProps) => {
+  const pausedRef = useRef(paused);
+  const interrupt = useRef<() => void>(() => {});
+  const recollect = useRef<() => void>(() => {});
+  const previousReference = useRef(referenceRequest);
+  useEffect(() => { pausedRef.current = paused; interrupt.current(); }, [paused]);
+  useEffect(() => {
+    if (previousReference.current !== referenceRequest) { previousReference.current = referenceRequest; recollect.current(); }
+  }, [referenceRequest]);
   const latest = useRef<MonitorSnapshot>(createMonitorSnapshot());
   const publish = useCallback((snapshot: MonitorSnapshot) => {
     latest.current = snapshot;
@@ -54,6 +64,26 @@ const PostureMonitor = ({ isRunning, deviceId, onUpdate, recordCapture }: Postur
     let watchdog: ReturnType<typeof setInterval> | undefined;
     let lastFrameAt: number | null = null;
     let capturedGeneration = 0;
+    let resumeAt = 0;
+    interrupt.current = () => {
+      if (!calibration.reference) calibration = createCalibration();
+      observation = interruptObservation(observation);
+      neck = interruptEvaluation(neck);
+      shoulder = interruptEvaluation(shoulder);
+      resumeAt = performance.now();
+      // Record the continuity boundary, without displaying a new value during pause.
+      recording[0]?.sample(resumeAt, neck);
+      recording[1]?.sample(resumeAt, shoulder);
+    };
+    recollect.current = () => {
+      const at = performance.now();
+      recording.forEach(sink => sink?.finish(at));
+      recording = beginRecord(at); recordedReference = null;
+      calibration = createCalibration(); observation = createObservation();
+      neck = createEvaluation(turtleScorePolicy); shoulder = createEvaluation(shoulderScorePolicy);
+      resumeAt = at;
+      publish({ ...createMonitorSnapshot(), phase: 'calibrating' });
+    };
     const setup = async () => {
       const stream = await startWebcam(deviceId || undefined);
       if (abort.signal.aborted) return;
@@ -81,7 +111,7 @@ const PostureMonitor = ({ isRunning, deviceId, onUpdate, recordCapture }: Postur
       const pose = await initMediaPipe((results, capturedAtMs) => {
         const video = videoRef.current;
         const canvas = canvasRef.current;
-        if (abort.signal.aborted || !video || !canvas || capturedGeneration !== runtime.current.generation) return;
+        if (abort.signal.aborted || pausedRef.current || capturedAtMs <= resumeAt || !video || !canvas || capturedGeneration !== runtime.current.generation) return;
         const receivedAtMs = performance.now();
         lastFrameAt = receivedAtMs;
         if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
@@ -160,9 +190,9 @@ const PostureMonitor = ({ isRunning, deviceId, onUpdate, recordCapture }: Postur
         await video.play();
         if (!abort.signal.aborted) {
           lastFrameAt = performance.now();
-          startProcessing(video, () => { capturedGeneration = runtime.current.generation; return previewRef.current ?? video; });
+          startProcessing(video, () => { capturedGeneration = runtime.current.generation; return previewRef.current ?? video; }, () => !pausedRef.current);
           watchdog = setInterval(() => {
-            if (!abort.signal.aborted && lastFrameAt !== null && performance.now() - lastFrameAt > 1500 && latest.current.phase !== 'error') {
+            if (!abort.signal.aborted && !pausedRef.current && lastFrameAt !== null && performance.now() - lastFrameAt > 1500 && latest.current.phase !== 'error') {
               canvasRef.current?.getContext('2d')?.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
               observation = interruptObservation(observation);
               neck = interruptEvaluation(neck);
@@ -185,6 +215,8 @@ const PostureMonitor = ({ isRunning, deviceId, onUpdate, recordCapture }: Postur
     });
     return () => {
       abort.abort();
+      interrupt.current = () => {};
+      recollect.current = () => {};
       const finishedAt = performance.now();
       recording.forEach(sink => sink?.finish(finishedAt));
       clearInterval(watchdog);

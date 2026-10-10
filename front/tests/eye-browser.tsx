@@ -2,7 +2,8 @@
 // Supplies an empty canvas stream; never requests the user's real camera.
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
-import EyeSession from '../src/features/eye/EyeSession';
+import PostureSession from '../src/features/posture/PostureSession';
+import MonitoringProvider from '../src/features/session/MonitoringProvider';
 import '../src/index.css';
 
 let activeTracks = 0;
@@ -30,5 +31,5 @@ diagnostics.setAttribute('role', 'status');
 document.body.prepend(diagnostics);
 window.setInterval(() => { diagnostics.textContent = `Test camera streams active: ${activeTracks}; opens: ${opens}`; }, 250);
 createRoot(document.getElementById('root')!).render(
-  <MemoryRouter><main className="mx-auto max-w-4xl p-6"><h1>TEST HARNESS: {freeze ? 'frozen first frame' : 'blank video'}, no real camera</h1><EyeSession /></main></MemoryRouter>,
+  <MemoryRouter><MonitoringProvider><main className="mx-auto max-w-4xl p-6"><h1>TEST HARNESS: {freeze ? 'frozen first frame' : 'blank video'}, no real camera</h1><PostureSession /></main></MonitoringProvider></MemoryRouter>,
 );

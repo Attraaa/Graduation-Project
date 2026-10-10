@@ -6,6 +6,9 @@ export interface CameraRuntime {
   canvas: HTMLCanvasElement | null;
   overlay: HTMLCanvasElement | null;
   track: MediaStreamTrack | null;
+  video: HTMLVideoElement | null;
+  stream: MediaStream | null;
+  paused: boolean;
   deviceId: string;
   editing: boolean;
   generation: number;

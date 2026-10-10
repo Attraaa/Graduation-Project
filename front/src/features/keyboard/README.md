@@ -82,9 +82,10 @@ Resolution changes request constraints on the active track. Hardware exposure is
 offered only when that track advertises supported modes/ranges; focus is not
 implemented. Software filters cannot recover clipped camera information.
 
-The common native settings window opens beside the learning-page device selector,
-shares the parent preview, and never starts a camera. Profiles save automatically
-per mode and actual device. Four outer-boundary handles, whole-grid dragging, and
+The common native settings window opens from the monitoring detail screen,
+selects each mode's camera, shares the parent preview, and never starts a camera.
+Device selections and profiles save automatically per mode and actual device.
+Four outer-boundary handles, whole-grid dragging, and
 grid-only flips/rotation work before automatic recognition succeeds; key names
 are always shown. The normalized 61-key layout is the same JSON used by Python.
 Editing pauses attribution and manual geometry freezes the real analyzer map.
@@ -101,9 +102,12 @@ Preview RAF is independent of the one-in-flight asynchronous binary JPEG pipelin
 (up to 20Hz opportunities); old fingertips expire after 500ms. See the full
 [camera contract](../../../../docs/camera-settings.md) and its validation limits.
 
-External observation is off by default. Settings approves exact executable paths
-through the Electron file picker and chooses Ctrl+Alt+F1~F12 for stopping. Start
-requires an explicit checkbox and button. The Python Windows Raw Input observer
+Starting keyboard monitoring observes Moti input and the apps approved in Settings;
+there is no separate start checkbox. An empty approved list still permits Moti
+input without an external observer. Settings approves exact executable paths
+through the Electron file picker. Monitoring pauses/stops through the on-screen
+buttons; no global stop shortcut is registered.
+The Python Windows Raw Input observer
 registers INPUTSINK only while an approved non-elevated app is foreground,
 checks identity/elevation again before reading a scan code, and unregisters
 elsewhere. Identity/elevation failures exclude the app. Known game names and
@@ -112,8 +116,11 @@ classifier. Do not approve games or sensitive apps. No hook, NOLEGACY, input
 injection, admin elevation, driver, tray, or autostart is used by this path.
 The standalone legacy pynput test is separate and disabled in the embedded API.
 
-Window lock/suspend, page exit, camera/service failure, stop button, and stop
-shortcut end observation; resuming requires another explicit start. No API can
+Window lock/suspend, leaving the app layout, camera/service failure, and stop button
+end observation; resuming requires another explicit start.
+Navigation within the app keeps the session. Pause stops the observer and clears
+transient frame/input queues; resume rechecks the map and continues session counts.
+No API can
 promise antivirus/anti-cheat compatibility. The loopback process uses a fresh
 random token, accepts one authenticated socket, and does not expose the test
 page. Preload has only specific commands and main validates the original main

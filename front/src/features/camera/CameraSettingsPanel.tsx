@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type CSSProperties, type PointerEvent } from 'react';
+import { useEffect, useId, useRef, useState, type CSSProperties, type PointerEvent, type ReactNode } from 'react';
 import { CameraOff, FlipHorizontal2, FlipVertical2, RotateCw, RotateCcw, ScanLine, Hand, MousePointer2, Maximize } from 'lucide-react';
 import { getLearningMode } from '../../data/modes';
 import { useCameraSettings } from './context';
@@ -7,7 +7,7 @@ import { displayedGrid, gridPolygons } from './grid';
 import WindowTitleBar from '../../components/layout/WindowTitleBar';
 import { normalizeFraming, unframePoint, zoomFraming, type CameraFraming } from './framing';
 
-export default function CameraSettingsPanel() {
+export default function CameraSettingsPanel({ selection }: { selection?: ReactNode }) {
   const camera = useCameraSettings();
   const { profile, runtime, connected, update, setGrid } = camera;
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -142,7 +142,7 @@ export default function CameraSettingsPanel() {
               {Object.entries(polygons).map(([name, p]) => <g key={name} data-grid="true"><polygon points={p.map(q => `${q[0] * 1000},${q[1] * 1000 / ratio}`).join(' ')} fill="transparent" stroke="rgba(125,211,252,.65)" strokeWidth="1" vectorEffect="non-scaling-stroke" /><text x={p.reduce((n, q) => n + q[0], 0) * 250} y={p.reduce((n, q) => n + q[1], 0) * 250 / ratio} textAnchor="middle" dominantBaseline="central" fill="white" stroke="#0f172a" strokeWidth="3" paintOrder="stroke" fontSize={Math.max(14, 10000 / Math.max(1, previewWidth))}>{name}</text></g>)}
               {grid.quad.map((p, i) => { const x = p[0] * 1000, y = p[1] * 1000 / ratio, size = 1000 / Math.max(1, previewWidth); return <g key={i} data-corner={i} className="camera-corner"><rect x={x - 20 * size} y={y - 20 * size} width={40 * size} height={40 * size} fill="transparent" /><path d={`M ${x + (i === 0 || i === 3 ? 15 : -15) * size} ${y} L ${x} ${y} L ${x} ${y + (i < 2 ? 15 : -15) * size}`} stroke="#1cb0f6" strokeWidth="3" fill="none" vectorEffect="non-scaling-stroke" /><rect x={x - 4 * size} y={y - 4 * size} width={8 * size} height={8 * size} fill="white" stroke="#1cb0f6" strokeWidth="2" vectorEffect="non-scaling-stroke" /></g>; })}
             </svg>}
-          {!connected && <div className="camera-off"><CameraOff size={36} /><strong>카메라 꺼짐</strong><p>학습 화면에서 시작을 눌러 주세요.</p></div>}
+          {!connected && <div className="camera-off"><CameraOff size={36} /><strong>카메라 꺼짐</strong><p>홈 또는 모니터링 화면에서 시작을 눌러 주세요.</p></div>}
         </div>
         {connected && <div className="camera-preview-toolbar" role="toolbar" aria-label="미리보기 보기 도구">
           {camera.modeId === 'keyboard' && <><button type="button" aria-label="영역 편집" aria-pressed={tool === 'edit'} title="키보드 영역과 모서리 편집" onClick={() => setTool('edit')}><MousePointer2 size={16} />영역 편집</button><button type="button" aria-label="화면 이동" aria-pressed={tool === 'move'} title="드래그로 이동 · 휠 버튼 드래그도 가능" onClick={() => setTool('move')}><Hand size={16} />이동</button></>}
@@ -151,6 +151,7 @@ export default function CameraSettingsPanel() {
         </div>}
       </section>
       <aside className="camera-settings-controls">
+        {selection}
         {camera.modeId === 'keyboard' && <section><h2><ScanLine size={18} />키보드 영역</h2><div className="camera-choice"><button aria-pressed={grid.source === 'automatic'} onClick={() => setGrid({ ...grid, source: 'automatic', flipX: false, flipY: false, turns: 0 })}>자동 인식</button><button aria-pressed={grid.source === 'manual'} onClick={() => changeGrid({})}>직접 맞추기</button></div><p className="camera-hint">{grid.source === 'manual' ? '네 모서리를 맞추고, 내부를 드래그해 이동하세요.' : '자동 인식이 어려우면 바로 직접 맞출 수 있어요.'}</p><h3>영역 방향</h3><div className="camera-button-grid">{gridDirections}</div><button className="camera-reset" onClick={() => changeGrid({ quad: defaultQuad(), flipX: false, flipY: false, turns: 0 })}><RotateCcw size={15} />영역 초기화</button></section>}
         <section><h2>영상 방향</h2><div className="camera-button-grid"><button aria-pressed={profile.flipX} onClick={() => update({ flipX: !profile.flipX })}><FlipHorizontal2 size={17} />좌우 반전</button><button aria-pressed={profile.flipY} onClick={() => update({ flipY: !profile.flipY })}><FlipVertical2 size={17} />상하 반전</button><button onClick={() => update({ angle: ((profile.angle + 270) % 360) - 180 })}><RotateCw size={17} />90° 회전</button><button onClick={() => update({ angle: ((profile.angle + 360) % 360) - 180 })}><RotateCw size={17} />180° 회전</button></div><Range label="기울기" value={profile.angle} min={-180} max={180} suffix="°" onChange={angle => update({ angle })} /></section>
         <section><h2>영상 조정</h2><Range label="밝기" value={profile.brightness} min={50} max={150} suffix="%" onChange={brightness => update({ brightness })} /><Range label="대비" value={profile.contrast} min={50} max={150} suffix="%" onChange={contrast => update({ contrast })} /><label className="camera-field">해상도<select value={profile.resolution} onChange={event => update({ resolution: Number(event.target.value) })}><option value={640}>640 · 가볍게</option><option value={1280}>1280 · 기본</option><option value={1920}>1920 · 선명하게</option></select></label>{settings.width && <p className="camera-hint">현재 영상 {settings.width} × {settings.height}</p>}<button className="camera-reset" onClick={() => update({ left: 0, top: 0, width: 1, height: 1, angle: 0, brightness: 100, contrast: 100, flipX: camera.modeId !== 'keyboard', flipY: false, zoom: 1, panX: 0, panY: 0 })}><RotateCcw size={15} />영상 조정 초기화</button></section>

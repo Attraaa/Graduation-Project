@@ -53,4 +53,20 @@ class ServicePrivacyTests(unittest.TestCase):
         client.disconnect(); self.assertEqual(len(self.service.frame_buffer), 0)
         self.assertIsNone(decode_data_url('not a jpeg'))
 
+    def test_pause_requires_owner_token_and_stops_approved_app_observer(self):
+        from unittest.mock import Mock
+        client = self.connect()
+        observer = Mock()
+        self.service.observer = observer
+        generation = self.service._privacy_generation
+        self.service._mapping_ready = True
+        self.assertFalse(client.emit('stop_observation', {'token': 'wrong'}, callback=True)['ok'])
+        observer.stop.assert_not_called()
+        self.assertTrue(client.emit('stop_observation', {'token': 'test-token-only'}, callback=True)['ok'])
+        observer.stop.assert_called_once()
+        self.assertFalse(self.service._mapping_ready)
+        self.assertGreater(self.service._privacy_generation, generation)
+        self.assertTrue(self.service.event_queue.empty())
+        client.disconnect()
+
 if __name__ == '__main__': unittest.main()
