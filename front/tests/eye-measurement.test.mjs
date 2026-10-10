@@ -13,7 +13,15 @@ function fixture() {
   let state;
   const step = (observation = open, dt = 50) => { now += dt; state = engine.sample(now, observation); return state; };
   for (let i = 0; i <= 60; i++) step();
+  assert.equal(state.calibrationPhase, 'eyes');
+  for (let i = 0; i < 3; i++) {
+    step(); step(closed); step(closed); step();
+  }
   assert.equal(state.calibrated, true);
+  assert.equal(state.calibrationPhase, 'ready');
+  assert.equal(state.calibrationBlinks, 3);
+  assert.equal(state.blinks, 0);
+  assert.equal(state.validMs, 0);
   return { step, engine, get now() { return now; } };
 }
 test('stable three-second reference excludes calibration from blink statistics', () => {

@@ -4,6 +4,7 @@ import { MemoryRecords } from './fixtures/memory-records.mjs';
 import { EyeRecorder } from '../../database/eyeRecorder.ts';
 import { emptyEyeTotals, parseEyeBatch, eyeRate } from '../../database/eye.ts';
 import { createEyeMeasurement } from '../src/features/eye/measurement.ts';
+import { eyePolicyVersion } from '../src/features/eye/eyePolicy.ts';
 import { sampleBatch } from './fixtures/record-batch.mjs';
 import { historyView } from '../src/features/records/views.ts';
 
@@ -90,11 +91,19 @@ test('mixed calendar orders and paginates eye and posture rows together, with fu
   assert.equal(db.history({ ...q, owner: '8' }).records.length, 0);
 });
 test('real eye measurement totals survive calibration, missing frames, pause and recalibration', () => {
-  const engine = createEyeMeasurement(), collector = new EyeRecorder(record(), 0);
+  const engine = createEyeMeasurement(), collector = new EyeRecorder({ ...record(), policyVersion: eyePolicyVersion() }, 0);
   const observation = (closed = false) => ({ left: closed ? .8 : .1, right: closed ? .8 : .1, faceWidth: .2 });
   let at = 0, snapshot;
   const take = value => { snapshot = engine.sample(at, value); collector.sample(at, snapshot); at += 100; };
   for (let i = 0; i < 35; i++) take(observation());
+  assert.equal(snapshot.calibrationPhase, 'eyes');
+  for (let i = 0; i < 3; i++) {
+    take(observation()); take(observation(true)); take(observation(true)); take(observation());
+    assert.equal(snapshot.calibrationBlinks, i + 1);
+    assert.equal(snapshot.blinks, 0);
+    assert.equal(snapshot.validMs, 0);
+  }
+  assert.equal(snapshot.calibrationPhase, 'ready');
   take(observation(true)); take(observation(true)); take(observation()); take(null);
   at += 20000; collector.rest(at, 1); take(null);
   collector.sample(at, engine.recalibrate());
@@ -103,8 +112,14 @@ test('real eye measurement totals survive calibration, missing frames, pause and
   collector.finish(at);
   const batch = collector.batch(0);
   assert.equal(batch.record.blinks, snapshot.blinks); assert.equal(batch.record.blinks, 2);
-  assert.ok(Math.abs(batch.record.validMs - snapshot.validMs) < .01); assert.equal(batch.record.breaks, 1);
+  assert.equal(snapshot.validMs, 900); assert.equal(batch.record.validMs, snapshot.validMs);
+  assert.equal(batch.record.breaks, 1);
   assert.ok(batch.record.validMs < batch.record.runMs - 20000); parseEyeBatch(batch);
+  const db = new MemoryRecords(); db.writeEye(batch);
+  assert.equal(db.eyeDetail('7', 'eye').record.policyVersion, 'eye-habits-v3:normal');
+  const rows = db.eyeStatistics(query);
+  assert.equal(rows.reduce((sum, row) => sum + row.blinks, 0), 2);
+  assert.equal(rows.reduce((sum, row) => sum + row.validMs, 0), 900);
 });
 test('long sessions drain bounded batches and preserve immutable retries and policy isolation', () => {
   const db = new MemoryRecords();

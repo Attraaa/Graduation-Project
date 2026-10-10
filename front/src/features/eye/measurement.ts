@@ -1,8 +1,13 @@
 import { eyePolicy as p } from './eyePolicy.ts';
+import type { EyeSensitivity } from './eyePolicy.ts';
 import type { EyeObservation } from './observation.ts';
+import { createBlinkCalibration, createBlinkCycle, median } from './blinkCalibration.ts';
+import type { BlinkThresholds } from './blinkCalibration.ts';
 
 export type EyeSnapshot = {
   calibrated: boolean;
+  calibrationPhase: 'distance' | 'eyes' | 'ready';
+  calibrationBlinks: number;
   progress: number;
   blinks: number;
   validMs: number;
@@ -14,36 +19,38 @@ export type EyeSnapshot = {
   nearReminder: boolean;
 };
 export const emptyEyeSnapshot = (): EyeSnapshot => ({
-  calibrated: false, progress: 0, blinks: 0, validMs: 0,
+  calibrated: false, calibrationPhase: 'distance', calibrationBlinks: 0, progress: 0, blinks: 0, validMs: 0,
   blinksPerMinute: null, recentBlinksPerMinute: null, recentValidMs: 0,
   faceScale: null, openReminder: false, nearReminder: false,
 });
 
-/** Pure temporal state: gaps never count as observed time or a completed blink. */
-export function createEyeMeasurement() {
+/** Pure temporal state: calibration and unknown intervals never become measured blink time. */
+export function createEyeMeasurement(sensitivity: EyeSensitivity = 'normal') {
   let snapshot = emptyEyeSnapshot();
-  let lastAt: number | null = null;
-  let previousValid = false;
+  let lastAt: number | null = null, previousValid = false;
   let baseline: number | null = null;
-  let widths: number[] = [];
-  let calibrationMs = 0;
-  let phase: 'unarmed' | 'open' | 'closed' = 'unarmed';
-  let closedAt = 0;
-  let openMs = 0;
-  let nearMs = 0;
-  let previousNear = false;
-  let recentBlinks: number[] = [];
-  let referenceValidStart = 0;
-  const resetContinuity = () => { phase = 'unarmed'; openMs = 0; nearMs = 0; previousNear = false; };
-  // A changed camera/reference starts a new recent window without erasing session totals.
+  let references: EyeObservation[] = [], calibrationMs = 0;
+  let eyeCalibration: ReturnType<typeof createBlinkCalibration> | null = null;
+  let thresholds: BlinkThresholds | null = null;
+  let cycle: ReturnType<typeof createBlinkCycle> | null = null;
+  let previousOpen = false, openMs = 0, nearMs = 0, previousNear = false;
+  let recentBlinks: number[] = [], referenceValidStart = 0;
+  const resetContinuity = () => {
+    cycle?.reset(); eyeCalibration?.resetTrial(); previousOpen = false; openMs = 0; nearMs = 0; previousNear = false;
+  };
   const recalibrate = (): EyeSnapshot => {
-    baseline = null; widths = []; calibrationMs = 0;
+    baseline = null; references = []; calibrationMs = 0;
     lastAt = null; previousValid = false;
     recentBlinks = []; referenceValidStart = snapshot.validMs;
     resetContinuity();
-    snapshot = { ...snapshot, calibrated: false, progress: 0, faceScale: null,
+    snapshot = { ...snapshot, calibrated: false, calibrationPhase: 'distance', progress: 0, faceScale: null,
       recentBlinksPerMinute: null, recentValidMs: 0, openReminder: false, nearReminder: false };
     return { ...snapshot };
+  };
+  const recalibrateEyes = (): EyeSnapshot => {
+    thresholds = null; cycle = null; eyeCalibration = null;
+    snapshot.calibrationBlinks = 0;
+    return recalibrate();
   };
   const sample = (now: number, observation: EyeObservation | null): EyeSnapshot => {
     if (!Number.isFinite(now) || (lastAt !== null && now <= lastAt)) return { ...snapshot };
@@ -55,43 +62,54 @@ export function createEyeMeasurement() {
     previousValid = valid;
     if (!valid || !continuous) resetContinuity();
     if (!valid || !observation) {
-      if (baseline === null) { widths = []; calibrationMs = 0; }
-      snapshot = { ...snapshot, progress: baseline === null ? 0 : 1, faceScale: null, openReminder: false, nearReminder: false };
+      if (baseline === null) { references = []; calibrationMs = 0; }
+      snapshot = { ...snapshot, progress: baseline === null ? 0 : thresholds ? 1 : snapshot.calibrationBlinks / p.calibrationBlinks,
+        faceScale: null, openReminder: false, nearReminder: false };
       return { ...snapshot };
     }
     if (baseline === null) {
-      if (!continuous) { widths = []; calibrationMs = 0; }
-      const candidate = [...widths, observation.faceWidth];
-      const sorted = [...candidate].sort((a, b) => a - b);
-      const median = sorted[Math.floor(sorted.length / 2)];
-      if ((sorted.at(-1)! - sorted[0]) / median > 0.1) {
-        widths = [observation.faceWidth]; calibrationMs = 0;
+      if (!continuous) { references = []; calibrationMs = 0; }
+      const candidate = [...references, observation];
+      const widths = candidate.map(value => value.faceWidth), width = median(widths);
+      const stable = (Math.max(...widths) - Math.min(...widths)) / width <= 0.1
+        && (['left', 'right'] as const).every(side => observation[side] <= p.calibrationOpenMax
+          && Math.max(...candidate.map(value => value[side])) - Math.min(...candidate.map(value => value[side])) <= p.calibrationOpenSpread);
+      if (!stable) {
+        references = observation.left <= p.calibrationOpenMax && observation.right <= p.calibrationOpenMax ? [observation] : [];
+        calibrationMs = 0;
       } else {
-        widths = candidate; calibrationMs += continuous ? delta : 0;
+        calibrationMs += continuous && references.length > 0 ? delta : 0; references = candidate;
       }
-      snapshot.progress = Math.min(1, calibrationMs / p.calibrationMs, widths.length / p.calibrationSamples);
-      if (snapshot.progress >= 1) { baseline = median; snapshot.calibrated = true; }
+      snapshot.progress = Math.min(1, calibrationMs / p.calibrationMs, references.length / p.calibrationSamples);
+      if (snapshot.progress >= 1) {
+        baseline = width;
+        if (thresholds) { cycle!.sample(now, observation); snapshot.calibrated = true; snapshot.calibrationPhase = 'ready'; }
+        else {
+          eyeCalibration = createBlinkCalibration({ left: median(references.map(value => value.left)), right: median(references.map(value => value.right)) }, sensitivity);
+          eyeCalibration.sample(now, observation);
+          snapshot.calibrationPhase = 'eyes'; snapshot.calibrationBlinks = 0; snapshot.progress = 0;
+        }
+        references = [];
+      }
+      return { ...snapshot };
+    }
+    if (!thresholds) {
+      eyeCalibration!.sample(now, observation);
+      snapshot.calibrationBlinks = eyeCalibration!.completed;
+      snapshot.progress = snapshot.calibrationBlinks / p.calibrationBlinks;
+      thresholds = eyeCalibration!.thresholds;
+      if (thresholds) {
+        cycle = createBlinkCycle(thresholds); cycle.sample(now, observation);
+        snapshot.calibrated = true; snapshot.calibrationPhase = 'ready';
+      }
       return { ...snapshot };
     }
     const dt = continuous ? delta : 0;
     snapshot.validMs += dt;
-    const bothOpen = observation.left <= p.openThreshold && observation.right <= p.openThreshold;
-    const bothClosed = observation.left >= p.closeThreshold && observation.right >= p.closeThreshold;
-    if (bothOpen) {
-      if (phase === 'closed') {
-        const duration = now - closedAt;
-        if (duration >= p.minBlinkMs && duration <= p.maxBlinkMs) {
-          snapshot.blinks += 1;
-          recentBlinks.push(snapshot.validMs);
-        }
-      }
-      openMs = phase === 'open' ? openMs + dt : 0;
-      phase = 'open';
-    } else {
-      openMs = 0;
-      if (bothClosed && phase === 'open') { phase = 'closed'; closedAt = now; }
-      if (phase === 'closed' && now - closedAt > p.maxBlinkMs) phase = 'unarmed';
-    }
+    if (cycle!.sample(now, observation)) { snapshot.blinks += 1; recentBlinks.push(snapshot.validMs); }
+    const bothOpen = observation.left <= thresholds.left.open && observation.right <= thresholds.right.open;
+    openMs = bothOpen ? previousOpen ? openMs + dt : 0 : 0;
+    previousOpen = bothOpen;
     const faceScale = observation.faceWidth / baseline;
     if (faceScale >= p.nearRatio) nearMs += previousNear ? dt : 0;
     else if (faceScale <= p.nearReleaseRatio || !snapshot.nearReminder) nearMs = 0;
@@ -102,10 +120,9 @@ export function createEyeMeasurement() {
       blinksPerMinute: snapshot.validMs >= p.rateMinValidMs ? snapshot.blinks * 60000 / snapshot.validMs : null,
       recentValidMs,
       recentBlinksPerMinute: recentValidMs >= p.rateMinValidMs ? recentBlinks.length * 60000 / recentValidMs : null,
-      openReminder: openMs >= p.openReminderMs,
-      nearReminder: nearMs >= p.nearHoldMs,
+      openReminder: openMs >= p.openReminderMs, nearReminder: nearMs >= p.nearHoldMs,
     };
     return { ...snapshot };
   };
-  return { sample, recalibrate };
+  return { sample, recalibrate, recalibrateEyes };
 }

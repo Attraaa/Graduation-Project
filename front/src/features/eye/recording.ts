@@ -4,7 +4,8 @@ import { emptyEyeTotals } from '../../../../database/eye';
 import { getCurrentUser } from '../../utils/authStore';
 import { recordsApi, recordValue } from '../records/api';
 import { registerRecorder, announceRecording } from '../records/recording';
-import { eyePolicy } from './eyePolicy';
+import { eyePolicyVersion } from './eyePolicy';
+import type { EyeSensitivity } from './eyePolicy';
 
 type Active = { collector: EyeRecorder; generation: Promise<number>; timer: ReturnType<typeof setInterval>;
   saving: Promise<void> | null; error: string | null };
@@ -43,7 +44,7 @@ registerRecorder({
   error: () => [...active].find(entry => entry.error)?.error ?? null,
 });
 export interface EyeSink { sample(at: number, value: EyeSample): void; rest(completed: number): void; finish(): void }
-export function beginEyeRecording(): EyeSink {
+export function beginEyeRecording(sensitivity: EyeSensitivity = 'normal'): EyeSink {
   const owner = getCurrentUser()?.id;
   const noop = { sample: () => {}, rest: () => {}, finish: () => {} };
   if (!owner) {
@@ -52,7 +53,7 @@ export function beginEyeRecording(): EyeSink {
   }
   const epoch = Date.now(), at = performance.now();
   const collector = new EyeRecorder({ ...emptyEyeTotals(), id: crypto.randomUUID(), owner, mode: 'eye',
-    startedAt: epoch, updatedAt: epoch, offsetMinutes: new Date(epoch).getTimezoneOffset(), policyVersion: eyePolicy.version, status: 'running' }, at);
+    startedAt: epoch, updatedAt: epoch, offsetMinutes: new Date(epoch).getTimezoneOffset(), policyVersion: eyePolicyVersion(sensitivity), status: 'running' }, at);
   const generation = recordValue(recordsApi().generation(owner)); void generation.catch(() => {});
   const entry: Active = { collector, generation, saving: null, error: null,
     timer: setInterval(() => { collector.advance(performance.now()); void save(entry).catch(() => {}); }, 1000) };
