@@ -49,3 +49,9 @@ export function scoreText(value: number | null) {
 export function rateText(value: number | null) {
   return value === null ? '자료 부족' : `분당 ${Math.round(value)}회`;
 }
+
+/** "9월 30일" */
+export function monthDayText(date: string) {
+  const [, month, day] = parts(date);
+  return `${month}월 ${day}일`;
+}

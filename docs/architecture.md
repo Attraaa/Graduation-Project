@@ -43,7 +43,7 @@ Electron 개발 앱의 키보드 모드는 로컬 Python 프로세스를 자동 
 | `front/src/components/layout/AppLayout.tsx` | 사이드바와 공통 화면 틀/Outlet |
 | `front/src/styles/tokens.css` | 공통 색상, 의미별 CSS 변수, 다크 테마, 대시보드 모드 색(`mode-*`)·`track`·`nav-active` |
 | `front/src/components/Button.tsx`, `Sidebar.tsx`, `ModeSelector.tsx` | 공유 UI. 새 화면은 공통 토큰/컴포넌트부터 사용. `ModeSelector`는 2026-10-06 대시보드 개편 뒤 쓰지 않지만 되돌리기용으로 남김 |
-| `front/src/pages/Dashboard.tsx`, `front/src/features/dashboard/` | 데이터 위젯 대시보드. `summary.ts`는 기존 기록 API 응답에서 모드별 최신 정책 묶음만으로 카드·7일 그래프·타임라인·이탈 시간대를 계산하는 순수 함수, `useDashboardData.ts`가 네 출처를 불러옴. [설계](superpowers/specs/2026-10-06-dashboard-redesign-design.md) |
+| `front/src/pages/Dashboard.tsx`, `front/src/features/dashboard/` | 데이터 위젯 대시보드. `summary.ts`는 기존 기록 API 응답에서 모드별 최신 정책 묶음만으로 카드·7일 그래프·타임라인·이탈 시간대를 계산하는 순수 함수, `useDashboardData.ts`가 네 출처를 불러옴. [설계](superpowers/specs/2026-10-06-dashboard-redesign-design.md). 통계·학습이력도 `summary.ts`(날짜 helper·정책 묶음·날짜별 값·기록 줄), `format.ts`, `DayDetail`, `ScoreRing`, `SourceState`를 가져다 씀 |
 | `front/src/components/AppDialog.tsx` | 대화상자 Provider와 표시 |
 | `front/src/components/dialog/dialogContext.ts`, `useDialog.ts` | 대화상자 타입/상태 계약과 호출 훅 |
 | `front/src/pages/LearningSession.tsx` | 상체 단일 모드 / 키보드 / 안구 화면 선택. 모드 변경 시 이전 상태 폐기 |
@@ -65,8 +65,10 @@ Electron 개발 앱의 키보드 모드는 로컬 Python 프로세스를 자동 
 | `front/src/utils/apiClient.ts`, `authStore.ts` | API 주소·JWT 세션 보관·401 처리, 서버 회원가입/로그인/계정 변경 |
 | `database/contracts.ts`, `keyboard.ts`, `eye.ts`, `eyeRecorder.ts`, `recorder.ts`, `aggregation.ts` | 자세·키보드 직렬화 계약·순수 집계. 프론트와 서버가 같은 검증기를 사용 |
 | `front/src/features/records/` | 저장 배치/실패 재시도·HTTP 기록 API·조회 상태·목/어깨 표시 어댑터. AI/의학 예시는 별도 컴포넌트 |
-| `front/src/pages/Statistics.tsx`, `LearningHistory.tsx` | 서버에 저장된 실제 통계와 전체 모드의 시작일별 달력·페이지 목록·상세. 키보드는 집계 히트맵/손가락 분포, 자세·안구는 분 집계 |
+| `front/src/pages/Statistics.tsx`, `front/src/features/statistics/` | 통계(7/30일, 직전 같은 길이 기간 비교, 상체·키보드·안구 탭). `period.ts`가 세 출처 응답으로 기간 값을 계산하는 순수 함수, `useStatisticsData.ts`가 불러옴. 키보드 탭은 `features/keyboard/KeyboardStatistics.tsx`(계산은 키보드 담당). [설계](superpowers/specs/2026-10-06-stats-history-redesign-design.md) |
+| `front/src/pages/LearningHistory.tsx`, `front/src/features/history/` | 학습이력(주간·월간 달력, 시작일별 기록 줄, 오른쪽 상세, 기록 없는 날). `calendar.ts`가 달력·기록 줄·앞뒤 기록을 계산하고 `currentPolicies.ts`가 "이전 기준"을 판단. 세 모드의 세션 상세를 여기서 봄(키보드는 `KeyboardRecordDetail`) |
 | `front/src/features/keyboard/KeyboardRecordDetail.tsx`, `KeyboardKeyExploration.tsx`, `keyExploration.ts` | 키보드 세션 상세 표시, 통계/이력 공용 히트맵·선택 키 표시, DOM 없는 키별 집계·연습 순위. 카메라/실시간 점수 정책을 소유하지 않음 |
+| `features/records/StatisticsData.tsx`, `features/eye/EyeStatistics.tsx`, `EyeRecordData.tsx`의 `EyeStatisticsData`, `records/views.ts`의 `historyView`·`historyGraph` | 2026-10-07 통계·학습이력 개편 뒤 쓰지 않지만 되돌리기용으로 남김(기존 테스트 유지) |
 | `server/src/server.ts`, `config.ts` | 환경 검증 후 서버 시작. JWT 비밀값 자동 기본값 없음 |
 | `server/src/app.ts`, `http.ts` | API 조립과 공통 비동기 오류 응답 |
 | `server/src/validation.ts` | HTTP 입력을 런타임에서 검사 |
@@ -85,13 +87,13 @@ Electron 개발 앱의 키보드 모드는 로컬 Python 프로세스를 자동 
 
 ## 측정 화면의 계약
 
-학습 모드와 통계 선택은 `안구 / 상체 / 키보드` 순서로 제공합니다. 상체 통계는 목·어깨를 나란히 표시하고 키보드는 독립 집계 화면을 사용합니다. 안구 통계는 최근 7/30일의 깜빡임·유효 시간·휴식·안내 횟수를 정책별로 표시하고 학습이력에서 세션 상세를 제공합니다.
+학습 모드 선택은 `안구 / 상체 / 키보드` 순서, 통계 탭은 대시보드와 같은 `상체 / 키보드 / 안구` 순서입니다. 통계는 7/30일 기간과 바로 앞 같은 길이 기간을 비교하고 모드별 최신 정책 묶음만 씁니다. 상체는 목·어깨를 한 그래프에, 키보드는 기존 집계·히트맵을, 안구는 깜빡임 빈도·유효 관찰·휴식·안내 횟수를 보여줍니다. 세 모드의 세션 상세는 학습이력에서 봅니다.
 
 상체 화면은 `LearningSession → PostureSession → PostureMonitor`로 연결합니다. 프레임 계산은 `useWebcam/useMediaPipe → calibration → observation → scoring/evaluation → MonitorSnapshot → PostureMetrics` 순서입니다. 모드 변경과 기준 다시 잡기는 이전 스트림·모델·점수·습관 상태를 정리하고 새 기준을 수집합니다. 중지하면 카메라를 해제하고 마지막 계산까지 화면에 반영합니다. 기준 수집은 현재 `upper_body`에 연결되어 있으며, 안구 모드는 독립된 `EyeSession → EyeMonitor → Face Landmarker → measurement` 경로로 깜빡임·상대 얼굴 크기·휴식 안내를 제공합니다. 같은 서버 API로 분 집계를 저장하고 안구 통계·학습이력에서 조회합니다. [안구 모드](eye-mode.md)를 참고합니다.
 
 키보드는 `LearningSession → KeyboardSession → KeyboardMonitor → loopback Python service → runtime adapter → finger policy → aggregate recording` 순서입니다. Electron main은 빈 로컬 포트와 세션 토큰으로 `.venv` Python을 실행합니다. 기본 입력은 현재 화면의 물리 `code`이며, 사용자가 설정에서 일반 앱을 승인하고 시작 시 체크한 경우에만 Windows Raw Input 경로를 추가합니다. 승인 경로·foreground 권한을 확인하고 미승인·관리자·확인 불가 앱을 제외합니다. 알려진 게임 실행 파일/디렉터리는 승인도 거절하지만 모든 게임의 자동 식별이나 제재 방지는 보장할 수 없습니다.
 
-Python은 손끝 후보와 프레임 시간차를 반환하고 앱의 `ansi-qwerty-touch:2.0.0` 정책이 100·70·0/보류를 결정합니다. 손 가림을 직접 감지하는 모델은 없으며 관측 부족·가까운 후보·시간 차이를 보류 근거로 사용합니다. 손가락 일관성은 별도 지표이며 가산점이 아닙니다. 원문·입력 순서·영상은 저장하지 않고 날짜·키·상황·손가락·판정 횟수만 서버에 저장합니다. 기간별 통계는 Statistics의 키보드 모드, 세션별 키 탐색 상세는 LearningHistory에서 제공합니다. 두 화면은 히트맵/선택 키 컴포넌트를 공유합니다. 학습이력에 키보드 요약이 추가되어도 홈 타임라인은 정책별 키보드 통계 출처를 한 번만 사용합니다. crop·자유 회전·필터는 미리보기와 분석에 동일하게 적용하고 변경 시 기존 맵과 프레임을 폐기합니다. 세부 산식/품질 한계는 [키보드 계약](../front/src/features/keyboard/README.md), 저장은 [database](../database/README.md)를 따릅니다.
+Python은 손끝 후보와 프레임 시간차를 반환하고 앱의 `ansi-qwerty-touch:2.0.0` 정책이 100·70·0/보류를 결정합니다. 손 가림을 직접 감지하는 모델은 없으며 관측 부족·가까운 후보·시간 차이를 보류 근거로 사용합니다. 손가락 일관성은 별도 지표이며 가산점이 아닙니다. 원문·입력 순서·영상은 저장하지 않고 날짜·키·상황·손가락·판정 횟수만 서버에 저장합니다. 정책별 통계·히트맵은 Statistics의 키보드 탭에, 세션별 키 탐색 상세는 학습이력에 있습니다. 두 화면은 히트맵/선택 키 컴포넌트를 공유합니다. 학습이력 응답에 키보드 요약이 추가되어도 홈 타임라인(최신 정책 묶음)과 학습이력 화면(모든 정책)은 키보드 줄을 키보드 통계 출처에서 한 번만 만듭니다. crop·자유 회전·필터는 미리보기와 분석에 동일하게 적용하고 변경 시 기존 맵과 프레임을 폐기합니다. 세부 산식/품질 한계는 [키보드 계약](../front/src/features/keyboard/README.md), 저장은 [database](../database/README.md)를 따릅니다.
 
 `MonitorSnapshot`은 준비/수집/관찰/관찰 불가/오류 상태와 수집 진행률, 부위별 편차, 유효 관찰 시간, 목·어깨 각각의 현재/평균 점수와 보호 상태·습관 집계·정책 버전을 전달합니다. 사용자의 자세가 의학적으로 올바른지 판단하는 타입이 아닙니다.
 

@@ -13,7 +13,7 @@
 **이번 차례에 하는 것:** 공통 색 규칙(`tokens.css`), 사이드바, 대시보드.
 
 **이번에 하지 않는 것:**
-- 통계, 학습이력, 설정, 로그인 계열 화면과 측정 화면 4개의 개편 (다음 차례)
+- 통계, 학습이력, 설정, 로그인 계열 화면과 측정 화면 3개(상체·키보드·안구)의 개편 (다음 차례)
 - 오늘/7일/30일 기간 전환
 - 서버·DB·`database/` 계약 변경, 글꼴 교체
 - 기존 파일 삭제
@@ -124,7 +124,7 @@
 **그대로 두는 것:**
 - `ModeSelector.tsx`: 대시보드에서 쓰지 않게 되지만 되돌리기용으로 남긴다.
 - `data/modes.tsx`: 모드 id와 이름을 재사용한다.
-- `features/records/api.ts`, `database/*`, `server/*`, 측정 화면 4개, 점수 정책
+- `features/records/api.ts`, `database/*`, `server/*`, 측정 화면 3개, 점수 정책
 
 **의존 방향:** `Dashboard` → `useDashboardData` → (`recordsApi`, `summary`) 순서로 의존한다. 화면 부품은 `summary` 결과 타입만 받는다. `ScoreRing`과 `Sparkline`은 나중에 통계 화면 개편에서 다시 쓰게 되면 그때 공용 폴더로 옮긴다.
 

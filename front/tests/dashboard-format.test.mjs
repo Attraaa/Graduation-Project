@@ -1,12 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { headerDate, longDate, dayLabel, minutesText, clockText, scoreText, rateText } from '../src/features/dashboard/format.ts';
+import { headerDate, longDate, dayLabel, minutesText, clockText, scoreText, rateText, monthDayText } from '../src/features/dashboard/format.ts';
 
 test('dashboard dates use the stored local date and Korean weekday', () => {
   assert.equal(headerDate('2026-10-06'), '10월 6일 화요일');
   assert.equal(longDate('2026-10-04'), '10월 4일 (일)');
   assert.equal(dayLabel('2026-09-30', '2026-10-06'), '수 9/30');
   assert.equal(dayLabel('2026-10-06', '2026-10-06'), '오늘');
+  assert.equal(monthDayText('2026-09-30'), '9월 30일');
 });
 
 test('durations round to minutes without hiding short sessions', () => {

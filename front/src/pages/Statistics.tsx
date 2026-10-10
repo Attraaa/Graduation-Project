@@ -1,48 +1,90 @@
-import { useCallback, useState } from 'react';
-import { getCurrentUser } from '../utils/authStore';
-import { recordsApi, recordValue } from '../features/records/api';
-import { useRecordQuery } from '../features/records/useRecordQuery';
-import { todayDateKey } from '../features/records/views';
-import StatisticsData from '../features/records/StatisticsData';
-import StatisticsExamples from '../features/records/StatisticsExamples';
-import RecordingStatus from '../features/records/RecordingStatus';
-import Button from '../components/Button';
+import { useState, useSyncExternalStore } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import DayDetail from '../features/dashboard/DayDetail';
+import { SourceError, SourceLoading } from '../features/dashboard/SourceState';
+import { pastDateOrNull } from '../features/dashboard/summary';
 import KeyboardStatistics from '../features/keyboard/KeyboardStatistics';
-import EyeStatistics from '../features/eye/EyeStatistics';
-import { learningModes } from '../data/modes';
-import type { ModeId } from '../data/modes';
+import RecordingStatus from '../features/records/RecordingStatus';
+import StatisticsExamples from '../features/records/StatisticsExamples';
+import { recordingMessage, subscribeRecording } from '../features/records/recording';
+import { todayDateKey } from '../features/records/views';
+import EyePanel from '../features/statistics/EyePanel';
+import UpperPanel from '../features/statistics/UpperPanel';
+import type { PeriodDays } from '../features/statistics/period';
+import { rangeText } from '../features/statistics/text';
+import { useStatisticsData } from '../features/statistics/useStatisticsData';
+
+type StatMode = 'upper' | 'keyboard' | 'eye';
+const MODES: { id: StatMode; name: string; dot: string }[] = [
+  { id: 'upper', name: '상체', dot: 'bg-mode-upper' },
+  { id: 'keyboard', name: '키보드', dot: 'bg-mode-keyboard' },
+  { id: 'eye', name: '안구', dot: 'bg-mode-eye' },
+];
+const PERIODS: PeriodDays[] = [7, 30];
+const isMode = (value: string | null): value is StatMode => MODES.some(mode => mode.id === value);
 
 export default function Statistics() {
-  const [date, setDate] = useState(todayDateKey);
-  const [mode, setMode] = useState<ModeId>('upper_body');
-  const owner = getCurrentUser()?.id ?? '';
-  const previousDate = new Date(Date.parse(date) - 86400_000).toISOString().slice(0, 10);
-  const load = useCallback(async () => {
-    if (!owner) throw new Error('로그인하면 이 계정의 기록을 조회할 수 있습니다.');
-    if (mode !== 'upper_body') return [];
-    return recordValue(recordsApi().statistics({ owner, from: previousDate, to: date }));
-  }, [owner, previousDate, date, mode]);
-  const query = useRecordQuery([owner, date, mode].join(':'), load);
-  const rows = query.data ?? [];
-  return <div className="space-y-6">
-    <header><h1 className="text-3xl font-black text-heading">나의 관찰 통계</h1>
-      <p className="mt-2 text-muted">서버에 저장된 이 계정의 실제 관찰 집계입니다. 자세 유사도와 키보드 훈련 점수는 의학적 진단이 아닙니다.</p></header>
-    <div className="flex flex-wrap items-end gap-3">
-      <label className="text-sm font-bold text-heading">날짜<input type="date" value={date} onChange={event => { if (/^\d{4}-\d{2}-\d{2}$/.test(event.target.value)) setDate(event.target.value); }} className="ml-2 rounded-xl border border-border bg-surface p-3" /></label>
-      <label className="text-sm font-bold text-heading">모드<select aria-label="통계 모드" value={mode} onChange={event => setMode(event.target.value as ModeId)} className="ml-2 rounded-xl border border-border bg-surface p-3">{learningModes.map(part => <option key={part.id} value={part.id}>{part.shortTitle}</option>)}</select></label>
-      {mode === 'upper_body' && <Button variant="outline" onClick={query.retry}>새로고침</Button>}
+  const [params] = useSearchParams();
+  const navigate = useNavigate();
+  const today = todayDateKey();
+  const [end, setEnd] = useState(() => pastDateOrNull(params.get('end'), today) ?? today);
+  const [days, setDays] = useState<PeriodDays>(() => (params.get('days') === '30' ? 30 : 7));
+  const [mode, setMode] = useState<StatMode>(() => { const value = params.get('mode'); return isMode(value) ? value : 'upper'; });
+  const { summary, keyboard, status, retry } = useStatisticsData(end, days);
+  const saveMessage = useSyncExternalStore(subscribeRecording, recordingMessage, recordingMessage);
+  const openHistory = (date: string) => navigate(`/history?date=${date}`);
+  const detail = (date: string) => {
+    const day = summary.days.find(item => item.date === date);
+    return day?.hasRecords ? <DayDetail day={day} hint="눌러서 학습이력 보기 →" /> : null;
+  };
+  const panelStatus = mode === 'upper' ? status.posture : mode === 'eye' ? status.eye : status.keyboard;
+  const shared = { today, detail, onSelectDate: openHistory, onOpenHistory: () => openHistory(end) };
+
+  return (
+    <div className="space-y-4 pb-4">
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-extrabold text-heading">통계</h1>
+          <p className="mt-1 text-sm text-muted">{`서버에 저장된 내 측정 기록이에요 · ${rangeText(summary.range.dates[0], end)}`}</p>
+        </div>
+        <div className="flex items-center gap-3">
+          {end !== today && (
+            <button type="button" onClick={() => setEnd(today)} className="text-sm font-semibold text-secondary hover:underline">오늘까지 보기</button>
+          )}
+          <div role="group" aria-label="기간" className="flex rounded-xl bg-track p-1">
+            {PERIODS.map(value => (
+              <button key={value} type="button" aria-pressed={days === value} onClick={() => setDays(value)}
+                className={`rounded-lg px-3 py-1 text-sm font-semibold ${days === value ? 'bg-surface text-heading shadow-sm' : 'text-muted'}`}>
+                {`${value}일`}
+              </button>
+            ))}
+          </div>
+        </div>
+      </header>
+      {saveMessage.startsWith('저장 실패') && <RecordingStatus />}
+      <div role="tablist" aria-label="모드" className="flex flex-wrap gap-2">
+        {MODES.map(item => (
+          <button key={item.id} type="button" role="tab" aria-selected={mode === item.id} onClick={() => setMode(item.id)}
+            className={`flex items-center gap-2 rounded-full px-4 py-1.5 text-sm font-semibold ${mode === item.id ? 'bg-heading text-surface' : 'border border-border bg-surface text-heading'}`}>
+            <span aria-hidden="true" className={`h-2 w-2 rounded-full ${item.dot}`} />{item.name}
+          </button>
+        ))}
+      </div>
+      {panelStatus === 'loading' ? <SourceLoading className="h-96" />
+        : panelStatus === 'error' ? <SourceError onRetry={retry} />
+        : mode === 'upper' ? (
+          <>
+            <UpperPanel upper={summary.upper} days={summary.days} periodDays={days} floor={summary.upperFloor} {...shared} />
+            <details>
+              <summary className="flex cursor-pointer list-none justify-end">
+                <span className="rounded-full border border-dashed border-border px-3 py-1 text-xs font-semibold text-muted">▸ AI 기능 예정 (예시)</span>
+              </summary>
+              <div className="mt-4"><StatisticsExamples /></div>
+            </details>
+          </>
+        )
+        : mode === 'eye' ? <EyePanel eye={summary.eye} days={summary.days} periodDays={days} max={summary.eyeMax} {...shared} />
+        : <KeyboardStatistics data={keyboard} date={end} days={days} {...shared} />}
     </div>
-    <RecordingStatus />
-    {mode === 'eye' ? <EyeStatistics owner={owner} date={date} /> : mode === 'keyboard' ? <KeyboardStatistics owner={owner} date={date} /> : <>
-    {query.loading && <p role="status" className="card-duo text-muted">기록을 불러오는 중입니다.</p>}
-    {query.error && <div role="alert" className="card-duo text-muted"><p>{query.error}</p><Button variant="outline" onClick={query.retry}>다시 불러오기</Button></div>}
-    {query.data && <div className="grid gap-6 lg:grid-cols-2">{(['turtle', 'shoulder'] as const).map(part => (
-      <section key={part} aria-label={part === 'turtle' ? '목 통계' : '어깨 통계'}>
-        <h2 className="mb-3 text-xl font-black text-heading">{part === 'turtle' ? '목 점수' : '어깨 점수'}</h2>
-        <StatisticsData rows={rows.filter(row => row.date === date && row.mode === part)} previous={rows.filter(row => row.date === previousDate && row.mode === part)} />
-      </section>
-    ))}</div>}
-    <StatisticsExamples />
-    </>}
-  </div>;
+  );
 }

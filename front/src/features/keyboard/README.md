@@ -125,6 +125,8 @@ or the database. Same-user malware can still inspect process memory and local
 files. This is data minimization, not OS isolation or encrypted SQLite.
 
 `KeyboardStatistics` supplies score/agreement/coverage/consistency, daily trends,
-key heatmaps, finger/reason distributions, frequent differences, and session
-details, grouped by identical score/recognition versions and weight. SQLite and
-retry/delete/close contracts are in [database/README.md](../../../../database/README.md).
+key heatmaps, finger/reason distributions and frequent differences, grouped by
+identical score/recognition versions and weight. Since 2026-10-07 the Statistics
+page loads the records and passes them in, and session details moved to the
+learning history screen. SQLite and retry/delete/close contracts are in
+[database/README.md](../../../../database/README.md).

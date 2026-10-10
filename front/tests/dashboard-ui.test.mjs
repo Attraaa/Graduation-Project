@@ -15,6 +15,7 @@ async function load(entry) {
 const DayDetail = await load('src/features/dashboard/DayDetail.tsx');
 const TodayTimeline = await load('src/features/dashboard/TodayTimeline.tsx');
 const DeviationHours = await load('src/features/dashboard/DeviationHours.tsx');
+const ScoreRing = await load('src/features/dashboard/ScoreRing.tsx');
 const html = (component, props) => renderToStaticMarkup(createElement(component, props));
 
 test('day detail lists only the modes recorded that day', () => {
@@ -43,4 +44,17 @@ test('timeline and deviation cards show empty states and interrupted sessions', 
   assert.match(out, /중단됨/);
   const bars = html(DeviationHours, { hours: [{ hour: 9, count: 3, strong: true }, { hour: 10, count: 0, strong: false }] });
   assert.match(bars, /기준 이탈이 많은 시간: 9시/);
+});
+
+test('day detail can carry a hint line and the ring can show a share in percent', () => {
+  const day = { date: '2026-10-04', totalMs: 60_000, hasRecords: true,
+    upper: { turtle: 80, shoulder: 88, sessions: 1, runMs: 60_000, deviations: 0 },
+    keyboard: { score: null, coverage: null, sessions: 0, runMs: 0, present: false },
+    eye: { rate: null, runMs: 0, breaks: 0, present: false } };
+  assert.match(html(DayDetail, { day, hint: '눌러서 학습이력 보기 →' }), /눌러서 학습이력 보기 →/);
+  assert.doesNotMatch(html(DayDetail, { day }), /학습이력/);
+  const ring = html(ScoreRing, { value: 91.6, strokeClass: 'stroke-mode-upper', label: '제대로 측정', unit: '%' });
+  assert.match(ring, /aria-label="제대로 측정 92%"/);
+  assert.match(ring, />92%</);
+  assert.match(html(ScoreRing, { value: 80, strokeClass: 'stroke-mode-upper', label: '목' }), /aria-label="목 80점"/);
 });
