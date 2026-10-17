@@ -20,6 +20,37 @@ export const HABIT_POLICY = Object.freeze({
   exitDelta: 0.10,
   minDurationMs: 2000,
 });
+export type HabitPolicy = Readonly<{ version: string; enterDelta: number; exitDelta: number; minDurationMs: number }>;
+
+// 설정 화면의 "자세 무너짐 민감도"입니다. 50%가 위의 기본 규칙이고, 10%p 올릴 때마다 진입·종료 편차 기준이
+// 기본값의 10%씩 낮아져 더 작은 변화도 이탈로 셉니다. 2초 조건과 점수 계산은 바뀌지 않습니다.
+// 예: 70% → 0.15 × 0.8 = 0.12 진입, 0.10 × 0.8 = 0.08 종료. 100% → 0.075/0.05, 10% → 0.21/0.14.
+export const POSTURE_SENSITIVITY = Object.freeze({ min: 10, max: 100, step: 10, default: 50 });
+
+/** 슬라이더 범위와 10% 간격에 맞춘 값입니다. 읽을 수 없는 값은 기본 50%로 봅니다. */
+export function normalizePostureSensitivity(value: unknown) {
+  const { min, max, step } = POSTURE_SENSITIVITY;
+  const number = typeof value === 'number' ? value : typeof value === 'string' && value.trim() ? Number(value) : NaN;
+  return Number.isFinite(number) ? Math.min(max, Math.max(min, Math.round(number / step) * step)) : POSTURE_SENSITIVITY.default;
+}
+
+/** 민감도별 습관 규칙입니다. 기본값은 기존 규칙과 ID 그대로이고, 다른 값은 ID에 민감도를 붙여 통계에서 섞이지 않게 합니다. */
+export function habitPolicy(sensitivity: number = POSTURE_SENSITIVITY.default): HabitPolicy {
+  const value = normalizePostureSensitivity(sensitivity);
+  if (value === POSTURE_SENSITIVITY.default) return HABIT_POLICY;
+  const factor = 1 + (POSTURE_SENSITIVITY.default - value) / 100;
+  const scaled = (delta: number) => Math.round(delta * factor * 1e4) / 1e4;
+  return Object.freeze({ version: `${HABIT_POLICY.version}:s${value}`, enterDelta: scaled(HABIT_POLICY.enterDelta),
+    exitDelta: scaled(HABIT_POLICY.exitDelta), minDurationMs: HABIT_POLICY.minDurationMs });
+}
+
+/** 지금 앱이 새 기록에 쓰는 습관 규칙 ID(기본 또는 민감도 변형)인지 확인합니다. */
+export function isCurrentHabitPolicy(version: string) {
+  for (let value = POSTURE_SENSITIVITY.min; value <= POSTURE_SENSITIVITY.max; value += POSTURE_SENSITIVITY.step) {
+    if (habitPolicy(value).version === version) return true;
+  }
+  return false;
+}
 
 export interface EvaluationState {
   // 어떤 점수/습관 규칙으로 계산했는지 구분하는 ID입니다.
@@ -58,10 +89,10 @@ export interface EvaluationState {
 }
 
 /** 새 세션의 빈 상태입니다. 아직 측정하지 않았으므로 처음부터 100점을 넣지 않습니다. */
-export function createEvaluation(policy: ScorePolicy): EvaluationState {
+export function createEvaluation(policy: ScorePolicy, habit: HabitPolicy = HABIT_POLICY): EvaluationState {
   return {
     scorePolicyVersion: policy.version,
-    habitPolicyVersion: HABIT_POLICY.version,
+    habitPolicyVersion: habit.version,
     currentScore: null,
     currentDeviation: null,
     averageScore: null,
@@ -97,10 +128,11 @@ export function advanceEvaluation(
   previous: EvaluationState,
   observation: ObservationState,
   policy: ScorePolicy,
+  habit: HabitPolicy = HABIT_POLICY,
 ): EvaluationState {
   // 규칙 버전이 달라졌으면 새 상태로 시작해 서로 다른 규칙의 평균을 섞지 않습니다.
-  const base = previous.scorePolicyVersion === policy.version && previous.habitPolicyVersion === HABIT_POLICY.version
-    ? previous : createEvaluation(policy);
+  const base = previous.scorePolicyVersion === policy.version && previous.habitPolicyVersion === habit.version
+    ? previous : createEvaluation(policy, habit);
   const current = scorePosture(observation.delta, policy);
   // 이번 상태를 만들고 원점수부터 넣습니다. 아래 보호 규칙이 currentScore를 조정할 수 있습니다.
   const next: EvaluationState = {
@@ -164,15 +196,15 @@ export function advanceEvaluation(
 
   // 아래부터는 점수와 별도의 습관 집계입니다. 움직임을 가로지르는 이탈 구간은 세지 않습니다.
   if (moving || base.protection === 'moving') return next;
-  if (base.deviationState === 'away' && current.deviation! > HABIT_POLICY.exitDelta) {
+  if (base.deviationState === 'away' && current.deviation! > habit.exitDelta) {
     // 이미 확정한 이탈이 계속되면 확인한 구간 시간만 더합니다.
     next.deviationState = 'away';
     next.deviationMs += intervalMs;
-  } else if (current.deviation! >= HABIT_POLICY.enterDelta) {
+  } else if (current.deviation! >= habit.enterDelta) {
     // 이탈 진입 후보가 2초 이어지면 1회로 확정합니다. 대기 2초는 이탈 시간에 소급하지 않습니다.
-    next.pendingMs = base.currentDeviation! >= HABIT_POLICY.enterDelta ? base.pendingMs + intervalMs : 0;
+    next.pendingMs = base.currentDeviation! >= habit.enterDelta ? base.pendingMs + intervalMs : 0;
     next.deviationState = 'pending';
-    if (next.pendingMs + roundingMs >= HABIT_POLICY.minDurationMs) {
+    if (next.pendingMs + roundingMs >= habit.minDurationMs) {
       next.deviationState = 'away';
       next.deviationEpisodeCount += 1;
       next.pendingMs = 0;

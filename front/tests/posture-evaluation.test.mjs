@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { advanceEvaluation, createEvaluation, interruptEvaluation, HABIT_POLICY } from '../src/features/posture/evaluation.ts';
+import { advanceEvaluation, createEvaluation, interruptEvaluation, HABIT_POLICY, habitPolicy, isCurrentHabitPolicy, normalizePostureSensitivity } from '../src/features/posture/evaluation.ts';
 import { createObservation, advanceObservation } from '../src/features/posture/observation.ts';
 import { turtleScorePolicy as policy } from '../src/features/posture/modes/turtle.ts';
 import { shoulderScorePolicy } from '../src/features/posture/modes/shoulder.ts';
@@ -145,4 +145,22 @@ test('real capture gaps and timestamp reversals do not reuse motion or observed 
     const next=advanceObservation(moved,reference,frame(at));
     assert.equal(next.velocityPxPerSecond,null); close(next.observedSeconds,0.1);
   }
+});
+test('posture sensitivity keeps the default rule at 50% and scales only the deviation thresholds', () => {
+  assert.equal(habitPolicy(), HABIT_POLICY); assert.equal(habitPolicy(50), HABIT_POLICY);
+  assert.deepEqual(habitPolicy(70), { version: 'weighted-reference-deviation-v3:s70', enterDelta: 0.12, exitDelta: 0.08, minDurationMs: 2000 });
+  assert.deepEqual([habitPolicy(100).enterDelta, habitPolicy(100).exitDelta], [0.075, 0.05]);
+  assert.deepEqual([habitPolicy(10).enterDelta, habitPolicy(10).exitDelta], [0.21, 0.14]);
+  for (const [input, value] of [[73, 70], ['30', 30], [5, 10], [400, 100], [NaN, 50], ['', 50], [null, 50], ['abc', 50]]) assert.equal(normalizePostureSensitivity(input), value);
+  for (const version of [HABIT_POLICY.version, 'weighted-reference-deviation-v3:s10', 'weighted-reference-deviation-v3:s70', 'weighted-reference-deviation-v3:s100']) assert.equal(isCurrentHabitPolicy(version), true);
+  for (const version of ['weighted-reference-deviation-v2', 'weighted-reference-deviation-v3:s50', 'weighted-reference-deviation-v3:s75', 'weighted-reference-deviation-v3:s']) assert.equal(isCurrentHabitPolicy(version), false);
+});
+test('a higher posture sensitivity counts a smaller sustained deviation while scores stay the same', () => {
+  const stream = habit => { let state=createEvaluation(policy, habit); for(let at=0; at<=2100; at+=100) state=advanceEvaluation(state, observed(at,0.13), policy, habit); return state; };
+  const normal=stream(HABIT_POLICY), high=stream(habitPolicy(70)), low=stream(habitPolicy(30));
+  assert.equal(normal.deviationEpisodeCount,0); assert.equal(high.deviationEpisodeCount,1); assert.equal(low.deviationEpisodeCount,0);
+  assert.equal(high.deviationState,'away'); assert.equal(high.habitPolicyVersion,'weighted-reference-deviation-v3:s70');
+  close(high.averageScore, normal.averageScore); assert.equal(high.currentScore, normal.currentScore); close(high.validMs, normal.validMs);
+  const switched=advanceEvaluation(normal, observed(2200,0.13), policy, habitPolicy(70));
+  assert.equal(switched.validMs,0); assert.equal(switched.deviationEpisodeCount,0); assert.equal(switched.habitPolicyVersion,'weighted-reference-deviation-v3:s70');
 });

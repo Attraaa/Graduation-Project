@@ -91,6 +91,12 @@ test('legacy marks any policy that differs from what the app writes today', () =
     [['s1', true], ['k1', true], ['k2', true], ['k3', false], ['e1', true]]);
 });
 
+test('a record measured with another posture sensitivity is still a current standard', () => {
+  const habitPolicyVersion = `${CURRENT_POLICIES.habit}:s70`;
+  const rows = entriesByDate([posture({ habitPolicyVersion }), shoulder({ habitPolicyVersion })], [], ['2026-10-02']).get('2026-10-02');
+  assert.deepEqual(rows.map(row => [row.id, row.legacy]), [['s1', false]]);
+});
+
 test('calendar cells match the rows of the same date, and neighbours stay inside the loaded range', () => {
   const byDate = entriesByDate(
     [posture(), shoulder(), eye({ id: 'e2', startedAt: at('2026-10-05T04:00:00Z'), updatedAt: at('2026-10-05T04:10:00Z') })],

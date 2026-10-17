@@ -1,9 +1,12 @@
 import { useState } from 'react';
-import { Activity, Bell, Check, Database, KeyRound, Palette, Trash2, User } from 'lucide-react';
+import { Activity, Bell, Check, Database, Eye, KeyRound, Palette, Trash2, User } from 'lucide-react';
 import { changePassword, clearStatistics, getCurrentUser, updateCurrentUser } from '../utils/authStore';
 import { useDialog } from '../components/dialog/useDialog';
+import type { EyeSensitivity } from '../features/eye/eyePolicy';
 import KeyboardSettings from '../features/keyboard/KeyboardSettings';
+import { POSTURE_SENSITIVITY } from '../features/posture/evaluation';
 import { BUTTON, BUTTON_DANGER, BUTTON_STRONG, Field, INPUT, Segmented, SettingsCard, Slider, Switch } from '../features/settings/parts';
+import { readEyeSensitivity, readPostureSensitivity, writeEyeSensitivity, writePostureSensitivity } from '../features/settings/preferences';
 
 type Theme = 'light' | 'dark';
 // Each tile always shows its own theme, so it carries that theme's colors instead of the current tokens.
@@ -13,6 +16,8 @@ const THEMES: Record<Theme, { name: string; page: string; card: string; line: st
 };
 const FREQUENCIES = [{ id: '0', name: '즉시' }, { id: '5', name: '5분' }, { id: '10', name: '10분' }, { id: '30', name: '30분' }];
 const STRENGTHS = [{ id: 'soft', name: '약함' }, { id: 'normal', name: '보통' }, { id: 'strong', name: '강함' }];
+const EYE_SENSITIVITIES: { id: EyeSensitivity; name: string }[] = [{ id: 'low', name: '낮음' }, { id: 'normal', name: '보통' }, { id: 'high', name: '높음' }];
+const NEXT_SESSION = '다음 측정부터 적용돼요. 통계는 같은 민감도로 잰 기록끼리만 묶여요.';
 const MODE_DOTS = ['bg-mode-upper', 'bg-mode-keyboard'];
 const keep = (key: string, value: string) => localStorage.setItem(`postureAI.${key}`, value);
 
@@ -69,7 +74,8 @@ const Settings = () => {
   const [alertFrequency, setAlertFrequency] = useState(localStorage.getItem('postureAI.alertFrequency') ?? '10');
   const [alertStrength, setAlertStrength] = useState(localStorage.getItem('postureAI.alertStrength') ?? 'normal');
   const [scoreThreshold, setScoreThreshold] = useState(Number(localStorage.getItem('postureAI.scoreThreshold') ?? 70));
-  const [collapseSensitivity, setCollapseSensitivity] = useState(Number(localStorage.getItem('postureAI.collapseSensitivity') ?? 50));
+  const [postureSensitivity, setPostureSensitivity] = useState(() => readPostureSensitivity());
+  const [eyeSensitivity, setEyeSensitivity] = useState(() => readEyeSensitivity());
 
   const handleTheme = (theme: Theme) => {
     setDarkMode(theme === 'dark');
@@ -119,7 +125,7 @@ const Settings = () => {
     <div className="space-y-4 pb-4">
       <header>
         <h1 className="text-2xl font-extrabold text-heading">설정</h1>
-        <p className="mt-1 text-sm text-muted">계정과 앱 환경을 관리해요 · 화면·알림·자세 기준은 바꾸면 이 기기에 바로 저장돼요</p>
+        <p className="mt-1 text-sm text-muted">계정과 앱 환경을 관리해요 · 화면·알림·민감도는 바꾸면 이 기기에 바로 저장돼요</p>
       </header>
 
       <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
@@ -174,16 +180,31 @@ const Settings = () => {
           </Field>
         </SettingsCard>
 
-        <SettingsCard title="자세 교정 기준" icon={<Activity size={18} />} iconClass="bg-mode-upper-soft text-mode-upper">
+        <SettingsCard title="상체 · 자세 기준" icon={<Activity size={18} />} iconClass="bg-mode-upper-soft text-mode-upper">
+          <div className="space-y-1.5">
+            <Slider id="settings-posture-sensitivity" label="자세 무너짐 민감도" valueText={`${postureSensitivity}%`}
+              min={POSTURE_SENSITIVITY.min} max={POSTURE_SENSITIVITY.max} step={POSTURE_SENSITIVITY.step} minLabel="둔감" maxLabel="민감"
+              value={postureSensitivity} onChange={value => { setPostureSensitivity(value); writePostureSensitivity(value); }} />
+            <p className="text-xs text-muted">높일수록 기준 자세에서 조금만 달라져도 ‘기준에서 벗어남’으로 세요. 점수 계산은 그대로예요.</p>
+          </div>
           <Slider id="settings-score-threshold" label="경고 점수 기준" valueText={`${scoreThreshold}점 이하`}
             min={40} max={95} minLabel="40점" maxLabel="95점" value={scoreThreshold}
             onChange={value => { setScoreThreshold(value); keep('scoreThreshold', String(value)); }} />
-          <Slider id="settings-collapse-sensitivity" label="자세 무너짐 민감도" valueText={`${collapseSensitivity}%`}
-            min={10} max={100} minLabel="10%" maxLabel="100%" value={collapseSensitivity}
-            onChange={value => { setCollapseSensitivity(value); keep('collapseSensitivity', String(value)); }} />
+          <p className="mt-auto text-xs text-muted">{`민감도는 ${NEXT_SESSION}`}</p>
         </SettingsCard>
 
-        <SettingsCard title="데이터 관리" icon={<Database size={18} />} iconClass="bg-mode-eye-soft text-mode-eye">
+        <SettingsCard title="안구 · 깜빡임 기준" icon={<Eye size={18} />} iconClass="bg-mode-eye-soft text-mode-eye">
+          <Field label="깜빡임 민감도">
+            <Segmented label="깜빡임 민감도" options={EYE_SENSITIVITIES} value={eyeSensitivity}
+              onChange={value => { setEyeSensitivity(value); writeEyeSensitivity(value); }} />
+          </Field>
+          <p className="text-sm text-muted">높음은 약한 눈 감김도 더 쉽게 판정합니다. 윙크는 세지 않습니다.</p>
+          <p className="mt-auto text-xs text-muted">{NEXT_SESSION}</p>
+        </SettingsCard>
+
+        <KeyboardSettings className="lg:col-span-2" />
+
+        <SettingsCard title="데이터 관리" icon={<Database size={18} />} className="lg:col-span-2 xl:col-span-1">
           <dl className="space-y-2 text-sm">
             <div className="flex gap-3">
               <dt className="w-14 shrink-0 font-semibold text-heading">지워져요</dt>
@@ -201,8 +222,6 @@ const Settings = () => {
             </button>
           </div>
         </SettingsCard>
-
-        <KeyboardSettings className="lg:col-span-2 xl:col-span-3" />
       </div>
     </div>
   );

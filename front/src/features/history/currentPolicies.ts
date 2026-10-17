@@ -1,7 +1,7 @@
 import type { EntrySource } from '../dashboard/summary.ts';
 import { eyePolicy, isCurrentEyePolicy } from '../eye/eyePolicy.ts';
 import { ANSI_QWERTY_TOUCH_POLICY_V1 } from '../keyboard/fingerPolicy.ts';
-import { HABIT_POLICY } from '../posture/evaluation.ts';
+import { HABIT_POLICY, isCurrentHabitPolicy } from '../posture/evaluation.ts';
 import { shoulderScorePolicy } from '../posture/modes/shoulder.ts';
 import { turtleScorePolicy } from '../posture/modes/turtle.ts';
 
@@ -23,6 +23,6 @@ export function isLegacy(source: EntrySource) {
     return source.stored.record.policyVersion !== CURRENT_POLICIES.keyboard
       || source.stored.record.recognitionVersion !== CURRENT_POLICIES.recognition;
   }
-  return source.records.some(record => record.habitPolicyVersion !== CURRENT_POLICIES.habit
+  return source.records.some(record => !isCurrentHabitPolicy(record.habitPolicyVersion)
     || record.scorePolicyVersion !== (record.mode === 'turtle' ? CURRENT_POLICIES.turtle : CURRENT_POLICIES.shoulder));
 }

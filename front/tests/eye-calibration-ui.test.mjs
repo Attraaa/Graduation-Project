@@ -22,9 +22,8 @@ const EyeCalibrationPanel = compiled.exports.default;
 
 function render(measurement = {}, props = {}) {
   return renderToStaticMarkup(createElement(EyeCalibrationPanel, {
-    sensitivity: 'normal', locked: false, active: true,
-    measurement: { ...emptyEyeSnapshot(), ...measurement },
-    onSensitivityChange() {}, ...props,
+    active: true,
+    measurement: { ...emptyEyeSnapshot(), ...measurement }, ...props,
   }));
 }
 
@@ -54,21 +53,15 @@ test('ready and inactive states do not continue asking for guided calibration', 
     assert.doesNotMatch(markup, /<progress/);
     assert.doesNotMatch(markup, /aria-live/);
     assert.doesNotMatch(markup, /확인 \d\/3회/);
-    assert.match(markup, /윙크는 세지 않습니다/);
+    assert.equal(markup, '');
   }
 });
 
-test('sensitivity choices are accessible, selected and locked during the measurement', () => {
-  const unlocked = render();
-  assert.match(unlocked, /<select aria-label="깜빡임 민감도"/);
-  assert.doesNotMatch(unlocked, /<select[^>]*\sdisabled(?:=|\s|>)/);
-  assert.match(unlocked, /<option value="low">낮음<\/option>/);
-  assert.match(unlocked, /<option value="normal" selected="">보통<\/option>/);
-  assert.match(unlocked, /<option value="high">높음<\/option>/);
-  const locked = render({}, { sensitivity: 'high', locked: true });
-  assert.match(locked, /<select[^>]*disabled=""/);
-  assert.match(locked, /<option value="high" selected="">높음<\/option>/);
-  assert.match(locked, /민감도는 측정을 중지한 뒤 바꿀 수 있습니다/);
+test('blink sensitivity is chosen in Settings, not in the session panel', () => {
+  for (const markup of [render({ calibrationPhase: 'distance' }), render({ calibrationPhase: 'eyes', calibrationBlinks: 1 })]) {
+    assert.doesNotMatch(markup, /<select/);
+    assert.doesNotMatch(markup, /민감도/);
+  }
 });
 
 test('history recognizes all three exact preset policy IDs as current and retains the legacy distinction', () => {

@@ -4,7 +4,7 @@ import { useWebcam } from '../hooks/useWebcam';
 import { useMediaPipe } from '../hooks/useMediaPipe';
 import { advanceCalibration, createCalibration } from '../features/posture/calibration';
 import { advanceObservation, createObservation, interruptObservation } from '../features/posture/observation';
-import { advanceEvaluation, createEvaluation, interruptEvaluation } from '../features/posture/evaluation';
+import { advanceEvaluation, createEvaluation, habitPolicy, interruptEvaluation } from '../features/posture/evaluation';
 import { createMonitorSnapshot } from '../features/posture/monitorTypes';
 import type { MonitorSnapshot } from '../features/posture/monitorTypes';
 import { turtleScorePolicy } from '../features/posture/modes/turtle';
@@ -19,9 +19,11 @@ interface PostureMonitorProps {
   deviceId: string;
   onUpdate: (snapshot: MonitorSnapshot) => void;
   recordCapture?: (start: CaptureStart) => CaptureSink;
+  /** "자세 무너짐 민감도" from Settings; fixed for the whole run. */
+  sensitivity?: number;
 }
 
-const PostureMonitor = ({ isRunning, paused = false, referenceRequest = 0, deviceId, onUpdate, recordCapture }: PostureMonitorProps) => {
+const PostureMonitor = ({ isRunning, paused = false, referenceRequest = 0, deviceId, onUpdate, recordCapture, sensitivity }: PostureMonitorProps) => {
   const pausedRef = useRef(paused);
   const interrupt = useRef<() => void>(() => {});
   const recollect = useRef<() => void>(() => {});
@@ -46,8 +48,9 @@ const PostureMonitor = ({ isRunning, paused = false, referenceRequest = 0, devic
     let calibration = createCalibration();
     let lastUiAt = -Infinity;
     let observation = createObservation();
-    let neck = createEvaluation(turtleScorePolicy);
-    let shoulder = createEvaluation(shoulderScorePolicy);
+    const habit = habitPolicy(sensitivity);
+    let neck = createEvaluation(turtleScorePolicy, habit);
+    let shoulder = createEvaluation(shoulderScorePolicy, habit);
     const startMono = performance.now();
     const startEpoch = Date.now();
     const beginRecord = (at: number) => {
@@ -80,7 +83,7 @@ const PostureMonitor = ({ isRunning, paused = false, referenceRequest = 0, devic
       recording.forEach(sink => sink?.finish(at));
       recording = beginRecord(at); recordedReference = null;
       calibration = createCalibration(); observation = createObservation();
-      neck = createEvaluation(turtleScorePolicy); shoulder = createEvaluation(shoulderScorePolicy);
+      neck = createEvaluation(turtleScorePolicy, habit); shoulder = createEvaluation(shoulderScorePolicy, habit);
       resumeAt = at;
       publish({ ...createMonitorSnapshot(), phase: 'calibrating' });
     };
@@ -154,12 +157,12 @@ const PostureMonitor = ({ isRunning, paused = false, referenceRequest = 0, devic
         if (recordedReference && recordedReference !== referenceKey) {
           recording.forEach(sink => sink?.finish(capturedAtMs));
           recording = beginRecord(capturedAtMs);
-          neck = createEvaluation(turtleScorePolicy);
-          shoulder = createEvaluation(shoulderScorePolicy);
+          neck = createEvaluation(turtleScorePolicy, habit);
+          shoulder = createEvaluation(shoulderScorePolicy, habit);
         }
         recordedReference = referenceKey;
-        neck = advanceEvaluation(neck, observation, turtleScorePolicy);
-        shoulder = advanceEvaluation(shoulder, observation, shoulderScorePolicy);
+        neck = advanceEvaluation(neck, observation, turtleScorePolicy, habit);
+        shoulder = advanceEvaluation(shoulder, observation, shoulderScorePolicy, habit);
         recording[0]?.sample(capturedAtMs, neck);
         recording[1]?.sample(capturedAtMs, shoulder);
         const snapshot: MonitorSnapshot = {
@@ -225,7 +228,7 @@ const PostureMonitor = ({ isRunning, paused = false, referenceRequest = 0, devic
       detach();
       void stopProcessing();
     };
-  }, [isRunning, deviceId, publish, videoRef, canvasRef, startWebcam, stopWebcam, initMediaPipe, startProcessing, stopProcessing, recordCapture, connect, detach, runtime]);
+  }, [isRunning, deviceId, publish, videoRef, canvasRef, startWebcam, stopWebcam, initMediaPipe, startProcessing, stopProcessing, recordCapture, connect, detach, runtime, sensitivity]);
 
   useEffect(() => {
     // Flush the last computed interval on stop, but never publish from an old keyed session's cleanup.

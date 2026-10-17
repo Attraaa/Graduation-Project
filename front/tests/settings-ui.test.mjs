@@ -30,28 +30,31 @@ test('switch exposes its name and state', () => {
   assert.match(html(Switch, { label: '자세 경고 알림', checked: false, onChange() {} }), /aria-checked="false"/);
 });
 
-test('settings page shows the seven cards with defaults when nothing is stored', () => {
+test('settings page shows the eight cards with defaults when nothing is stored', () => {
   const out = page({});
-  for (const title of ['계정', '비밀번호', '화면 테마', '알림', '자세 교정 기준', '데이터 관리', '키보드 · 승인 앱 관찰']) {
+  for (const title of ['계정', '비밀번호', '화면 테마', '알림', '상체 · 자세 기준', '안구 · 깜빡임 기준', '키보드 · 승인 앱 관찰', '데이터 관리']) {
     assert.match(out, new RegExp(`<section aria-label="${title}"`));
   }
   assert.match(out, /aria-pressed="true" aria-label="라이트 테마"/);
   assert.match(out, /aria-pressed="false" aria-label="다크 테마"/);
   assert.match(out, /role="switch" aria-checked="true"/);
   assert.match(out, /aria-pressed="true"[^>]*>10분</);
-  assert.match(out, /aria-pressed="true"[^>]*>보통</);
-  assert.match(out, />70점 이하</);
+  assert.match(out, /aria-label="알림 세기"[^]*?aria-pressed="true"[^>]*>보통</);
+  assert.match(out, /id="settings-posture-sensitivity" type="range" min="10" max="100" step="10"[^>]*value="50"/);
   assert.match(out, />50%</);
+  assert.match(out, /aria-label="깜빡임 민감도"[^]*?aria-pressed="true"[^>]*>보통</);
+  assert.match(out, />70점 이하</);
   assert.match(out, /승인 앱 설정은 데스크톱 앱에서 사용할 수 있습니다/);
   assert.match(out, /통계 삭제</);
   assert.doesNotMatch(out, /변경사항 저장/);
 });
 
-test('settings page reflects the stored account, theme and alert values', () => {
+test('settings page reflects the stored account, theme, alert and sensitivity values', () => {
   const out = page({
     'moti.session': JSON.stringify({ token: 't', user: { id: '7', username: 'moti_user', nickname: '정섭' } }),
     'postureAI.theme': 'dark', 'postureAI.notifications': 'off', 'postureAI.alertFrequency': '30',
-    'postureAI.alertStrength': 'strong', 'postureAI.scoreThreshold': '85', 'postureAI.collapseSensitivity': '20',
+    'postureAI.alertStrength': 'strong', 'postureAI.scoreThreshold': '85',
+    'moti.settings.postureSensitivity': '80', 'moti.settings.eyeSensitivity': 'high',
   });
   assert.match(out, />아이디 moti_user</);
   assert.match(out, />정<\/span>/);
@@ -61,5 +64,12 @@ test('settings page reflects the stored account, theme and alert values', () => 
   assert.match(out, /aria-pressed="true"[^>]*>30분</);
   assert.match(out, /aria-pressed="true"[^>]*>강함</);
   assert.match(out, />85점 이하</);
-  assert.match(out, />20%</);
+  assert.match(out, />80%</);
+  assert.match(out, /aria-label="깜빡임 민감도"[^]*?aria-pressed="true"[^>]*>높음</);
+});
+
+test('the old unused slider value does not become a posture sensitivity', () => {
+  const out = page({ 'postureAI.collapseSensitivity': '20' });
+  assert.match(out, />50%</);
+  assert.doesNotMatch(out, />20%</);
 });

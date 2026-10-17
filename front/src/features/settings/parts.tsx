@@ -67,8 +67,8 @@ export function Switch({ label, checked, onChange }: { label: string; checked: b
 }
 
 /** A range with its value chip and end labels. The filled part follows the 20px thumb's centre. */
-export function Slider({ id, label, valueText, min, max, minLabel, maxLabel, value, onChange }: {
-  id: string; label: string; valueText: string; min: number; max: number; minLabel: string; maxLabel: string;
+export function Slider({ id, label, valueText, min, max, step = 1, minLabel, maxLabel, value, onChange }: {
+  id: string; label: string; valueText: string; min: number; max: number; step?: number; minLabel: string; maxLabel: string;
   value: number; onChange: (value: number) => void;
 }) {
   const ratio = (value - min) / (max - min);
@@ -79,7 +79,7 @@ export function Slider({ id, label, valueText, min, max, minLabel, maxLabel, val
         <label htmlFor={id} className="text-sm font-semibold text-heading">{label}</label>
         <output htmlFor={id} className="rounded-md bg-mode-upper-soft px-1.5 py-0.5 text-xs font-semibold tabular-nums text-heading">{valueText}</output>
       </div>
-      <input id={id} type="range" min={min} max={max} value={value} onChange={event => onChange(Number(event.target.value))}
+      <input id={id} type="range" min={min} max={max} step={step} value={value} onChange={event => onChange(Number(event.target.value))}
         style={{ background: `linear-gradient(to right, var(--color-mode-upper) ${stop}, var(--color-track) ${stop})` }}
         className={RANGE} />
       <div className="flex justify-between text-xs text-muted"><span>{minLabel}</span><span>{maxLabel}</span></div>

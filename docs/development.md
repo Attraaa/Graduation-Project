@@ -277,3 +277,9 @@ Windows 프로젝트 도구로 `setup.cmd`를 실행했습니다. 처음에는 �
 Headless Edge의 가상 카메라 두 대·분석/API 대역으로 홈 시작, 카메라 공유, 독립 일시정지/중지, 이동 시 유지, 설정 창의 추가 스트림 없음, 장치 저장·재실행, 로그아웃 해제, 1024/768/390px와 다크 테마를 확인했습니다. 깜빡임 보정 완료 시 실제 횟수와 유효 시간이 0이고, 저장 요청이 모두 `eye-habits-v3:normal`이며, 기준 재수집이 누적을 유지하는 것을 확인했습니다. 기존 지표 높이는 102px였고 민감도·단축키 선택 UI와 브라우저 오류는 없었습니다. 기록 요청은 모두 가로채 원격 DB에 쓰지 않았습니다.
 
 별도 숨김 Electron 프로필에서는 실제 Pose/Face 초기화·추론, 공유 카메라, 승인 앱이 없는 상태의 실제 IPC/Python 시작과 독립 해제를 확인했습니다. 다른 프로필의 이전 승인 목록으로 단축키 등록 0회, Python 시작·중지·재시작과 잠금 자동 중지도 확인했습니다. 실제 사용자 카메라·일반 앱 입력은 수집하지 않았습니다. 로그와 검사 스크립트는 Git에서 제외하는 `reports/monitoring-qa/merge-*`, `check-merge.cjs`에 보관합니다. 실제 촬영 정확도·실물 장치 호환성·장시간 성능은 별도 검증 대상입니다.
+
+## 2026-10-17 설정 민감도 연결
+
+설정 화면의 상체 카드에 **자세 무너짐 민감도**(10–100%, 기본 50%), 안구 카드에 **깜빡임 민감도**(낮음/보통/높음, 기본 보통)를 두고 `features/settings/preferences.ts`가 이 기기에 저장합니다. `MonitoringProvider`가 상체 시작 때 두 값을 읽어 그 실행 동안 고정하고 `PostureMonitor`·`EyeMonitor`·안구 기록기에 같은 값을 전달합니다. 위 10-10 병합 기록의 "보통 고정"은 이 연결로 대체되었습니다. 상체 습관 정책 ID는 50%면 기존 그대로, 다른 값은 `weighted-reference-deviation-v3:s<값>`입니다([evaluation.md](evaluation.md)). 예전 `postureAI.collapseSensitivity` 값은 측정에 쓰인 적이 없어 읽지 않습니다.
+
+macOS의 프로젝트 도구(`scripts/moti.sh check`)에서 프론트 타입·린트·206개 테스트, 서버 빌드·44개 테스트를 통과했습니다. 실제 MySQL 1개는 `MOTI_TEST_MYSQL_URL` 부재로 제외했고, Python 단계는 잠금 파일이 Windows 전용이라 이 환경에서 실행하지 못했습니다. `npm run build -- --configLoader runner`의 UI/Electron main/preload 빌드도 통과했습니다. 실제 카메라로 설정값을 바꿔 시작한 뒤 저장 요청의 정책 ID를 확인하는 화면 검증은 하지 않았습니다.
