@@ -11,6 +11,7 @@ import { turtleScorePolicy } from '../features/posture/modes/turtle';
 import { shoulderScorePolicy } from '../features/posture/modes/shoulder';
 import type { CaptureSink, CaptureStart } from '../features/records/recording';
 import { useCameraSettings } from '../features/camera/context';
+import { watchPreparation, type PreparationStage } from '../features/session/modelPreparation';
 
 interface PostureMonitorProps {
   isRunning: boolean;
@@ -65,9 +66,30 @@ const PostureMonitor = ({ isRunning, paused = false, referenceRequest = 0, devic
     let recordedReference: string | null = null;
     let removeTrackListener = () => {};
     let watchdog: ReturnType<typeof setInterval> | undefined;
+    let stopPreparation = () => {};
     let lastFrameAt: number | null = null;
     let capturedGeneration = 0;
     let resumeAt = 0;
+    const fail = (message: string) => {
+      if (abort.signal.aborted) return;
+      stopPreparation();
+      clearInterval(watchdog);
+      neck = interruptEvaluation(neck);
+      shoulder = interruptEvaluation(shoulder);
+      publish({ ...latest.current, phase: 'error', message, delta: null, neck, shoulder });
+      // Cancel observation immediately, but let an in-flight WASM initialization
+      // settle before teardown. Never release its global initialization lock early.
+      abort.abort();
+      stopWebcam();
+      detach();
+      void stopProcessing();
+    };
+    const preparing = (stage: PreparationStage) => {
+      stopPreparation();
+      stopPreparation = watchPreparation(stage, message => {
+        if (!abort.signal.aborted) publish({ ...latest.current, phase: 'loading', message });
+      });
+    };
     interrupt.current = () => {
       if (!calibration.reference) calibration = createCalibration();
       observation = interruptObservation(observation);
@@ -88,9 +110,11 @@ const PostureMonitor = ({ isRunning, paused = false, referenceRequest = 0, devic
       publish({ ...createMonitorSnapshot(), phase: 'calibrating' });
     };
     const setup = async () => {
+      preparing('camera');
       const stream = await startWebcam(deviceId || undefined);
       if (abort.signal.aborted) return;
       if (!stream) {
+        stopPreparation();
         publish({ ...createMonitorSnapshot(), phase: 'error' });
         return;
       }
@@ -104,18 +128,17 @@ const PostureMonitor = ({ isRunning, paused = false, referenceRequest = 0, devic
         observation = interruptObservation(observation);
         neck = interruptEvaluation(neck);
         shoulder = interruptEvaluation(shoulder);
-        publish({ ...latest.current, phase: 'error', reason: 'interrupted', delta: null, neck, shoulder });
-        stopWebcam();
-        detach();
-        void stopProcessing();
+        fail('카메라 연결이 중단되었습니다. 다시 연결한 뒤 중지하고 시작해 주세요.');
       };
       track.addEventListener('ended', ended);
       removeTrackListener = () => track.removeEventListener('ended', ended);
+      preparing('pose');
       const pose = await initMediaPipe((results, capturedAtMs) => {
         const video = videoRef.current;
         const canvas = canvasRef.current;
         if (abort.signal.aborted || pausedRef.current || capturedAtMs <= resumeAt || !video || !canvas || capturedGeneration !== runtime.current.generation) return;
         const receivedAtMs = performance.now();
+        stopPreparation();
         lastFrameAt = receivedAtMs;
         if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
           canvas.width = video.videoWidth;
@@ -147,7 +170,7 @@ const PostureMonitor = ({ isRunning, paused = false, referenceRequest = 0, devic
         }
 
         const frame = {
-          landmarks: results.poseLandmarks, widthPx: video.videoWidth, heightPx: video.videoHeight,
+          landmarks: results.poseLandmarks, worldLandmarks: results.poseWorldLandmarks, widthPx: video.videoWidth, heightPx: video.videoHeight,
           sourceId: `${track.id}:${capturedGeneration}`, timestampMs: capturedAtMs,
         };
         calibration = advanceCalibration(calibration, frame);
@@ -171,6 +194,7 @@ const PostureMonitor = ({ isRunning, paused = false, referenceRequest = 0, devic
           reason: observation.reason ?? calibration.reason,
           observedSeconds: observation.observedSeconds,
           delta: observation.delta,
+          evidence: { head: observation.headEvidence, trunk: observation.trunk.estimate, modelEligible: reference?.baseTrunkUpright === true },
           neck, shoulder,
         };
         if (receivedAtMs - lastUiAt >= 200 || (observation.delta === null && latest.current.delta !== null)) {
@@ -182,14 +206,11 @@ const PostureMonitor = ({ isRunning, paused = false, referenceRequest = 0, devic
       }, abort.signal);
       if (abort.signal.aborted) return;
       if (!pose) {
-        neck = interruptEvaluation(neck);
-        shoulder = interruptEvaluation(shoulder);
-        publish({ phase: 'error', progress: 0, reason: null, observedSeconds: observation.observedSeconds, delta: null, neck, shoulder });
-        stopWebcam();
-        detach();
+        fail('자세 분석 모델을 시작하지 못했습니다. Moti를 완전히 종료한 뒤 다시 실행해 주세요.');
         return;
       }
       if (video) {
+        preparing('frame');
         await video.play();
         if (!abort.signal.aborted) {
           lastFrameAt = performance.now();
@@ -200,22 +221,13 @@ const PostureMonitor = ({ isRunning, paused = false, referenceRequest = 0, devic
               observation = interruptObservation(observation);
               neck = interruptEvaluation(neck);
               shoulder = interruptEvaluation(shoulder);
-              publish({ ...latest.current, phase: 'unavailable', reason: 'interrupted', delta: null, neck, shoulder });
+              if (latest.current.phase !== 'loading') publish({ ...latest.current, phase: 'unavailable', reason: 'interrupted', delta: null, neck, shoulder });
             }
           }, 500);
         }
       }
     };
-    void setup().catch(() => {
-      if (!abort.signal.aborted) {
-        neck = interruptEvaluation(neck);
-        shoulder = interruptEvaluation(shoulder);
-        publish({ phase: 'error', progress: 0, reason: null, observedSeconds: observation.observedSeconds, delta: null, neck, shoulder });
-        stopWebcam();
-        detach();
-        void stopProcessing();
-      }
-    });
+    void setup().catch(error => fail(error instanceof Error ? error.message : String(error)));
     return () => {
       abort.abort();
       interrupt.current = () => {};
@@ -223,6 +235,7 @@ const PostureMonitor = ({ isRunning, paused = false, referenceRequest = 0, devic
       const finishedAt = performance.now();
       recording.forEach(sink => sink?.finish(finishedAt));
       clearInterval(watchdog);
+      stopPreparation();
       removeTrackListener();
       stopWebcam();
       detach();
@@ -241,7 +254,7 @@ const PostureMonitor = ({ isRunning, paused = false, referenceRequest = 0, devic
 
   useEffect(() => {
     if (isRunning && (aiError || webcamError)) {
-      publish({ ...latest.current, phase: 'error', delta: null,
+      publish({ ...latest.current, phase: 'error', message: webcamError || aiError || undefined, delta: null,
         neck: { ...latest.current.neck, currentScore: null, currentDeviation: null, continuousMs: 0, deviationState: 'unknown', protection: 'none' },
         shoulder: { ...latest.current.shoulder, currentScore: null, currentDeviation: null, continuousMs: 0, deviationState: 'unknown', protection: 'none' } });
       stopWebcam();

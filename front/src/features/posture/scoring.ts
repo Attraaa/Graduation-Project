@@ -1,5 +1,5 @@
 import type { PostureDeltas } from './observation.ts';
-import { SHOULDER_VERTICAL_GAIN, YAW_LIMIT } from './scoreSettings.ts';
+import { SHOULDER_CURVE, SHOULDER_VERTICAL_GAIN, YAW_LIMIT } from './scoreSettings.ts';
 
 /**
  * [역할: 한 번의 변화량을 0~100 원점수로 환산]
@@ -27,6 +27,16 @@ export interface PostureScore {
   deviation: number | null;
 }
 
+export const scoreMetricGain = (policy: ScorePolicy, metric: ScoreMetric) =>
+  policy.mode === 'shoulder' && metric === 'shoulderShrug' ? SHOULDER_VERTICAL_GAIN : 1;
+
+/** 설정된 경계 각도까지 선형, 이후 지수적으로 추가 편차가 증가합니다. */
+export function scoreMetricValue(policy: ScorePolicy, metric: ScoreMetric, value: number) {
+  if (policy.mode !== 'shoulder' || metric !== 'shoulderTilt') return value * scoreMetricGain(policy, metric);
+  const excess = Math.max(0, Math.min(180, value * 180 / Math.PI) - SHOULDER_CURVE.kneeDegrees);
+  return value + SHOULDER_CURVE.extraDeviation * Math.expm1(Math.LN2 * excess / SHOULDER_CURVE.doublingDegrees);
+}
+
 /** 세션 기준과의 화면상 유사도를 계산합니다. 건강이나 올바른 자세를 진단하는 함수는 아닙니다. */
 export function scorePosture(delta: PostureDeltas | null, policy: ScorePolicy): PostureScore {
   const unknown = { scorePolicyVersion: policy.version, score: null, deviation: null };
@@ -40,13 +50,12 @@ export function scorePosture(delta: PostureDeltas | null, policy: ScorePolicy): 
     if (!Number.isFinite(weight) || weight < 0) return unknown;
     if (weight === 0) continue;
     if (!Number.isFinite(delta[metric]) || delta[metric] < 0) return unknown;
-    const gain = policy.mode === 'shoulder' && metric === 'shoulderShrug' ? SHOULDER_VERTICAL_GAIN : 1;
-    // 가중 편차 = Σ(변화량 × 가중치 × 추가 감도). 숫자가 클수록 기준에서 더 벗어난 것입니다.
-    deviation += weight * delta[metric] * gain;
+    // 어깨 기울기에만 비선형 변환을 적용한 뒤 가중합합니다. 목 입력은 그대로입니다.
+    deviation += weight * scoreMetricValue(policy, metric, delta[metric]);
   }
 
   // 허용 범위 안: 100점 / 크게 벗어남: 0점 / 중간: 직선 비례로 계산합니다.
-  // 예: 어깨 편차 0.105 → 100 × (0.18 - 0.105) / (0.18 - 0.03) = 50점.
+  // 예: 어깨 편차 0.13 → 100 × (0.22 - 0.13) / (0.22 - 0.04) = 50점.
   const score = deviation <= policy.fullCreditDelta ? 100
     : deviation >= policy.zeroCreditDelta ? 0
       : 100 * (policy.zeroCreditDelta - deviation) / (policy.zeroCreditDelta - policy.fullCreditDelta);

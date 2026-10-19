@@ -3,6 +3,7 @@ import type { ObservationState } from './observation.ts';
 import { scorePosture } from './scoring.ts';
 import type { ScorePolicy } from './scoring.ts';
 import { MOTION_PROTECTION } from './scoreSettings.ts';
+import { advanceSustainedDeviation, createSustainedDeviation, interruptSustainedDeviation, type SustainedDeviation } from './sustainedDeviation.ts';
 
 /**
  * [역할: 원점수에 시간 규칙을 적용하고 세션 결과를 누적]
@@ -15,7 +16,7 @@ import { MOTION_PROTECTION } from './scoreSettings.ts';
 // 가중 편차 0.15 이상이 2초 이어지면 1회 확정, 이후 0.10 이하이면 해당 이탈 구간 종료.
 // 진입·종료 기준을 다르게 두어 경계에서 흔들릴 때 횟수가 반복 증가하지 않게 합니다.
 export const HABIT_POLICY = Object.freeze({
-  version: 'weighted-reference-deviation-v3',
+  version: 'weighted-reference-deviation-v6',
   enterDelta: 0.15,
   exitDelta: 0.10,
   minDurationMs: 2000,
@@ -86,6 +87,8 @@ export interface EvaluationState {
   lastScore: number | null;
   // 낮아진 점수의 100점 복귀를 인정하기 위해 허용 범위가 연속된 시간.
   nearReferenceMs: number;
+  // 큰 머리 전진의 추가 감점. 기본 원점수와 분리하며 새 세션/기준/정책에서 초기화합니다.
+  sustained: SustainedDeviation;
 }
 
 /** 새 세션의 빈 상태입니다. 아직 측정하지 않았으므로 처음부터 100점을 넣지 않습니다. */
@@ -106,7 +109,7 @@ export function createEvaluation(policy: ScorePolicy, habit: HabitPolicy = HABIT
     scoreTimeSum: 0,
     pendingMs: 0,
     protection: 'none', staticDeviationMs: 0, rawScore: null,
-    lastScore: null, nearReferenceMs: 0,
+    lastScore: null, nearReferenceMs: 0, sustained: createSustainedDeviation(),
   };
 }
 
@@ -120,6 +123,7 @@ export function interruptEvaluation(previous: EvaluationState): EvaluationState 
     deviationState: 'unknown',
     pendingMs: 0,
     protection: 'none', staticDeviationMs: 0, rawScore: null, nearReferenceMs: 0,
+    sustained: interruptSustainedDeviation(previous.sustained),
   };
 }
 
@@ -151,8 +155,14 @@ export function advanceEvaluation(
   if (current.score === null) return next;
   // 유지할 점수는 마지막 표시 점수입니다. 측정 이력이 처음이면 실제 원점수를 사용합니다.
   const held = base.lastScore ?? current.score;
-  const moving = observation.velocityPxPerSecond !== null
-    && observation.velocityPxPerSecond > MOTION_PROTECTION.velocityPxPerSecond;
+  const moving = observation.velocityShoulderWidthsPerSecond !== null
+    && observation.velocityShoulderWidthsPerSecond > MOTION_PROTECTION.velocityShoulderWidthsPerSecond;
+  if (!moving) next.sustained = advanceSustainedDeviation(
+    connected && base.protection !== 'moving' ? base.sustained : interruptSustainedDeviation(base.sustained),
+    observation.delta!, policy, connected ? elapsedMs : 0, roundingMs,
+  );
+  const targetScore = Math.max(0, current.score - next.sustained.penaltyPoints);
+  next.currentScore = targetScore;
   if (moving) {
     // 빠르게 움직일 때는 마지막 점수를 유지합니다. 이력이 없으면 null로 기다립니다.
     next.protection = 'moving';
@@ -166,10 +176,10 @@ export function advanceEvaluation(
       next.protection = 'grace';
       next.currentScore = held;
     } else {
-      // 2초를 넘긴 시간만 감점합니다. 원점수보다 더 낮게 깎지는 않습니다.
+      // 2초를 넘긴 시간만 감점합니다. 큰 목 전진은 원점수에서 지속 감점까지 뺀 목표를 사용합니다.
       // 예: 마지막 100점, 원점수 60점, 감점 구간 0.1초 → 100 - 35 × 0.1 = 96.5점.
       const penaltyMs = Math.min(elapsedMs, next.staticDeviationMs - MOTION_PROTECTION.graceMs);
-      next.currentScore = Math.max(current.score, held - MOTION_PROTECTION.penaltyPointsPerSecond * penaltyMs / 1000);
+      next.currentScore = Math.max(targetScore, held - MOTION_PROTECTION.penaltyPointsPerSecond * penaltyMs / 1000);
     }
   } else if (current.score === 100 && held < 100) {
     // 원점수가 잠깐 100이 됐다고 바로 회복하지 않습니다. 정면 허용 범위를 1초 확인합니다.

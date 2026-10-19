@@ -1,4 +1,7 @@
-@import "tailwindcss";
+@import "tailwindcss" source(none);
+/* Scan application UI only; local datasets, reports and nested worktrees are not UI sources. */
+@source "./";
+@source "../index.html";
 @import "./styles/tokens.css";
 
 @utility font-duo {

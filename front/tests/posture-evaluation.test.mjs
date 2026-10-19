@@ -7,7 +7,7 @@ import { shoulderScorePolicy } from '../src/features/posture/modes/shoulder.ts';
 import { MOTION_PROTECTION } from '../src/features/posture/scoreSettings.ts';
 const close = (a,b) => assert.ok(Math.abs(a-b)<1e-7, `${a} != ${b}`);
 function observed(ms, deviation = 0, velocity = 0) {
-  return { ...createObservation(), observedSeconds: ms / 1000, velocityPxPerSecond: velocity,
+  return { ...createObservation(), observedSeconds: ms / 1000, velocityShoulderWidthsPerSecond: velocity,
     delta: deviation === null ? null : { headForward: deviation, torsoForward: deviation, neckSlump: deviation, shoulderTilt: deviation, shoulderShrug: deviation, yawRatio: 0 } };
 }
 const step = (state, ms, d=0, v=0, selected=policy) => advanceEvaluation(state, observed(ms,d,v), selected);
@@ -27,7 +27,7 @@ test('no observations are unknown; grace does not manufacture missing data', () 
   assert.equal(missing.currentScore,null); assert.equal(missing.averageScore,null);
   const first=step(missing,0,1);
   assert.equal(first.currentScore,0); assert.equal(first.averageScore,null); assert.equal(first.validMs,0);
-  const moving=step(createEvaluation(policy),0,1,MOTION_PROTECTION.velocityPxPerSecond+1);
+  const moving=step(createEvaluation(policy),0,1,MOTION_PROTECTION.velocityShoulderWidthsPerSecond+1);
   assert.equal(moving.currentScore,null); assert.equal(moving.lastScore,null); assert.equal(moving.averageScore,null);
 });
 test('grace period of static deviation is protected and subsequent penalty is gradual', () => {
@@ -49,7 +49,7 @@ test('a short departure returns without contaminating the average', () => {
 });
 test('a ten second stretch freezes the previous score and restarts grace when motion stops', () => {
   let state=run(1000);
-  for(let at=1100; at<=11100; at+=100) state=step(state,at,1,MOTION_PROTECTION.velocityPxPerSecond + 1);
+  for(let at=1100; at<=11100; at+=100) state=step(state,at,1,MOTION_PROTECTION.velocityShoulderWidthsPerSecond + 1);
   assert.equal(state.protection,'moving'); close(state.averageScore,100);
   assert.equal(state.deviationEpisodeCount,0); assert.equal(state.staticDeviationMs,0);
   state=step(state,11200,1,0);
@@ -62,7 +62,7 @@ test('a ten second stretch freezes the previous score and restarts grace when mo
 test('motion holds an already lowered score instead of replacing it with a perfect score', () => {
   const lowered=depart(MOTION_PROTECTION.graceMs + 1000);
   close(lowered.currentScore, 100 - MOTION_PROTECTION.penaltyPointsPerSecond * 1);
-  const moving=step(lowered,MOTION_PROTECTION.graceMs + 1200,1,MOTION_PROTECTION.velocityPxPerSecond + 50);
+  const moving=step(lowered,MOTION_PROTECTION.graceMs + 1200,1,MOTION_PROTECTION.velocityShoulderWidthsPerSecond + 50);
   close(moving.currentScore, 100 - MOTION_PROTECTION.penaltyPointsPerSecond * 1);
   const stationary=step(moving,MOTION_PROTECTION.graceMs + 1300,1);
   close(stationary.currentScore, 100 - MOTION_PROTECTION.penaltyPointsPerSecond * 1);
@@ -78,8 +78,8 @@ test('motion holds an already lowered score instead of replacing it with a perfe
 });
 test('velocity comparison is strictly above its threshold', () => {
   const base=run(1000);
-  assert.equal(step(base,1100,1,MOTION_PROTECTION.velocityPxPerSecond).protection,'grace');
-  assert.equal(step(base,1100,1,MOTION_PROTECTION.velocityPxPerSecond+1e-8).protection,'moving');
+  assert.equal(step(base,1100,1,MOTION_PROTECTION.velocityShoulderWidthsPerSecond).protection,'grace');
+  assert.equal(step(base,1100,1,MOTION_PROTECTION.velocityShoulderWidthsPerSecond+1e-8).protection,'moving');
 });
 test('missing data resets grace and continuity but preserves completed totals', () => {
   const before=depart(5900);
@@ -113,7 +113,7 @@ test('habit hysteresis uses weighted deviations and excludes moving intervals', 
   const away=step(almost,2000,0.15); assert.equal(away.deviationEpisodeCount,1); assert.equal(away.deviationMs,0);
   const continuing=step(away,2100,0.11); close(continuing.deviationMs,100);
   const exited=step(continuing,2200,0.10); assert.equal(exited.deviationState,'near-reference'); close(exited.deviationMs,100);
-  const moving=step(continuing,2200,0.2,MOTION_PROTECTION.velocityPxPerSecond + 50); assert.equal(moving.deviationState,'unknown'); close(moving.deviationMs,100);
+  const moving=step(continuing,2200,0.2,MOTION_PROTECTION.velocityShoulderWidthsPerSecond + 50); assert.equal(moving.deviationState,'unknown'); close(moving.deviationMs,100);
 });
 test('neck and shoulder have independent grace timers', () => {
   let neck=step(createEvaluation(policy),0), shoulder=step(createEvaluation(shoulderScorePolicy),0,0,0,shoulderScorePolicy);
@@ -130,7 +130,7 @@ test('identical samples preserve caller data and replay deterministically', () =
   assert.deepEqual(run(7000,0.2),run(7000,0.2));
 });
 test('real capture gaps and timestamp reversals do not reuse motion or observed time', () => {
-  const reference={ schemaVersion:2, sourceId:'cam', widthPx:1000, heightPx:1000, completedAtMs:0, baseEarSpanPx:200, baseShoulderSpanPx:500, baseEarHeightPx:250 };
+  const reference={ schemaVersion:2, sourceId:'cam', widthPx:1000, heightPx:1000, completedAtMs:0, baseEarSpanPx:200, baseShoulderSpanPx:500, baseEarHeightPx:250, metrics: { shoulderHeightDifferenceShoulderWidths: 0 } };
   function frame(at,shift=0) {
     const landmarks=Array.from({length:33},()=>({x:0.5,y:0.5,visibility:1}));
     landmarks[0]={x:0.5+shift,y:0.25,visibility:1};
@@ -140,27 +140,27 @@ test('real capture gaps and timestamp reversals do not reuse motion or observed 
   }
   const first=advanceObservation(createObservation(),reference,frame(0));
   const moved=advanceObservation(first,reference,frame(100,0.02));
-  close(moved.velocityPxPerSecond,200);
+  close(moved.velocityShoulderWidthsPerSecond,0.4);
   for(const at of [100,99,601]) {
     const next=advanceObservation(moved,reference,frame(at));
-    assert.equal(next.velocityPxPerSecond,null); close(next.observedSeconds,0.1);
+    assert.equal(next.velocityShoulderWidthsPerSecond,null); close(next.observedSeconds,0.1);
   }
 });
 test('posture sensitivity keeps the default rule at 50% and scales only the deviation thresholds', () => {
   assert.equal(habitPolicy(), HABIT_POLICY); assert.equal(habitPolicy(50), HABIT_POLICY);
-  assert.deepEqual(habitPolicy(70), { version: 'weighted-reference-deviation-v3:s70', enterDelta: 0.12, exitDelta: 0.08, minDurationMs: 2000 });
+  assert.deepEqual(habitPolicy(70), { version: 'weighted-reference-deviation-v6:s70', enterDelta: 0.12, exitDelta: 0.08, minDurationMs: 2000 });
   assert.deepEqual([habitPolicy(100).enterDelta, habitPolicy(100).exitDelta], [0.075, 0.05]);
   assert.deepEqual([habitPolicy(10).enterDelta, habitPolicy(10).exitDelta], [0.21, 0.14]);
   for (const [input, value] of [[73, 70], ['30', 30], [5, 10], [400, 100], [NaN, 50], ['', 50], [null, 50], ['abc', 50]]) assert.equal(normalizePostureSensitivity(input), value);
-  for (const version of [HABIT_POLICY.version, 'weighted-reference-deviation-v3:s10', 'weighted-reference-deviation-v3:s70', 'weighted-reference-deviation-v3:s100']) assert.equal(isCurrentHabitPolicy(version), true);
-  for (const version of ['weighted-reference-deviation-v2', 'weighted-reference-deviation-v3:s50', 'weighted-reference-deviation-v3:s75', 'weighted-reference-deviation-v3:s']) assert.equal(isCurrentHabitPolicy(version), false);
+  for (const version of [HABIT_POLICY.version, 'weighted-reference-deviation-v6:s10', 'weighted-reference-deviation-v6:s70', 'weighted-reference-deviation-v6:s100']) assert.equal(isCurrentHabitPolicy(version), true);
+  for (const version of ['weighted-reference-deviation-v2', 'weighted-reference-deviation-v3', 'weighted-reference-deviation-v3:s70', 'weighted-reference-deviation-v6:s50', 'weighted-reference-deviation-v6:s75', 'weighted-reference-deviation-v6:s']) assert.equal(isCurrentHabitPolicy(version), false);
 });
 test('a higher posture sensitivity counts a smaller sustained deviation while scores stay the same', () => {
   const stream = habit => { let state=createEvaluation(policy, habit); for(let at=0; at<=2100; at+=100) state=advanceEvaluation(state, observed(at,0.13), policy, habit); return state; };
   const normal=stream(HABIT_POLICY), high=stream(habitPolicy(70)), low=stream(habitPolicy(30));
   assert.equal(normal.deviationEpisodeCount,0); assert.equal(high.deviationEpisodeCount,1); assert.equal(low.deviationEpisodeCount,0);
-  assert.equal(high.deviationState,'away'); assert.equal(high.habitPolicyVersion,'weighted-reference-deviation-v3:s70');
+  assert.equal(high.deviationState,'away'); assert.equal(high.habitPolicyVersion,'weighted-reference-deviation-v6:s70');
   close(high.averageScore, normal.averageScore); assert.equal(high.currentScore, normal.currentScore); close(high.validMs, normal.validMs);
   const switched=advanceEvaluation(normal, observed(2200,0.13), policy, habitPolicy(70));
-  assert.equal(switched.validMs,0); assert.equal(switched.deviationEpisodeCount,0); assert.equal(switched.habitPolicyVersion,'weighted-reference-deviation-v3:s70');
+  assert.equal(switched.validMs,0); assert.equal(switched.deviationEpisodeCount,0); assert.equal(switched.habitPolicyVersion,'weighted-reference-deviation-v6:s70');
 });

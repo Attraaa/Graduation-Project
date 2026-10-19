@@ -23,7 +23,8 @@ function LiveCard({ modeId, children, className }: { modeId: MonitoringMode; chi
     </header>
     <MonitoringPreview modeId={modeId} />
     <div className="flex flex-wrap items-center justify-between gap-2"><SessionStatus modeId={modeId} /><SessionActions modeId={modeId} /></div>
-    {error && <p role="alert" className="text-sm text-danger">{upper ? '카메라·분석 연결을 확인해 주세요.' : state.keyboard.snapshot.message}</p>}
+    {upper && session.controls.isRunning && state.upper.snapshot.phase === 'loading' && <p role="status" className="text-sm text-muted">{state.upper.snapshot.message}</p>}
+    {error && <p role="alert" className="text-sm text-danger">{upper ? state.upper.snapshot.message || '카메라·분석 연결을 확인해 주세요.' : state.keyboard.snapshot.message}</p>}
     {children}
   </section>;
 }
