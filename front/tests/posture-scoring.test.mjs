@@ -10,7 +10,7 @@ const close = (a, b) => assert.ok(Math.abs(a - b) < 1e-9, `${a} != ${b}`);
 
 test('each part uses its own weighted sum rather than the largest feature or a combined score', () => {
   close(scorePosture(delta(0, { headForward: 0.2, torsoForward: 0.1, neckSlump: 0.3 }), neck).deviation, 0.215);
-  close(scorePosture(delta(0, { shoulderTilt: 0.2, shoulderShrug: 0.1 }), shoulder).deviation, 0.1775);
+  close(scorePosture(delta(0, { shoulderTilt: 0.05, shoulderShrug: 0.1 }), shoulder).deviation, 0.059);
   close(Object.values(NECK_WEIGHTS).reduce((a,b) => a+b), 1);
   close(Object.values(SHOULDER_WEIGHTS).reduce((a,b) => a+b), 1);
 });
@@ -27,7 +27,7 @@ test('full and zero credit boundaries, linear midpoint and adjacent values', () 
   for (const policy of policies) {
     const a = policy.fullCreditDelta, b = policy.zeroCreditDelta;
     const sample = d => policy === neck ? delta(0, { neckSlump: d / NECK_WEIGHTS.neckSlump })
-      : delta(0, { shoulderTilt: d / SHOULDER_WEIGHTS.shoulderTilt });
+      : delta(0, { shoulderShrug: d / (SHOULDER_WEIGHTS.shoulderShrug * 0.8) });
     close(scorePosture(sample(a), policy).score, 100);
     assert.ok(scorePosture(sample(a + 1e-8), policy).score < 100);
     close(scorePosture(sample((a+b)/2), policy).score, 50);
@@ -67,7 +67,7 @@ test('score decreases monotonically within zero and one hundred', () => {
   }
 });
 test('tuning weights creates a different persisted policy version', () => {
-  assert.match(neck.version, /^upper-body-neck-v3-/);
-  assert.match(shoulder.version, /^upper-body-shoulder-v3-/);
-  assert.notEqual(scoreSettingsVersion('neck', { ...NECK_WEIGHTS, headForward: 0.6 }, NECK_LIMITS), neck.version);
+  assert.match(neck.version, /^upper-body-neck-v6-/);
+  assert.match(shoulder.version, /^upper-body-shoulder-v6-/);
+  assert.notEqual(scoreSettingsVersion('neck', { ...NECK_WEIGHTS, headForward: 0.5 }, NECK_LIMITS), neck.version);
 });

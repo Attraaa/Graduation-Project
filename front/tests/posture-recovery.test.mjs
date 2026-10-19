@@ -94,17 +94,17 @@ test('a brief apparent return to reference cannot raise the score; a stable fron
   assert.ok(stable.evaluations.every(state => state.currentScore === 100));
 });
 
-test('shoulder elevation and lowering use the same relative deviation and greater vertical sensitivity', () => {
+test('small shoulder elevation and lowering share a relaxed tolerance', () => {
   for (const shoulderY of [.45, .55]) {
     const sample = advanceObservation(createObservation(), reference, frame(0, { span: 200, earY: .25, shoulderY }));
     close(sample.delta.shoulderShrug, .1);
-    close(scorePosture(sample.delta, shoulder).score, 95);
+    close(scorePosture(sample.delta, shoulder).score, 100);
   }
   const translated = advanceObservation(createObservation(), reference, frame(0, { span: 200, earY: .25, translateY: .1 }));
   close(translated.delta.shoulderShrug, 0);
   close(scorePosture(translated.delta, shoulder).score, 100);
-  const tilted = { ...translated.delta, shoulderTilt: .1 };
-  close(scorePosture(tilted, shoulder).deviation, .07);
+  const tilted = { ...translated.delta, shoulderTilt: .05 };
+  close(scorePosture(tilted, shoulder).deviation, .035);
 });
 
 test('turning intervals remain excluded from persisted scores and old policy records survive', () => {
@@ -120,15 +120,15 @@ test('turning intervals remain excluded from persisted scores and old policy rec
   }
   const db = new MemoryRecords();
   {
-    const old = sampleBatch(); old.record.scorePolicyVersion = 'upper-body-neck-v2-old'; db.write(old);
+    const old = sampleBatch(); old.record.scorePolicyVersion = 'upper-body-neck-v3-old'; db.write(old);
     captures.forEach((capture, index) => {
       capture.finish(10000); db.write(capture.batch(0));
       const stored = db.detail('demo', capture.record.id).record;
       for (const field of ['validMs', 'scoreTimeSum', 'deviationMs', 'deviationEpisodeCount', 'longestContinuousMs'])
         close(stored[field], latest.evaluations[index][field]);
       assert.ok(stored.validMs < stored.runMs);
-      assert.match(stored.scorePolicyVersion, /-v3-/);
+      assert.match(stored.scorePolicyVersion, /-v6-/);
     });
-    assert.equal(db.detail('demo', old.record.id).record.scorePolicyVersion, 'upper-body-neck-v2-old');
+    assert.equal(db.detail('demo', old.record.id).record.scorePolicyVersion, 'upper-body-neck-v3-old');
   }
 });

@@ -47,8 +47,9 @@ test('upper-body paired scores persist independently and preserve earlier policy
     landmarks[0] = { x: 0.5, y: 0.25, visibility: 1 };
     landmarks[7] = { x: changed ? 0.65 : 0.6, y: 0.25, visibility: 1 };
     landmarks[8] = { x: changed ? 0.35 : 0.4, y: 0.25, visibility: 1 };
-    landmarks[11] = { x: 0.75, y: changed ? 0.55 : 0.5, visibility: 1 };
-    landmarks[12] = { x: 0.25, y: changed ? 0.45 : 0.5, visibility: 1 };
+    // Moderate tilt keeps the shoulder score above zero, unlike the strongly extended neck.
+    landmarks[11] = { x: 0.75, y: changed ? 0.53 : 0.5, visibility: 1 };
+    landmarks[12] = { x: 0.25, y: changed ? 0.47 : 0.5, visibility: 1 };
     return { landmarks, widthPx: 1000, heightPx: 1000, sourceId: 'paired-camera', timestampMs: at };
   };
   let calibration = createCalibration();

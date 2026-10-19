@@ -1,0 +1,1364 @@
+{
+  "source": "https://zenodo.org/records/14230872",
+  "license": "CC-BY-4.0",
+  "md5": "7efbc94d653acf32eefecec3ff26d6c6",
+  "rows": 4794,
+  "columns": 102,
+  "subjects": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13
+  ],
+  "features": [
+    "abs_torso_x",
+    "torso_y",
+    "torso_z",
+    "abs_head_x",
+    "head_y",
+    "head_z",
+    "abs_shoulder_y"
+  ],
+  "classes": [
+    "upright",
+    "forward",
+    "backward",
+    "lateral"
+  ],
+  "method": "fixed 7-16-4 tanh MLP, leave-one-participant-out, seed 20261017, 600 Adam steps",
+  "all": {
+    "n": 4794,
+    "coverage": 1.0,
+    "accuracy": 0.9785148101793909,
+    "balanced_accuracy": 0.9779916393854851,
+    "recall": {
+      "upright": 0.9721362229102167,
+      "forward": 0.9920927780706379,
+      "backward": 0.997737556561086,
+      "lateral": 0.95
+    },
+    "confusion": [
+      [
+        1570,
+        5,
+        30,
+        10
+      ],
+      [
+        12,
+        1882,
+        0,
+        3
+      ],
+      [
+        1,
+        0,
+        441,
+        0
+      ],
+      [
+        29,
+        10,
+        3,
+        798
+      ]
+    ]
+  },
+  "accepted": {
+    "n": 4239,
+    "coverage": 0.8842302878598248,
+    "accuracy": 0.9957537154989384,
+    "balanced_accuracy": 0.9946287628275807,
+    "recall": {
+      "upright": 0.9985261606484893,
+      "forward": 0.999418942475305,
+      "backward": 1.0,
+      "lateral": 0.9805699481865285
+    },
+    "confusion": [
+      [
+        1355,
+        0,
+        1,
+        1
+      ],
+      [
+        0,
+        1720,
+        0,
+        1
+      ],
+      [
+        0,
+        0,
+        389,
+        0
+      ],
+      [
+        7,
+        8,
+        0,
+        757
+      ]
+    ]
+  },
+  "folds": [
+    {
+      "subject": 1,
+      "train_subjects": [
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13
+      ],
+      "all": {
+        "n": 540,
+        "coverage": 1.0,
+        "accuracy": 0.9740740740740741,
+        "balanced_accuracy": 0.9705402405185566,
+        "recall": {
+          "upright": 0.9901477832512315,
+          "forward": 0.9938650306748467,
+          "backward": 0.9814814814814815,
+          "lateral": 0.9166666666666666
+        },
+        "confusion": [
+          [
+            201,
+            0,
+            2,
+            0
+          ],
+          [
+            1,
+            162,
+            0,
+            0
+          ],
+          [
+            1,
+            0,
+            53,
+            0
+          ],
+          [
+            0,
+            10,
+            0,
+            110
+          ]
+        ]
+      },
+      "accepted": {
+        "n": 483,
+        "coverage": 0.8944444444444445,
+        "accuracy": 0.9813664596273292,
+        "balanced_accuracy": 0.9801587301587301,
+        "recall": {
+          "upright": 0.9947089947089947,
+          "forward": 1.0,
+          "backward": 1.0,
+          "lateral": 0.9259259259259259
+        },
+        "confusion": [
+          [
+            188,
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            144,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            42,
+            0
+          ],
+          [
+            0,
+            8,
+            0,
+            100
+          ]
+        ]
+      }
+    },
+    {
+      "subject": 2,
+      "train_subjects": [
+        1,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13
+      ],
+      "all": {
+        "n": 450,
+        "coverage": 1.0,
+        "accuracy": 0.9644444444444444,
+        "balanced_accuracy": 0.9795446407257102,
+        "recall": {
+          "upright": 0.9533898305084746,
+          "forward": 0.9647887323943662,
+          "backward": 1.0,
+          "lateral": 1.0
+        },
+        "confusion": [
+          [
+            225,
+            1,
+            0,
+            10
+          ],
+          [
+            2,
+            137,
+            0,
+            3
+          ],
+          [
+            0,
+            0,
+            12,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            60
+          ]
+        ]
+      },
+      "accepted": {
+        "n": 365,
+        "coverage": 0.8111111111111111,
+        "accuracy": 0.9945205479452055,
+        "balanced_accuracy": 0.9965054913707032,
+        "recall": {
+          "upright": 0.9941520467836257,
+          "forward": 0.991869918699187,
+          "backward": 1.0,
+          "lateral": 1.0
+        },
+        "confusion": [
+          [
+            170,
+            0,
+            0,
+            1
+          ],
+          [
+            0,
+            122,
+            0,
+            1
+          ],
+          [
+            0,
+            0,
+            11,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            60
+          ]
+        ]
+      }
+    },
+    {
+      "subject": 3,
+      "train_subjects": [
+        1,
+        2,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13
+      ],
+      "all": {
+        "n": 480,
+        "coverage": 1.0,
+        "accuracy": 0.9916666666666667,
+        "balanced_accuracy": 0.9940828402366864,
+        "recall": {
+          "upright": 0.9763313609467456,
+          "forward": 1.0,
+          "backward": 1.0,
+          "lateral": 1.0
+        },
+        "confusion": [
+          [
+            165,
+            0,
+            4,
+            0
+          ],
+          [
+            0,
+            240,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            11,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            60
+          ]
+        ]
+      },
+      "accepted": {
+        "n": 450,
+        "coverage": 0.9375,
+        "accuracy": 1.0,
+        "balanced_accuracy": 1.0,
+        "recall": {
+          "upright": 1.0,
+          "forward": 1.0,
+          "backward": 1.0,
+          "lateral": 1.0
+        },
+        "confusion": [
+          [
+            140,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            240,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            10,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            60
+          ]
+        ]
+      }
+    },
+    {
+      "subject": 4,
+      "train_subjects": [
+        1,
+        2,
+        3,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13
+      ],
+      "all": {
+        "n": 480,
+        "coverage": 1.0,
+        "accuracy": 0.975,
+        "balanced_accuracy": 0.9826800232288038,
+        "recall": {
+          "upright": 0.9404761904761905,
+          "forward": 0.9902439024390244,
+          "backward": 1.0,
+          "lateral": 1.0
+        },
+        "confusion": [
+          [
+            158,
+            1,
+            9,
+            0
+          ],
+          [
+            2,
+            203,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            47,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            60
+          ]
+        ]
+      },
+      "accepted": {
+        "n": 384,
+        "coverage": 0.8,
+        "accuracy": 1.0,
+        "balanced_accuracy": 1.0,
+        "recall": {
+          "upright": 1.0,
+          "forward": 1.0,
+          "backward": 1.0,
+          "lateral": 1.0
+        },
+        "confusion": [
+          [
+            121,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            178,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            35,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            50
+          ]
+        ]
+      }
+    },
+    {
+      "subject": 5,
+      "train_subjects": [
+        1,
+        2,
+        3,
+        4,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13
+      ],
+      "all": {
+        "n": 444,
+        "coverage": 1.0,
+        "accuracy": 0.9954954954954955,
+        "balanced_accuracy": 0.9962641916936636,
+        "recall": {
+          "upright": 0.9929078014184397,
+          "forward": 0.9958847736625515,
+          "backward": null,
+          "lateral": 1.0
+        },
+        "confusion": [
+          [
+            140,
+            1,
+            0,
+            0
+          ],
+          [
+            1,
+            242,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            60
+          ]
+        ]
+      },
+      "accepted": {
+        "n": 410,
+        "coverage": 0.9234234234234234,
+        "accuracy": 1.0,
+        "balanced_accuracy": 1.0,
+        "recall": {
+          "upright": 1.0,
+          "forward": 1.0,
+          "backward": null,
+          "lateral": 1.0
+        },
+        "confusion": [
+          [
+            128,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            222,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            60
+          ]
+        ]
+      }
+    },
+    {
+      "subject": 6,
+      "train_subjects": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13
+      ],
+      "all": {
+        "n": 480,
+        "coverage": 1.0,
+        "accuracy": 0.9875,
+        "balanced_accuracy": 0.9936113163150839,
+        "recall": {
+          "upright": 0.9923664122137404,
+          "forward": 0.982078853046595,
+          "backward": 1.0,
+          "lateral": 1.0
+        },
+        "confusion": [
+          [
+            130,
+            0,
+            1,
+            0
+          ],
+          [
+            5,
+            274,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            10,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            60
+          ]
+        ]
+      },
+      "accepted": {
+        "n": 413,
+        "coverage": 0.8604166666666667,
+        "accuracy": 1.0,
+        "balanced_accuracy": 1.0,
+        "recall": {
+          "upright": 1.0,
+          "forward": 1.0,
+          "backward": 1.0,
+          "lateral": 1.0
+        },
+        "confusion": [
+          [
+            110,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            235,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            8,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            60
+          ]
+        ]
+      }
+    },
+    {
+      "subject": 7,
+      "train_subjects": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13
+      ],
+      "all": {
+        "n": 300,
+        "coverage": 1.0,
+        "accuracy": 0.99,
+        "balanced_accuracy": 0.985,
+        "recall": {
+          "upright": 0.94,
+          "forward": 1.0,
+          "backward": 1.0,
+          "lateral": 1.0
+        },
+        "confusion": [
+          [
+            47,
+            0,
+            3,
+            0
+          ],
+          [
+            0,
+            144,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            46,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            60
+          ]
+        ]
+      },
+      "accepted": {
+        "n": 236,
+        "coverage": 0.7866666666666666,
+        "accuracy": 1.0,
+        "balanced_accuracy": 1.0,
+        "recall": {
+          "upright": 1.0,
+          "forward": 1.0,
+          "backward": 1.0,
+          "lateral": 1.0
+        },
+        "confusion": [
+          [
+            27,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            120,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            29,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            60
+          ]
+        ]
+      }
+    },
+    {
+      "subject": 8,
+      "train_subjects": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        9,
+        10,
+        11,
+        12,
+        13
+      ],
+      "all": {
+        "n": 270,
+        "coverage": 1.0,
+        "accuracy": 0.9962962962962963,
+        "balanced_accuracy": 0.9959016393442623,
+        "recall": {
+          "upright": 0.9836065573770492,
+          "forward": 1.0,
+          "backward": 1.0,
+          "lateral": 1.0
+        },
+        "confusion": [
+          [
+            60,
+            1,
+            0,
+            0
+          ],
+          [
+            0,
+            148,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            60
+          ]
+        ]
+      },
+      "accepted": {
+        "n": 257,
+        "coverage": 0.9518518518518518,
+        "accuracy": 1.0,
+        "balanced_accuracy": 1.0,
+        "recall": {
+          "upright": 1.0,
+          "forward": 1.0,
+          "backward": 1.0,
+          "lateral": 1.0
+        },
+        "confusion": [
+          [
+            52,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            144,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            60
+          ]
+        ]
+      }
+    },
+    {
+      "subject": 9,
+      "train_subjects": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        10,
+        11,
+        12,
+        13
+      ],
+      "all": {
+        "n": 270,
+        "coverage": 1.0,
+        "accuracy": 0.9888888888888889,
+        "balanced_accuracy": 0.9929906542056075,
+        "recall": {
+          "upright": 0.9719626168224299,
+          "forward": 1.0,
+          "backward": 1.0,
+          "lateral": 1.0
+        },
+        "confusion": [
+          [
+            104,
+            0,
+            3,
+            0
+          ],
+          [
+            0,
+            62,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            41,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            60
+          ]
+        ]
+      },
+      "accepted": {
+        "n": 252,
+        "coverage": 0.9333333333333333,
+        "accuracy": 1.0,
+        "balanced_accuracy": 1.0,
+        "recall": {
+          "upright": 1.0,
+          "forward": 1.0,
+          "backward": 1.0,
+          "lateral": 1.0
+        },
+        "confusion": [
+          [
+            97,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            57,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            38,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            60
+          ]
+        ]
+      }
+    },
+    {
+      "subject": 10,
+      "train_subjects": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        11,
+        12,
+        13
+      ],
+      "all": {
+        "n": 270,
+        "coverage": 1.0,
+        "accuracy": 0.9888888888888889,
+        "balanced_accuracy": 0.9921052631578947,
+        "recall": {
+          "upright": 0.968421052631579,
+          "forward": 1.0,
+          "backward": 1.0,
+          "lateral": 1.0
+        },
+        "confusion": [
+          [
+            92,
+            1,
+            2,
+            0
+          ],
+          [
+            0,
+            38,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            77,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            60
+          ]
+        ]
+      },
+      "accepted": {
+        "n": 247,
+        "coverage": 0.9148148148148149,
+        "accuracy": 1.0,
+        "balanced_accuracy": 1.0,
+        "recall": {
+          "upright": 1.0,
+          "forward": 1.0,
+          "backward": 1.0,
+          "lateral": 1.0
+        },
+        "confusion": [
+          [
+            86,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            36,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            74,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            51
+          ]
+        ]
+      }
+    },
+    {
+      "subject": 11,
+      "train_subjects": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        12,
+        13
+      ],
+      "all": {
+        "n": 270,
+        "coverage": 1.0,
+        "accuracy": 0.9925925925925926,
+        "balanced_accuracy": 0.9950256107171,
+        "recall": {
+          "upright": 0.9907407407407407,
+          "forward": 0.9893617021276596,
+          "backward": 1.0,
+          "lateral": 1.0
+        },
+        "confusion": [
+          [
+            107,
+            0,
+            1,
+            0
+          ],
+          [
+            1,
+            93,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            8,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            60
+          ]
+        ]
+      },
+      "accepted": {
+        "n": 253,
+        "coverage": 0.937037037037037,
+        "accuracy": 1.0,
+        "balanced_accuracy": 1.0,
+        "recall": {
+          "upright": 1.0,
+          "forward": 1.0,
+          "backward": 1.0,
+          "lateral": 1.0
+        },
+        "confusion": [
+          [
+            103,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            84,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            6,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            60
+          ]
+        ]
+      }
+    },
+    {
+      "subject": 12,
+      "train_subjects": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        13
+      ],
+      "all": {
+        "n": 270,
+        "coverage": 1.0,
+        "accuracy": 0.8851851851851852,
+        "balanced_accuracy": 0.8736721611721612,
+        "recall": {
+          "upright": 0.978021978021978,
+          "forward": 1.0,
+          "backward": 1.0,
+          "lateral": 0.5166666666666667
+        },
+        "confusion": [
+          [
+            89,
+            0,
+            2,
+            0
+          ],
+          [
+            0,
+            60,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            59,
+            0
+          ],
+          [
+            29,
+            0,
+            0,
+            31
+          ]
+        ]
+      },
+      "accepted": {
+        "n": 241,
+        "coverage": 0.8925925925925926,
+        "accuracy": 0.970954356846473,
+        "balanced_accuracy": 0.9527027027027027,
+        "recall": {
+          "upright": 1.0,
+          "forward": 1.0,
+          "backward": 1.0,
+          "lateral": 0.8108108108108109
+        },
+        "confusion": [
+          [
+            85,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            60,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            59,
+            0
+          ],
+          [
+            7,
+            0,
+            0,
+            30
+          ]
+        ]
+      }
+    },
+    {
+      "subject": 13,
+      "train_subjects": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12
+      ],
+      "all": {
+        "n": 270,
+        "coverage": 1.0,
+        "accuracy": 0.9777777777777777,
+        "balanced_accuracy": 0.9738636363636364,
+        "recall": {
+          "upright": 0.9454545454545454,
+          "forward": 1.0,
+          "backward": 1.0,
+          "lateral": 0.95
+        },
+        "confusion": [
+          [
+            52,
+            0,
+            3,
+            0
+          ],
+          [
+            0,
+            79,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            76,
+            0
+          ],
+          [
+            0,
+            0,
+            3,
+            57
+          ]
+        ]
+      },
+      "accepted": {
+        "n": 248,
+        "coverage": 0.9185185185185185,
+        "accuracy": 1.0,
+        "balanced_accuracy": 1.0,
+        "recall": {
+          "upright": 1.0,
+          "forward": 1.0,
+          "backward": 1.0,
+          "lateral": 1.0
+        },
+        "confusion": [
+          [
+            48,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            78,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            76,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            46
+          ]
+        ]
+      }
+    }
+  ],
+  "majority_baseline": {
+    "n": 4794,
+    "coverage": 1.0,
+    "accuracy": 0.3957029620358782,
+    "balanced_accuracy": 0.25,
+    "recall": {
+      "upright": 0.0,
+      "forward": 1.0,
+      "backward": 0.0,
+      "lateral": 0.0
+    },
+    "confusion": [
+      [
+        0,
+        1615,
+        0,
+        0
+      ],
+      [
+        0,
+        1897,
+        0,
+        0
+      ],
+      [
+        0,
+        442,
+        0,
+        0
+      ],
+      [
+        0,
+        840,
+        0,
+        0
+      ]
+    ]
+  },
+  "limitation": "LOSO on MultiPosture only. No Moti webcam, visibility, temporal, CVA or clinical validation. Softmax is not calibrated correctness probability."
+}
