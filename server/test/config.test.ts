@@ -18,6 +18,12 @@ test('startup rejects invalid ports and malformed token expiration', () => {
   assert.throws(() => readConfig({ ...valid, JWT_EXPIRES_IN: '0d' }), /JWT_EXPIRES_IN/);
 });
 
+test('the Anthropic API key is optional and trimmed; a blank value turns the AI review off', () => {
+  assert.equal(readConfig(valid).anthropicApiKey, null);
+  assert.equal(readConfig({ ...valid, ANTHROPIC_API_KEY: '   ' }).anthropicApiKey, null);
+  assert.equal(readConfig({ ...valid, ANTHROPIC_API_KEY: ' sk-ant-test\n' }).anthropicApiKey, 'sk-ant-test');
+});
+
 test('explicit setup values produce a usable runtime configuration', () => {
   const config = readConfig({ ...valid, PORT: '4100', JWT_EXPIRES_IN: '30m' });
   assert.equal(config.port, 4100);

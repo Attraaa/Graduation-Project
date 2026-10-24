@@ -1,6 +1,6 @@
 import type React from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Home, BarChart2, Settings, LogOut, CalendarDays } from 'lucide-react';
+import { Home, BarChart2, Settings, LogOut, CalendarDays, Sparkles } from 'lucide-react';
 import { logoutUser } from '../utils/authStore';
 import { useDialog } from './dialog/useDialog';
 
@@ -13,6 +13,7 @@ const Sidebar = () => {
     { name: '학습', path: '/dashboard', icon: <Home size={22} /> },
     { name: '통계', path: '/statistics', icon: <BarChart2 size={22} /> },
     { name: '학습이력', path: '/history', icon: <CalendarDays size={22} /> },
+    { name: 'AI 총평', path: '/ai-review', icon: <Sparkles size={22} /> },
     { name: '설정', path: '/settings', icon: <Settings size={22} /> },
   ];
 

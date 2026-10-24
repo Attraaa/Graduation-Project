@@ -8,6 +8,8 @@ export interface ServerConfig {
     database: string;
   };
   jwt: { secret: string; expiresIn: number };
+  /** Key for the AI review (Claude). Optional: without it only /api/ai answers 503. */
+  anthropicApiKey: string | null;
 }
 
 /** Validate before listening so setup errors cannot silently select an unsafe secret. */
@@ -40,5 +42,6 @@ export function readConfig(env: NodeJS.ProcessEnv): ServerConfig {
       database: env.DB_NAME ?? 'moti',
     },
     jwt: { secret, expiresIn },
+    anthropicApiKey: env.ANTHROPIC_API_KEY?.trim() || null,
   };
 }

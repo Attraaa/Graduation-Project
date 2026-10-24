@@ -92,7 +92,9 @@ approval boundary, an unsafe operation, or an unresolved conflict.
   `/api/records` (server URL: `front/.env` `VITE_MOTI_API_URL`); read
   `database/README.md` for its contract. Server builds bundle `database/contracts.ts`
   and `keyboard.ts`, so deploy them with `server/`. AI/medical sections remain
-  labeled examples; AI summary, offline sync, and HTTPS are not implemented.
+  labeled examples. The AI review menu (`/ai-review`, server `/api/ai/review`) calls
+  Claude with `ANTHROPIC_API_KEY` from `server/.env` only; read `docs/ai-review.md`.
+  BYOK, offline sync, and HTTPS are not implemented.
   Do not present demo values as measurements.
 - Reuse `src/styles/tokens.css`, `components/layout`, and the shared UI components.
   Keep camera lifecycle, pure measurement rules, HTTP routes, and database

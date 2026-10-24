@@ -283,3 +283,11 @@ Headless Edge의 가상 카메라 두 대·분석/API 대역으로 홈 시작, �
 설정 화면의 상체 카드에 **자세 무너짐 민감도**(10–100%, 기본 50%), 안구 카드에 **깜빡임 민감도**(낮음/보통/높음, 기본 보통)를 두고 `features/settings/preferences.ts`가 이 기기에 저장합니다. `MonitoringProvider`가 상체 시작 때 두 값을 읽어 그 실행 동안 고정하고 `PostureMonitor`·`EyeMonitor`·안구 기록기에 같은 값을 전달합니다. 위 10-10 병합 기록의 "보통 고정"은 이 연결로 대체되었습니다. 상체 습관 정책 ID는 50%면 기존 그대로, 다른 값은 `weighted-reference-deviation-v3:s<값>`입니다([evaluation.md](evaluation.md)). 예전 `postureAI.collapseSensitivity` 값은 측정에 쓰인 적이 없어 읽지 않습니다.
 
 macOS의 프로젝트 도구(`scripts/moti.sh check`)에서 프론트 타입·린트·206개 테스트, 서버 빌드·44개 테스트를 통과했습니다. 실제 MySQL 1개는 `MOTI_TEST_MYSQL_URL` 부재로 제외했고, Python 단계는 잠금 파일이 Windows 전용이라 이 환경에서 실행하지 못했습니다. `npm run build -- --configLoader runner`의 UI/Electron main/preload 빌드도 통과했습니다. 실제 카메라로 설정값을 바꿔 시작한 뒤 저장 요청의 정책 ID를 확인하는 화면 검증은 하지 않았습니다.
+
+## 2026-10-17 AI 총평 메뉴
+
+사이드바에 **AI 총평**(`/ai-review`)을 추가했습니다. 통계와 같은 기간 집계를 보내기 전에 화면에 모두 보여 줍니다. 사용자가 누르면 서버 `POST /api/ai/review`가 `server/.env`의 `ANTHROPIC_API_KEY`로 Claude(`claude-opus-5-5`)를 호출합니다. 서버 의존성 `@anthropic-ai/sdk` 0.133.0을 정확히 고정해 추가했습니다. 키가 없으면 서버는 그대로 시작하고 이 경로만 503을 돌려줍니다. 흐름과 키 설정은 [ai-review.md](ai-review.md)를 따릅니다.
+
+macOS의 `scripts/moti.sh check`에서 프론트 타입·린트·211개 테스트와 서버 빌드·52개 테스트를 통과했습니다. 실제 MySQL 1개는 `MOTI_TEST_MYSQL_URL` 부재로 제외했고, Python 단계는 잠금 파일이 Windows 전용이라 실행하지 못했습니다. `npm run build -- --configLoader runner`도 통과했습니다. 자동 검사는 SDK 클라이언트를 대역으로 바꿔 요청 형태, 거절·잘린 응답, SDK 오류 변환, 입력 검사, 계정당 제한을 확인합니다.
+
+화면은 가짜 API 서버와 headless Chrome으로 1440px 라이트·다크와 390px 모바일에서 확인했습니다. 메뉴 활성 표시, 7/30일 전환, 생성 중·완료 상태가 통계 화면과 같은 토큰·카드로 보였습니다. 화면이 보낸 요청 본문은 서버 입력 검사를 그대로 통과했습니다. 실제 키로 Claude를 호출한 결과와 배포 서버 설정은 확인하지 않았습니다.

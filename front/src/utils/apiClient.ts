@@ -17,7 +17,7 @@ export function readSession(): Session | null {
 export const writeSession = (session: Session) => localStorage.setItem(SESSION_KEY, JSON.stringify(session));
 export const clearSession = () => localStorage.removeItem(SESSION_KEY);
 
-export async function apiRequest<T>(path: string, options: { method?: string; body?: unknown } = {}): Promise<T> {
+export async function apiRequest<T>(path: string, options: { method?: string; body?: unknown; timeoutMs?: number } = {}): Promise<T> {
   const token = readSession()?.token;
   let response: Response;
   try {
@@ -28,7 +28,7 @@ export async function apiRequest<T>(path: string, options: { method?: string; bo
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
       body: options.body === undefined ? undefined : JSON.stringify(options.body),
-      signal: AbortSignal.timeout(15_000),
+      signal: AbortSignal.timeout(options.timeoutMs ?? 15_000),
     });
   } catch {
     throw new Error('서버에 연결할 수 없습니다. 네트워크 상태를 확인해 주세요.');

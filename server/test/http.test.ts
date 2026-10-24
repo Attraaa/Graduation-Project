@@ -43,7 +43,7 @@ test('health is liveness only and does not require a provisioned database', asyn
 
 test('protected session and statistics routes reject missing authentication before storage', async (t) => {
   const app = await startApp(t);
-  for (const path of ['/api/sessions', '/api/statistics/today', '/api/auth/me', '/api/auth/me/settings', '/api/feedback']) {
+  for (const path of ['/api/sessions', '/api/statistics/today', '/api/auth/me', '/api/auth/me/settings', '/api/feedback', '/api/ai/review']) {
     const response = await app.request(path, { headers: { authorization: '' } });
     assert.equal(response.status, 401);
   }
