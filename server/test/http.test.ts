@@ -4,19 +4,19 @@ import test, { type TestContext } from 'node:test';
 import type { AddressInfo } from 'node:net';
 import type { Pool } from 'mysql2/promise';
 import { createApp } from '../src/app.js';
-import { createAuth } from '../src/auth.js';
+import { createAuth, hashPassword } from '../src/auth.js';
 import { readConfig } from '../src/config.js';
 
 const config = readConfig({ JWT_SECRET: 'test-only-secret-012345678901234567890' });
 const token = createAuth(config.jwt).signToken({ userId: 1, username: 'tester' });
 
-async function startApp(t: TestContext) {
+async function startApp(t: TestContext, database?: Pool) {
   let queries = 0;
   const unavailableDatabase = {
     query: async () => { queries += 1; throw new Error('PRIVATE_DATABASE_DETAILS'); },
     getConnection: async () => { queries += 1; throw new Error('PRIVATE_DATABASE_DETAILS'); },
   } as unknown as Pool;
-  const server = createApp(config, unavailableDatabase).listen(0, '127.0.0.1');
+  const server = createApp(config, database ?? unavailableDatabase).listen(0, '127.0.0.1');
   await once(server, 'listening');
   t.after(async () => {
     server.closeAllConnections();
@@ -80,6 +80,27 @@ test('malformed inputs return 400 without reaching the database', async (t) => {
     assert.equal((await app.request(path)).status, 400, path);
   }
   assert.equal(app.queries(), 0);
+});
+
+test('a wrong current password is a 400, because the app treats any 401 as an expired login', async (t) => {
+  const passwordHash = await hashPassword('current-password');
+  const updates: unknown[] = [];
+  const database = {
+    query: async (sql: string, params: unknown[]) => {
+      if (sql.startsWith('UPDATE')) { updates.push(params); return [{ affectedRows: 1 }]; }
+      return [[{ password_hash: passwordHash }]];
+    },
+  } as unknown as Pool;
+  const app = await startApp(t, database);
+  const change = (currentPassword: string) => app.request('/api/auth/me/password', {
+    method: 'PUT', body: JSON.stringify({ currentPassword, newPassword: 'next-password' }),
+  });
+  const wrong = await change('wrong-password');
+  assert.equal(wrong.status, 400);
+  assert.deepEqual(await wrong.json(), { message: '현재 비밀번호를 확인해 주세요.' });
+  assert.equal(updates.length, 0);
+  assert.equal((await change('current-password')).status, 200);
+  assert.equal(updates.length, 1);
 });
 
 test('invalid JSON uses the common client error response', async (t) => {

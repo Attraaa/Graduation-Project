@@ -98,7 +98,8 @@ export function createAuthRouter(pool: Pool, auth: Auth) {
       'SELECT password_hash FROM users WHERE id = ?', [req.user!.userId],
     );
     if (!rows[0] || !(await comparePassword(currentPassword, rows[0].password_hash))) {
-      throw new HttpError(401, '현재 비밀번호를 확인해 주세요.');
+      // Not 401: the app treats a 401 with a token as an expired login and logs out.
+      throw new HttpError(400, '현재 비밀번호를 확인해 주세요.');
     }
     const hash = await hashPassword(newPassword);
     await pool.query('UPDATE users SET password_hash = ? WHERE id = ?', [hash, req.user!.userId]);
