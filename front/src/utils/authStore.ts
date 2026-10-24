@@ -29,6 +29,23 @@ export const loginUser = async (username: string, password: string): Promise<Res
 
 export const logoutUser = () => clearSession();
 
+/**
+ * Logs out only after running measurements have stopped and their last batches are saved with the current token.
+ * If that save fails, confirmUnsaved decides: false keeps the login (and the retry button), true drops the unsaved records.
+ */
+export const logoutAfterSaving = async (confirmUnsaved: () => Promise<boolean>) => {
+  const owner = getCurrentUser()?.id;
+  const { discardUnsavedRecordings, stopAndSaveRecordings } = await import('../features/records/recording');
+  try {
+    await stopAndSaveRecordings();
+  } catch {
+    if (!await confirmUnsaved()) return false;
+    if (owner) discardUnsavedRecordings(owner);
+  }
+  logoutUser();
+  return true;
+};
+
 export const updateCurrentUser = async (nickname: string): Promise<Result> => {
   const session = readSession();
   if (!session) return { ok: false, message: '로그인이 필요합니다.' };
