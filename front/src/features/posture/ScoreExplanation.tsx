@@ -50,7 +50,6 @@ function Part({ title, policy, result, delta }: { title: string; policy: ScorePo
       <tr className="border-t border-border font-bold"><td className="py-2" colSpan={3}>가중 편차 합계</td><td>{valid ? percent(raw.deviation!) : '—'}</td></tr>
     </tbody></table></div>
     <p className="text-sm text-heading">{valid ? protectionText(result) : '유효한 관측을 기다리고 있습니다.'}</p>
-    {policy.mode === 'turtle' && valid && <p className="text-xs text-muted">큰 목 전진 연속 {(result.sustained.continuousMs / 1000).toFixed(1)}초 · 지속 추가 감점 {result.sustained.penaltyPoints.toFixed(1)}점</p>}
     <p className="text-xs text-muted">이탈 집계: 편차 {percent(habit.enterDelta)} 이상 {habit.minDurationMs / 1000}초 지속, {percent(habit.exitDelta)} 이하 복귀. {valid ? ({ unknown: '미확인', 'near-reference': '진입 기준 아래', pending: '지속 시간 확인 중', away: '지속 이탈 확인' }[result.deviationState]) : '현재 보류'}</p>
     <p className="break-all text-xs text-muted">정책 {result.scorePolicyVersion}</p>
   </article>;

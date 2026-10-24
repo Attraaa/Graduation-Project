@@ -9,7 +9,7 @@ import { shoulderScorePolicy } from './modes/shoulder.ts';
 export type EvaluationSummary = Pick<EvaluationState, 'scorePolicyVersion' | 'habitPolicyVersion'
   | 'currentScore' | 'currentDeviation' | 'averageScore' | 'validMs' | 'continuousMs'
   | 'longestContinuousMs' | 'deviationEpisodeCount' | 'deviationMs' | 'deviationState' | 'protection'
-  | 'rawScore' | 'staticDeviationMs' | 'nearReferenceMs' | 'pendingMs' | 'sustained'>;
+  | 'rawScore' | 'staticDeviationMs' | 'nearReferenceMs' | 'pendingMs'>;
 
 /** Camera-independent view contract. Null is unavailable; a measured zero is still a score. */
 export interface MonitorSnapshot {

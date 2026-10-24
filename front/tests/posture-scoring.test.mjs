@@ -67,7 +67,7 @@ test('score decreases monotonically within zero and one hundred', () => {
   }
 });
 test('tuning weights creates a different persisted policy version', () => {
-  assert.match(neck.version, /^upper-body-neck-v6-/);
+  assert.match(neck.version, /^upper-body-neck-v7-/);
   assert.match(shoulder.version, /^upper-body-shoulder-v6-/);
   assert.notEqual(scoreSettingsVersion('neck', { ...NECK_WEIGHTS, headForward: 0.5 }, NECK_LIMITS), neck.version);
 });

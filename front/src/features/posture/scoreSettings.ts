@@ -19,14 +19,6 @@ export const SHOULDER_LIMITS = Object.freeze({ fullCreditDelta: 0.04, zeroCredit
 export const SHOULDER_VERTICAL_GAIN = 0.8;
 // 기준 대비 화면상 양어깨 선의 각도. 작은 변화는 기존 선형 감도를 유지합니다.
 export const SHOULDER_CURVE = Object.freeze({ kneeDegrees: 4, doublingDegrees: 3, extraDeviation: 0.08 });
-// 머리 전진 + 기하 편차가 함께 있을 때 누적합니다. 기본 80점 부근도 포함합니다.
-// 학습 모델 항은 진입 판단에서 제외하며 아주 작은 변화는 여전히 누적하지 않습니다.
-// 값/예시/복귀 계약: docs/posture-score-tuning.md
-export const NECK_SUSTAINED = Object.freeze({
-  minHeadForward: 0.16, minGeometryDeviation: 0.065,
-  recoveryHeadForward: 0.12, recoveryGeometryDeviation: 0.045,
-  delayMs: 5000, pointsPerSecond: 2, recoveryMs: 1000,
-});
 // 코가 양 귀의 중점에서 얼마나 옆으로 벗어났는지 / 귀 폭. 0.15는 회전 각도가 아닙니다.
 // 이 비율을 넘으면 귀 좌표 비교를 믿기 어려워 목·어깨 모두 판정을 보류합니다.
 export const YAW_LIMIT = 0.15;
@@ -62,8 +54,9 @@ export function scoreSettingsVersion(part: 'neck' | 'shoulder', weights: object,
     relativeHead: RELATIVE_HEAD, auxiliaryModel: 'multiposture-trunk-mlp-v1',
     verticalGain: part === 'shoulder' ? SHOULDER_VERTICAL_GAIN : 1,
     shoulderCurve: part === 'shoulder' ? SHOULDER_CURVE : null,
-    sustained: part === 'neck' ? NECK_SUSTAINED : null });
+    // 시간 누적 감점은 없습니다. 어깨 v6의 기존 해시 입력은 유지합니다.
+    sustained: null });
   let hash = 2166136261;
   for (const char of text) hash = Math.imul(hash ^ char.charCodeAt(0), 16777619);
-  return `upper-body-${part}-v6-${(hash >>> 0).toString(36)}`;
+  return `upper-body-${part}-${part === 'neck' ? 'v7' : 'v6'}-${(hash >>> 0).toString(36)}`;
 }
