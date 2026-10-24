@@ -4,6 +4,7 @@ import { emptyTotals } from '../../../../database/contracts';
 import type { RecordMode } from '../../../../database/contracts';
 import { getCurrentUser } from '../../utils/authStore';
 import { recordsApi, recordValue } from './api';
+import { recordsChanged } from './refresh';
 
 export interface CaptureStart { id?: string; mode: RecordMode; scorePolicyVersion: string; habitPolicyVersion: string; at: number; epoch: number }
 export interface CaptureSink { sample(at: number, evaluation: CaptureEvaluation): void; finish(at: number): void }
@@ -36,7 +37,7 @@ async function save(entry: Active) {
         if (!batch) break;
         await recordValue(recordsApi().write(batch));
         entry.collector.acknowledge();
-        if (batch.record.status !== 'running') { active.delete(entry); break; }
+        if (batch.record.status !== 'running') { active.delete(entry); recordsChanged(); break; }
       } while (entry.stopped || entry.collector.hasPending);
       entry.error = null;
       announce('측정 기록이 서버에 저장되었습니다.');

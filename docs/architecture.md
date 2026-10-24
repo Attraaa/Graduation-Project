@@ -66,7 +66,7 @@ Electron 개발 앱의 키보드 모드는 로컬 Python 프로세스를 자동 
 | `front/src/features/posture/evaluation.ts` | 유효 시간 가중 평균·연속 관찰·기준 이탈 구간의 순수 집계 |
 | `front/src/utils/apiClient.ts`, `authStore.ts` | API 주소·JWT 세션 보관·401 처리, 서버 회원가입/로그인/계정 변경 |
 | `database/contracts.ts`, `keyboard.ts`, `eye.ts`, `eyeRecorder.ts`, `recorder.ts`, `aggregation.ts` | 자세·키보드 직렬화 계약·순수 집계. 프론트와 서버가 같은 검증기를 사용 |
-| `front/src/features/records/` | 저장 배치/실패 재시도·HTTP 기록 API·조회 상태·목/어깨 표시 어댑터. AI/의학 예시는 별도 컴포넌트 |
+| `front/src/features/records/` | 저장 배치/실패 재시도·HTTP 기록 API·조회 상태·목/어깨 표시 어댑터. 측정의 마지막 배치가 저장되면 `refresh.ts`가 신호를 보내고 `useRecordQuery`가 열린 화면(홈·통계·학습이력)을 이전 값을 유지한 채 다시 불러옴. AI/의학 예시는 별도 컴포넌트 |
 | `front/src/pages/Statistics.tsx`, `front/src/features/statistics/` | 통계(7/30일, 직전 같은 길이 기간 비교, 상체·키보드·안구 탭). `period.ts`가 세 출처 응답으로 기간 값을 계산하는 순수 함수, `useStatisticsData.ts`가 불러옴. 키보드 탭은 `features/keyboard/KeyboardStatistics.tsx`(계산은 키보드 담당). [설계](superpowers/specs/2026-10-06-stats-history-redesign-design.md) |
 | `front/src/pages/LearningHistory.tsx`, `front/src/features/history/` | 학습이력(주간·월간 달력, 시작일별 기록 줄, 오른쪽 상세, 기록 없는 날). `calendar.ts`가 달력·기록 줄·앞뒤 기록을 계산하고 `currentPolicies.ts`가 "이전 기준"을 판단. 세 모드의 세션 상세를 여기서 봄(키보드는 `KeyboardRecordDetail`) |
 | `front/src/pages/Settings.tsx`, `front/src/features/settings/` | 설정. 대시보드와 같은 카드 격자(계정, 비밀번호, 화면 테마, 알림, 상체·안구·키보드 모드 카드, 데이터 관리). `parts.tsx`가 카드·입력 캡션·구분 버튼·스위치·슬라이더를 제공함. `features/keyboard/KeyboardSettings.tsx`는 기존 UI와 관찰 동작을 유지하며 격자 배치만 맞춤. `preferences.ts`가 모드별 민감도(상체 자세 무너짐 10–100%, 안구 깜빡임 낮음/보통/높음)를 이 기기에 저장하고, `MonitoringProvider`가 상체 실행을 시작할 때 읽어 그 실행의 습관·깜빡임 정책에 고정. 테마·알림도 바꾸는 즉시 저장하며, 알림 값과 경고 점수 기준은 측정에는 쓰이지 않음 |

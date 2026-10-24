@@ -3,6 +3,7 @@ import type { KeyboardBatch, KeyboardCount, KeyboardRecord } from '../../../../d
 import { localDateKey } from '../../../../database/contracts';
 import { recordsApi, recordValue } from '../records/api';
 import { announceRecording, registerRecorder } from '../records/recording';
+import { recordsChanged } from '../records/refresh';
 import { getCurrentUser } from '../../utils/authStore';
 import { ANSI_QWERTY_TOUCH_POLICY_V1 } from './fingerPolicy';
 import type { KeyboardLiveResult } from './runtime';
@@ -46,7 +47,7 @@ async function save(entry: Active): Promise<void> {
         const batch = entry.collector.batch(generation);
         await recordValue(recordsApi().writeKeyboard(batch));
         entry.collector.acknowledge();
-        if (batch.record.status !== 'running') { active.delete(entry); break; }
+        if (batch.record.status !== 'running') { active.delete(entry); recordsChanged(); break; }
       } while (entry.collector.record.status !== 'running');
       entry.error = null; announceRecording('키보드 집계가 서버에 저장되었습니다.');
     } catch (error) {
