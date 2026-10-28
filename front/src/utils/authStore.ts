@@ -56,13 +56,6 @@ export const updateCurrentUser = async (nickname: string): Promise<Result> => {
   } catch (error) { return failure(error); }
 };
 
-export const changePassword = async (currentPassword: string, newPassword: string): Promise<Result> => {
-  try {
-    const { message } = await apiRequest<{ message: string }>('/api/auth/me/password', { method: 'PUT', body: { currentPassword, newPassword } });
-    return { ok: true, message };
-  } catch (error) { return failure(error); }
-};
-
 const messageRequest = async (path: string, method: string, body: unknown, timeoutMs?: number): Promise<Result> => {
   try {
     const { message } = await apiRequest<{ message: string }>(path, { method, body, timeoutMs });
@@ -78,6 +71,10 @@ export const findId = (email: string) => messageRequest('/api/auth/find-id', 'PO
 /** Mails a 6-digit code when the ID and its registered address match. The answer is the same either way. */
 export const requestPasswordReset = (username: string, email: string) =>
   messageRequest('/api/auth/password-reset', 'POST', { username: username.trim(), email: email.trim() }, MAIL_TIMEOUT_MS);
+
+/** Checks the mailed code before the new password is asked for; the code stays valid for resetPassword. */
+export const verifyResetCode = (username: string, code: string) =>
+  messageRequest('/api/auth/password-reset/verify', 'POST', { username: username.trim(), code: code.trim() });
 
 export const resetPassword = (username: string, code: string, newPassword: string) =>
   messageRequest('/api/auth/password-reset/confirm', 'POST', { username: username.trim(), code: code.trim(), newPassword });

@@ -10,7 +10,7 @@ const bundle = await build({ stdin: { contents: "export { default as Settings } 
   bundle: true, write: false, logLevel: 'error', platform: 'node', format: 'cjs', jsx: 'automatic', external: ['react', 'react-dom'] });
 const compiled = { exports: {} };
 new Function('module', 'exports', 'require', bundle.outputFiles[0].text)(compiled, compiled.exports, createRequire(import.meta.url));
-const { Settings, DialogProvider, Segmented, Switch } = compiled.exports;
+const { Settings, DialogProvider, Modal, Segmented, Switch } = compiled.exports;
 const html = (component, props) => renderToStaticMarkup(createElement(component, props));
 const page = stored => {
   globalThis.window = {};
@@ -25,6 +25,13 @@ test('segmented control names its group and marks only the chosen option', () =>
   assert.match(out, /aria-pressed="true"[^>]*>다크</);
 });
 
+test('a settings window is a named modal dialog with a close button', () => {
+  const out = html(Modal, { title: '이메일 변경', onClose() {}, children: '내용' });
+  assert.match(out, /role="dialog" aria-modal="true" aria-label="이메일 변경"/);
+  assert.match(out, /<h2[^>]*>이메일 변경<\/h2><button type="button" aria-label="닫기"/);
+  assert.match(out, />내용<\/section>/);
+});
+
 test('switch exposes its name and state', () => {
   assert.match(html(Switch, { label: '자세 경고 알림', checked: true, onChange() {} }), /role="switch" aria-checked="true" aria-label="자세 경고 알림"/);
   assert.match(html(Switch, { label: '자세 경고 알림', checked: false, onChange() {} }), /aria-checked="false"/);
@@ -35,9 +42,11 @@ test('settings page shows the eight cards with defaults when nothing is stored',
   for (const title of ['계정', '비밀번호 · 이메일', '화면 테마', '알림', '상체 · 자세 기준', '안구 · 깜빡임 기준', '키보드 · 승인 앱 관찰', '데이터 관리']) {
     assert.match(out, new RegExp(`<section aria-label="${title}"`));
   }
-  assert.match(out, /id="settings-email" type="email"/);
-  assert.match(out, />이메일 저장<\/button><button[^>]*>비밀번호 변경</);
+  // Passwords are never typed on the page itself; each change opens a window that checks who is asking.
+  assert.doesNotMatch(out, /type="password"/);
+  assert.match(out, />이메일 변경<\/button><button[^>]*>비밀번호 재설정</);
   // The missing-email notice waits for the server's answer instead of flashing while it loads.
+  assert.match(out, />불러오는 중…</);
   assert.doesNotMatch(out, /등록된 이메일이 없어요/);
   assert.match(out, /aria-pressed="true" aria-label="라이트 테마"/);
   assert.match(out, /aria-pressed="false" aria-label="다크 테마"/);

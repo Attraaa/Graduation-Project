@@ -55,6 +55,15 @@ function memoryDatabase(): Database & { queries: () => number } {
       code.attempts += 1;
       return changed(1);
     }
+    if (sql.startsWith('UPDATE password_reset_codes SET attempts = attempts - 1')) {
+      const code = codes.get(first as number);
+      if (!code || code.attempts <= 0) return changed(0);
+      code.attempts -= 1;
+      return changed(1);
+    }
+    if (sql.startsWith('SELECT user_id FROM password_reset_codes WHERE user_id = ? AND code_hash = ?')) {
+      return [codes.get(first as number)?.hash === second ? [{ user_id: first }] : []];
+    }
     if (sql.startsWith('DELETE FROM password_reset_codes')) {
       if (codes.get(first as number)?.hash !== second) return changed(0);
       codes.delete(first as number);
@@ -152,6 +161,9 @@ test('malformed addresses, codes and passwords are rejected before reading the d
     { code: '1234567', newPassword: 'new-password' }, { code: '123456' }]) {
     assert.equal((await post('/password-reset/confirm', { username: 'member', ...body })).status, 400, JSON.stringify(body));
   }
+  for (const body of [{ code: '12345' }, { code: 'abcdef' }, { code: '1234567' }, {}]) {
+    assert.equal((await post('/password-reset/verify', { username: 'member', ...body })).status, 400, JSON.stringify(body));
+  }
   assert.equal(db.queries(), 0);
 });
 
@@ -239,6 +251,26 @@ for (const [label, open, skip] of backends) {
     assert.equal(await comparePassword('new-password', await db.passwordHash(id)), true);
   });
 
+  test(`${label}: checking the code first keeps it for the new password and gives a right check its attempt back`, { skip }, async t => {
+    const db = await open(t);
+    const id = await db.addUser('member', 'member@example.com');
+    const mail = mailbox();
+    const post = await start(t, db.pool, mail.mailer);
+    await post('/password-reset', { username: 'member', email: 'member@example.com' });
+    const code = mail.code();
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      assert.deepEqual(await post('/password-reset/verify', { username: 'member', code: otherCode(code) }),
+        { status: 400, message: '인증 코드가 맞지 않습니다.' });
+    }
+    // Four misses and a right check leave one attempt, which the confirmation spends.
+    assert.deepEqual(await post('/password-reset/verify', { username: 'member', code }),
+      { status: 200, message: '인증되었습니다. 새 비밀번호를 입력해 주세요.' });
+    assert.equal(await comparePassword('old-password', await db.passwordHash(id)), true);
+    assert.equal((await post('/password-reset/confirm', { username: 'member', code, newPassword: 'new-password' })).status, 200);
+    assert.equal(await comparePassword('new-password', await db.passwordHash(id)), true);
+    assert.deepEqual(await post('/password-reset/verify', { username: 'member', code }), EXPIRED);
+  });
+
   test(`${label}: five wrong codes or an expired code need a new code`, { skip }, async t => {
     const db = await open(t);
     const guessed = await db.addUser('guessed', 'guessed@example.com');
@@ -250,10 +282,12 @@ for (const [label, open, skip] of backends) {
     for (let attempt = 0; attempt < 5; attempt += 1) {
       assert.equal((await post('/password-reset/confirm', { username: 'guessed', code: otherCode(code), newPassword: 'new-password' })).status, 400);
     }
+    assert.deepEqual(await post('/password-reset/verify', { username: 'guessed', code }), EXPIRED);
     assert.deepEqual(await post('/password-reset/confirm', { username: 'guessed', code, newPassword: 'new-password' }), EXPIRED);
     await post('/password-reset', { username: 'late', email: 'late@example.com' });
     const lateCode = mail.code();
     await db.expire(late);
+    assert.deepEqual(await post('/password-reset/verify', { username: 'late', code: lateCode }), EXPIRED);
     assert.deepEqual(await post('/password-reset/confirm', { username: 'late', code: lateCode, newPassword: 'new-password' }), EXPIRED);
     assert.deepEqual(await post('/password-reset/confirm', { username: 'nobody', code: lateCode, newPassword: 'new-password' }), EXPIRED);
     for (const id of [guessed, late]) assert.equal(await comparePassword('old-password', await db.passwordHash(id)), true);

@@ -12,7 +12,7 @@ const bundle = await build({ stdin: { contents: [
   "export { default as Register } from './src/pages/Register.tsx';",
   "export { DialogProvider } from './src/components/AppDialog.tsx';",
   "export { MemoryRouter } from 'react-router-dom';",
-  "export { findId, requestPasswordReset, resetPassword, changeEmail, readAccountEmail } from './src/utils/authStore.ts';",
+  "export { findId, requestPasswordReset, verifyResetCode, resetPassword, changeEmail, readAccountEmail } from './src/utils/authStore.ts';",
 ].join('\n'), resolveDir: process.cwd() },
   bundle: true, write: false, logLevel: 'error', platform: 'node', format: 'cjs', jsx: 'automatic', external: ['react', 'react-dom'] });
 const compiled = { exports: {} };
@@ -48,12 +48,12 @@ test('finding an ID asks for the registered email', () => {
   assert.doesNotMatch(out, /지원하지 않습니다/);
 });
 
-test('finding a password asks for the ID and email first and shows the code form only after a code is sent', () => {
+test('finding a password asks for the ID and email first; the code and new-password steps come later', () => {
   const out = page(app.FindPassword);
   assert.match(out, /<input type="text" placeholder="아이디"[^>]*required/);
   assert.match(out, /<input type="email" placeholder="이메일"[^>]*required/);
   assert.match(out, />인증 코드 받기<\/button>/);
-  assert.doesNotMatch(out, /인증 코드 6자리|비밀번호 재설정<\/button>/);
+  assert.doesNotMatch(out, /인증 코드 6자리|새 비밀번호|type="password"/);
 });
 
 test('registration asks for the email used to find the account', () => {
@@ -66,10 +66,12 @@ test('recovery requests send trimmed input and show the server answer', async t 
   const sent = { ok: true, message: '보냈습니다.' };
   assert.deepEqual(await app.findId(' a@example.com '), sent);
   assert.deepEqual(await app.requestPasswordReset(' member ', ' a@example.com '), sent);
+  assert.deepEqual(await app.verifyResetCode(' member ', ' 123456 '), sent);
   assert.deepEqual(await app.resetPassword(' member ', ' 123456 ', ' new password '), sent);
   assert.deepEqual(calls.map(({ url, method, body }) => [url, method, body]), [
     ['/api/auth/find-id', 'POST', { email: 'a@example.com' }],
     ['/api/auth/password-reset', 'POST', { username: 'member', email: 'a@example.com' }],
+    ['/api/auth/password-reset/verify', 'POST', { username: 'member', code: '123456' }],
     ['/api/auth/password-reset/confirm', 'POST', { username: 'member', code: '123456', newPassword: ' new password ' }],
   ]);
 });

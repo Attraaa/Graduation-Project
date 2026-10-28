@@ -1,11 +1,12 @@
-import { useEffect, useState } from 'react';
-import { Activity, Bell, Check, Database, Eye, KeyRound, Palette, Trash2, User } from 'lucide-react';
-import { changeEmail, changePassword, clearStatistics, getCurrentUser, readAccountEmail, updateCurrentUser } from '../utils/authStore';
+import { useState } from 'react';
+import { Activity, Bell, Check, Database, Eye, Palette, Trash2, User } from 'lucide-react';
+import { clearStatistics, getCurrentUser, updateCurrentUser } from '../utils/authStore';
 import { useDialog } from '../components/dialog/useDialog';
 import type { EyeSensitivity } from '../features/eye/eyePolicy';
 import KeyboardSettings from '../features/keyboard/KeyboardSettings';
+import AccountSecurity from '../features/settings/AccountSecurity';
 import { POSTURE_SENSITIVITY } from '../features/posture/evaluation';
-import { BUTTON, BUTTON_DANGER, BUTTON_STRONG, Field, INPUT, Segmented, SettingsCard, Slider, Switch } from '../features/settings/parts';
+import { BUTTON, BUTTON_DANGER, Field, INPUT, Segmented, SettingsCard, Slider, Switch } from '../features/settings/parts';
 import { readEyeSensitivity, readPostureSensitivity, writeEyeSensitivity, writePostureSensitivity } from '../features/settings/preferences';
 
 type Theme = 'light' | 'dark';
@@ -69,26 +70,11 @@ const Settings = () => {
   const [darkMode, setDarkMode] = useState(localStorage.getItem('postureAI.theme') === 'dark');
   const [nickname, setNickname] = useState(currentUser?.nickname ?? '');
   const [savedNickname, setSavedNickname] = useState(nickname);
-  const [currentPassword, setCurrentPassword] = useState('');
-  const [nextPassword, setNextPassword] = useState('');
-  const [email, setEmail] = useState('');
-  // undefined until the server answers, null when the account has no recovery address.
-  const [savedEmail, setSavedEmail] = useState<string | null>();
   const [alertFrequency, setAlertFrequency] = useState(localStorage.getItem('postureAI.alertFrequency') ?? '10');
   const [alertStrength, setAlertStrength] = useState(localStorage.getItem('postureAI.alertStrength') ?? 'normal');
   const [scoreThreshold, setScoreThreshold] = useState(Number(localStorage.getItem('postureAI.scoreThreshold') ?? 70));
   const [postureSensitivity, setPostureSensitivity] = useState(() => readPostureSensitivity());
   const [eyeSensitivity, setEyeSensitivity] = useState(() => readEyeSensitivity());
-
-  useEffect(() => {
-    let active = true;
-    readAccountEmail().then(value => {
-      if (!active) return;
-      setSavedEmail(value);
-      setEmail(value ?? '');
-    }).catch(() => {});
-    return () => { active = false; };
-  }, []);
 
   const handleTheme = (theme: Theme) => {
     setDarkMode(theme === 'dark');
@@ -100,34 +86,6 @@ const Settings = () => {
     const result = await updateCurrentUser(nickname);
     if (result.ok) setSavedNickname(nickname.trim());
     await notify({ title: result.ok ? '변경 완료' : '변경 실패', message: result.message, tone: result.ok ? 'success' : 'warning' });
-  };
-
-  const handlePasswordChange = async () => {
-    if (!nextPassword || nextPassword.length < 6) {
-      await notify({ title: '비밀번호 확인', message: '새 비밀번호는 6자 이상 입력해 주세요.', tone: 'warning' });
-      return;
-    }
-    const result = await changePassword(currentPassword, nextPassword);
-    await notify({ title: result.ok ? '변경 완료' : '변경 실패', message: result.message, tone: result.ok ? 'success' : 'warning' });
-    if (result.ok) {
-      setCurrentPassword('');
-      setNextPassword('');
-    }
-  };
-
-  const handleEmailChange = async () => {
-    if (!currentPassword) {
-      await notify({ title: '비밀번호 확인', message: '이메일을 바꾸려면 현재 비밀번호를 입력해 주세요.', tone: 'warning' });
-      return;
-    }
-    const result = await changeEmail(email, currentPassword);
-    await notify({ title: result.ok ? '변경 완료' : '변경 실패', message: result.message, tone: result.ok ? 'success' : 'warning' });
-    if (result.ok) {
-      const saved = email.trim().toLowerCase();
-      setSavedEmail(saved);
-      setEmail(saved);
-      setCurrentPassword('');
-    }
   };
 
   const handleClearStatistics = async () => {
@@ -173,24 +131,7 @@ const Settings = () => {
           <button type="button" onClick={handleAccountSave} className={`${BUTTON} mt-auto w-full`}>닉네임 변경</button>
         </SettingsCard>
 
-        <SettingsCard title="비밀번호 · 이메일" icon={<KeyRound size={18} />}>
-          <Field label="이메일 (아이디·비밀번호 찾기용)" htmlFor="settings-email">
-            <input id="settings-email" type="email" value={email} onChange={event => setEmail(event.target.value)} className={INPUT} />
-          </Field>
-          {savedEmail === null && <p className="text-xs font-semibold text-danger">등록된 이메일이 없어요. 등록해야 아이디·비밀번호를 찾을 수 있어요.</p>}
-          <Field label="현재 비밀번호 (변경할 때 필요)" htmlFor="settings-current-password">
-            <input id="settings-current-password" type="password" value={currentPassword}
-              onChange={event => setCurrentPassword(event.target.value)} className={INPUT} />
-          </Field>
-          <Field label="새 비밀번호 (6자 이상)" htmlFor="settings-next-password">
-            <input id="settings-next-password" type="password" value={nextPassword}
-              onChange={event => setNextPassword(event.target.value)} className={INPUT} />
-          </Field>
-          <div className="mt-auto grid grid-cols-2 gap-2">
-            <button type="button" onClick={handleEmailChange} className={BUTTON}>이메일 저장</button>
-            <button type="button" onClick={handlePasswordChange} className={BUTTON_STRONG}>비밀번호 변경</button>
-          </div>
-        </SettingsCard>
+        <AccountSecurity />
 
         <SettingsCard title="화면 테마" note="누르면 바로 바뀌어요" icon={<Palette size={18} />}>
           <div role="group" aria-label="테마" className="grid flex-1 grid-cols-2 gap-3">

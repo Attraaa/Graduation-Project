@@ -11,6 +11,8 @@ const CODE_MINUTES = 10;
 const MAX_ATTEMPTS = 5;
 const RESEND_MS = 60_000;
 const NOT_REQUESTED = '직접 요청하지 않았다면 이 메일은 무시해도 됩니다.';
+const EXPIRED = '인증 코드가 만료되었거나 입력 횟수를 넘었습니다. 인증 코드를 다시 받아 주세요.';
+const WRONG_CODE = '인증 코드가 맞지 않습니다.';
 
 // Only a hash is stored. The user ID is part of it, so a code cannot be used for another account.
 const codeHash = (userId: number, code: string) => createHash('sha256').update(`${userId}:${code}`).digest('hex');
@@ -43,13 +45,24 @@ export function createRecoveryRouter(pool: Pool, mailer: Mailer | null) {
       throw new HttpError(502, '메일을 보내지 못했습니다. 잠시 후 다시 시도해 주세요.');
     }
   };
-  // Spends an attempt before the code is compared, so parallel guesses cannot exceed the limit.
-  const spendAttempt = async (userId: number) => {
-    const [result] = await pool.query<ResultSetHeader>(
+  const readCode = (input: Record<string, unknown>) => {
+    const username = text(input.username, '아이디', 50);
+    const code = text(input.code, '인증 코드', 6);
+    if (!/^\d{6}$/.test(code)) throw new HttpError(400, '인증 코드는 6자리 숫자입니다.');
+    return { username, code };
+  };
+  /** Resolves to the user whose live code may now be compared, after spending one of its attempts. */
+  const startAttempt = async (username: string) => {
+    const [rows] = await pool.query<RowDataPacket[]>('SELECT id FROM users WHERE username = ?', [username]);
+    const user = rows[0] as { id: number } | undefined;
+    if (!user) throw new HttpError(400, EXPIRED);
+    // Spent before the comparison, so parallel guesses cannot exceed the limit.
+    const [spent] = await pool.query<ResultSetHeader>(
       'UPDATE password_reset_codes SET attempts = attempts + 1 WHERE user_id = ? AND attempts < ? AND expires_at > NOW()',
-      [userId, MAX_ATTEMPTS],
+      [user.id, MAX_ATTEMPTS],
     );
-    return result.affectedRows === 1;
+    if (spent.affectedRows !== 1) throw new HttpError(400, EXPIRED);
+    return user.id;
   };
 
   router.post('/find-id', asyncHandler(async (req, res) => {
@@ -97,22 +110,29 @@ export function createRecoveryRouter(pool: Pool, mailer: Mailer | null) {
     res.json({ message: `아이디와 이메일이 맞으면 인증 코드를 메일로 보냈습니다. ${CODE_MINUTES}분 안에 입력해 주세요.` });
   }));
 
+  // Checks the code before the screen asks for a new password. The code stays valid for the confirmation,
+  // and a right code gives its attempt back so checking first does not use up the limit.
+  router.post('/password-reset/verify', asyncHandler(async (req, res) => {
+    const { username, code } = readCode(bodyObject(req.body));
+    const userId = await startAttempt(username);
+    const [rows] = await pool.query<RowDataPacket[]>(
+      'SELECT user_id FROM password_reset_codes WHERE user_id = ? AND code_hash = ?', [userId, codeHash(userId, code)],
+    );
+    if (!rows.length) throw new HttpError(400, WRONG_CODE);
+    await pool.query('UPDATE password_reset_codes SET attempts = attempts - 1 WHERE user_id = ? AND attempts > 0', [userId]);
+    res.json({ message: '인증되었습니다. 새 비밀번호를 입력해 주세요.' });
+  }));
+
   router.post('/password-reset/confirm', asyncHandler(async (req, res) => {
     const input = bodyObject(req.body);
-    const username = text(input.username, '아이디', 50);
-    const code = text(input.code, '인증 코드', 6);
-    if (!/^\d{6}$/.test(code)) throw new HttpError(400, '인증 코드는 6자리 숫자입니다.');
+    const { username, code } = readCode(input);
     const newPassword = password(input.newPassword, '새 비밀번호');
-    const [rows] = await pool.query<RowDataPacket[]>('SELECT id FROM users WHERE username = ?', [username]);
-    const user = rows[0] as { id: number } | undefined;
-    if (!user || !(await spendAttempt(user.id))) {
-      throw new HttpError(400, '인증 코드가 만료되었거나 입력 횟수를 넘었습니다. 인증 코드를 다시 받아 주세요.');
-    }
+    const userId = await startAttempt(username);
     const [used] = await pool.query<ResultSetHeader>(
-      'DELETE FROM password_reset_codes WHERE user_id = ? AND code_hash = ?', [user.id, codeHash(user.id, code)],
+      'DELETE FROM password_reset_codes WHERE user_id = ? AND code_hash = ?', [userId, codeHash(userId, code)],
     );
-    if (!used.affectedRows) throw new HttpError(400, '인증 코드가 맞지 않습니다.');
-    await pool.query('UPDATE users SET password_hash = ? WHERE id = ?', [await hashPassword(newPassword), user.id]);
+    if (!used.affectedRows) throw new HttpError(400, WRONG_CODE);
+    await pool.query('UPDATE users SET password_hash = ? WHERE id = ?', [await hashPassword(newPassword), userId]);
     res.json({ message: '비밀번호를 재설정했습니다. 새 비밀번호로 로그인해 주세요.' });
   }));
 
