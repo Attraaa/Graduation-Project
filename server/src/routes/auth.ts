@@ -2,7 +2,7 @@ import { Router } from 'express';
 import type { Pool } from 'mysql2/promise';
 import { hashPassword, comparePassword, type Auth } from '../auth.js';
 import { asyncHandler, HttpError } from '../http.js';
-import { bodyObject, text, password, settingsObject } from '../validation.js';
+import { bodyObject, text, password, email, settingsObject } from '../validation.js';
 import type { RowDataPacket, ResultSetHeader } from 'mysql2';
 
 interface UserRow extends RowDataPacket {
@@ -37,15 +37,15 @@ export function createAuthRouter(pool: Pool, auth: Auth) {
     const username = text(input.username, '아이디', 50);
     const nickname = text(input.nickname, '닉네임', 100);
     const plain = password(input.password);
-    const email = input.email === undefined || input.email === null || input.email === ''
-      ? null : text(input.email, '이메일', 255);
+    // Required: finding an ID or resetting a password sends mail to this address.
+    const address = email(input.email);
     const [rows] = await pool.query<UserRow[]>('SELECT id FROM users WHERE username = ?', [username]);
     if (rows.length > 0) throw new HttpError(409, '이미 사용 중인 아이디입니다.');
     const hash = await hashPassword(plain);
     try {
       await pool.query<ResultSetHeader>(
         'INSERT INTO users (username, nickname, email, password_hash) VALUES (?, ?, ?, ?)',
-        [username, nickname, email, hash],
+        [username, nickname, address, hash],
       );
     } catch (error) {
       // The unique DB constraint also covers simultaneous registrations for the same username.
@@ -90,20 +90,31 @@ export function createAuthRouter(pool: Pool, auth: Auth) {
     res.json({ message: '닉네임이 변경되었습니다.' });
   }));
 
-  router.put('/me/password', auth.requireAuth, asyncHandler(async (req, res) => {
-    const input = bodyObject(req.body);
-    const currentPassword = text(input.currentPassword, '현재 비밀번호', 4096, false);
-    const newPassword = password(input.newPassword, '새 비밀번호');
-    const [rows] = await pool.query<UserRow[]>(
-      'SELECT password_hash FROM users WHERE id = ?', [req.user!.userId],
-    );
+  const checkCurrentPassword = async (userId: number, value: unknown) => {
+    const currentPassword = text(value, '현재 비밀번호', 4096, false);
+    const [rows] = await pool.query<UserRow[]>('SELECT password_hash FROM users WHERE id = ?', [userId]);
     if (!rows[0] || !(await comparePassword(currentPassword, rows[0].password_hash))) {
       // Not 401: the app treats a 401 with a token as an expired login and logs out.
       throw new HttpError(400, '현재 비밀번호를 확인해 주세요.');
     }
+  };
+
+  router.put('/me/password', auth.requireAuth, asyncHandler(async (req, res) => {
+    const input = bodyObject(req.body);
+    const newPassword = password(input.newPassword, '새 비밀번호');
+    await checkCurrentPassword(req.user!.userId, input.currentPassword);
     const hash = await hashPassword(newPassword);
     await pool.query('UPDATE users SET password_hash = ? WHERE id = ?', [hash, req.user!.userId]);
     res.json({ message: '비밀번호가 변경되었습니다.' });
+  }));
+
+  // The recovery address can reset the password, so changing it needs the current password too.
+  router.put('/me/email', auth.requireAuth, asyncHandler(async (req, res) => {
+    const input = bodyObject(req.body);
+    const address = email(input.email);
+    await checkCurrentPassword(req.user!.userId, input.currentPassword);
+    await pool.query('UPDATE users SET email = ? WHERE id = ?', [address, req.user!.userId]);
+    res.json({ message: '이메일이 변경되었습니다.' });
   }));
 
   router.get('/me/settings', auth.requireAuth, asyncHandler(async (req, res) => {

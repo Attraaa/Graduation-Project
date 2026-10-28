@@ -62,7 +62,11 @@ test('malformed inputs return 400 without reaching the database', async (t) => {
     { path: '/api/sessions/1/logs', method: 'POST', body: { status: 'GOOD', measuredValue: '90' } },
     { path: '/api/auth/register', method: 'POST', body: { username: [], nickname: 'test', password: 'a' } },
     { path: '/api/auth/register', method: 'POST', body: { username: 'test', nickname: 'test', password: '한'.repeat(25) } },
+    { path: '/api/auth/register', method: 'POST', body: { username: 'test', nickname: 'test', password: 'secret1' } },
+    { path: '/api/auth/register', method: 'POST', body: { username: 'test', nickname: 'test', password: 'secret1', email: 'test' } },
     { path: '/api/auth/me/password', method: 'PUT', body: { currentPassword: 'old' } },
+    { path: '/api/auth/me/email', method: 'PUT', body: { email: 'test@example.com' } },
+    { path: '/api/auth/me/email', method: 'PUT', body: { email: 'test', currentPassword: 'old' } },
     { path: '/api/auth/me/settings', method: 'PUT', body: [] },
     { path: '/api/auth/me/settings', method: 'PUT', body: { theme: { nested: true } } },
     { path: '/api/sessions/1/calibration', method: 'POST', body: {} },
@@ -82,16 +86,22 @@ test('malformed inputs return 400 without reaching the database', async (t) => {
   assert.equal(app.queries(), 0);
 });
 
-test('a wrong current password is a 400, because the app treats any 401 as an expired login', async (t) => {
+/** The signed-in user's password is 'current-password'; UPDATE parameters are recorded. */
+async function accountDatabase() {
   const passwordHash = await hashPassword('current-password');
   const updates: unknown[] = [];
-  const database = {
+  const pool = {
     query: async (sql: string, params: unknown[]) => {
       if (sql.startsWith('UPDATE')) { updates.push(params); return [{ affectedRows: 1 }]; }
       return [[{ password_hash: passwordHash }]];
     },
   } as unknown as Pool;
-  const app = await startApp(t, database);
+  return { pool, updates };
+}
+
+test('a wrong current password is a 400, because the app treats any 401 as an expired login', async (t) => {
+  const { pool, updates } = await accountDatabase();
+  const app = await startApp(t, pool);
   const change = (currentPassword: string) => app.request('/api/auth/me/password', {
     method: 'PUT', body: JSON.stringify({ currentPassword, newPassword: 'next-password' }),
   });
@@ -101,6 +111,36 @@ test('a wrong current password is a 400, because the app treats any 401 as an ex
   assert.equal(updates.length, 0);
   assert.equal((await change('current-password')).status, 200);
   assert.equal(updates.length, 1);
+});
+
+test('changing the email needs the current password and stores the address in lowercase', async (t) => {
+  const { pool, updates } = await accountDatabase();
+  const app = await startApp(t, pool);
+  const change = (currentPassword: string) => app.request('/api/auth/me/email', {
+    method: 'PUT', body: JSON.stringify({ email: ' New@Example.com ', currentPassword }),
+  });
+  const wrong = await change('wrong-password');
+  assert.equal(wrong.status, 400);
+  assert.deepEqual(await wrong.json(), { message: '현재 비밀번호를 확인해 주세요.' });
+  assert.equal(updates.length, 0);
+  assert.equal((await change('current-password')).status, 200);
+  assert.deepEqual(updates, [['new@example.com', 1]]);
+});
+
+test('registration stores the email in lowercase', async (t) => {
+  const inserts: unknown[][] = [];
+  const database = {
+    query: async (sql: string, params: unknown[]) => {
+      if (sql.startsWith('INSERT')) { inserts.push(params); return [{ affectedRows: 1 }]; }
+      return [[]];
+    },
+  } as unknown as Pool;
+  const app = await startApp(t, database);
+  const response = await app.request('/api/auth/register', {
+    method: 'POST', body: JSON.stringify({ username: 'member', nickname: '회원', password: 'secret1', email: ' Member@Example.com ' }),
+  });
+  assert.equal(response.status, 201);
+  assert.deepEqual(inserts[0].slice(0, 3), ['member', '회원', 'member@example.com']);
 });
 
 test('invalid JSON uses the common client error response', async (t) => {

@@ -10,6 +10,8 @@ export interface ServerConfig {
   jwt: { secret: string; expiresIn: number };
   /** Key for the AI review (Claude). Optional: without it only /api/ai answers 503. */
   anthropicApiKey: string | null;
+  /** SMTP account that sends ID and password-reset mail. Optional: without it only those two routes answer 503. */
+  mail: { host: string; port: number; user: string; password: string; from: string } | null;
 }
 
 /** Validate before listening so setup errors cannot silently select an unsafe secret. */
@@ -32,6 +34,7 @@ export function readConfig(env: NodeJS.ProcessEnv): ServerConfig {
   if (!Number.isSafeInteger(expiresIn) || expiresIn <= 0) {
     throw new Error('JWT_EXPIRES_IN must be a positive duration such as 30m, 1h, or 7d.');
   }
+  const smtp = { host: env.SMTP_HOST?.trim(), user: env.SMTP_USER?.trim(), password: env.SMTP_PASS?.trim() };
   return {
     port: port('PORT', 4000),
     database: {
@@ -43,5 +46,8 @@ export function readConfig(env: NodeJS.ProcessEnv): ServerConfig {
     },
     jwt: { secret, expiresIn },
     anthropicApiKey: env.ANTHROPIC_API_KEY?.trim() || null,
+    mail: smtp.host && smtp.user && smtp.password
+      ? { host: smtp.host, port: port('SMTP_PORT', 465), user: smtp.user, password: smtp.password, from: env.MAIL_FROM?.trim() || smtp.user }
+      : null,
   };
 }

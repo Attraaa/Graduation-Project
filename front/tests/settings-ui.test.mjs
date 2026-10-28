@@ -32,9 +32,13 @@ test('switch exposes its name and state', () => {
 
 test('settings page shows the eight cards with defaults when nothing is stored', () => {
   const out = page({});
-  for (const title of ['계정', '비밀번호', '화면 테마', '알림', '상체 · 자세 기준', '안구 · 깜빡임 기준', '키보드 · 승인 앱 관찰', '데이터 관리']) {
+  for (const title of ['계정', '비밀번호 · 이메일', '화면 테마', '알림', '상체 · 자세 기준', '안구 · 깜빡임 기준', '키보드 · 승인 앱 관찰', '데이터 관리']) {
     assert.match(out, new RegExp(`<section aria-label="${title}"`));
   }
+  assert.match(out, /id="settings-email" type="email"/);
+  assert.match(out, />이메일 저장<\/button><button[^>]*>비밀번호 변경</);
+  // The missing-email notice waits for the server's answer instead of flashing while it loads.
+  assert.doesNotMatch(out, /등록된 이메일이 없어요/);
   assert.match(out, /aria-pressed="true" aria-label="라이트 테마"/);
   assert.match(out, /aria-pressed="false" aria-label="다크 테마"/);
   assert.match(out, /role="switch" aria-checked="true"/);

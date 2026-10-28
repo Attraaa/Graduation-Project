@@ -94,6 +94,8 @@ approval boundary, an unsafe operation, or an unresolved conflict.
   `keyboard.ts`, and `eye.ts`, so deploy them with `server/`. AI/medical sections remain
   labeled examples. The AI review menu (`/ai-review`, server `/api/ai/review`) calls
   Claude with `ANTHROPIC_API_KEY` from `server/.env` only; read `docs/ai-review.md`.
+  Finding an ID and resetting a password mail the registered email through `SMTP_*`
+  in `server/.env` only (503 until set); the contract is in `database/README.md`.
   BYOK, offline sync, and HTTPS are not implemented.
   Do not present demo values as measurements.
 - Reuse `src/styles/tokens.css`, `components/layout`, and the shared UI components.

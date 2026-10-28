@@ -55,7 +55,7 @@ AGENTS.md와 README.md를 먼저 읽고, docs/architecture.md, docs/product-deci
 - UI: 공통 색상/테마, 화면 틀, 대화상자 호출 구조를 정리했습니다. 모든 화면의 시각 디자인을 전면 교체한 것은 아닙니다.
 - 서버: 인증·입력 검증·오류 처리와 세션 종료/집계 경계를 정리했습니다. DB 제품은 미정이며 현재 MySQL 어댑터를 유지합니다.
 - 키보드: Electron 개발 앱에서 로컬 Python 분석기를 실행하고 100·70·0 훈련 점수, 판정 가능 비율, 사용 일관성을 표시합니다. 날짜·키·손가락별 집계를 서버에 저장하고 통계의 키보드 모드에서 히트맵·추이를 조회합니다. Moti 화면 입력과 설정에서 승인한 일반 앱을 키보드 시작 시 관찰하며 관리자 앱·미승인 앱을 제외합니다. 승인 목록이 비어 있어도 Moti 입력으로 시작할 수 있습니다. 손캠 crop·자유 회전·영상 필터를 지원합니다. 실제 인식 정확도 검증과 설치 파일용 Python exe 동봉은 남아 있습니다.
-- 로그인·회원가입은 Moti API 서버 계정(JWT)입니다. 목·어깨·키보드 기록은 서버 MySQL에 저장하고 통계와 학습이력도 서버에서 조회합니다(서버 주소: `front/.env`의 `VITE_MOTI_API_URL`). AI·의학 정보 예시는 예시로 구분합니다. 별도 메뉴의 AI 총평은 `server/.env`의 `ANTHROPIC_API_KEY`로 Claude를 호출합니다([AI 총평](docs/ai-review.md)). BYOK, 오프라인 저장·동기화, HTTPS는 후속 작업입니다. 저장 계약과 복구·삭제 정책은 [database/README.md](database/README.md)를 확인합니다.
+- 로그인·회원가입은 Moti API 서버 계정(JWT)입니다. 목·어깨·키보드 기록은 서버 MySQL에 저장하고 통계와 학습이력도 서버에서 조회합니다(서버 주소: `front/.env`의 `VITE_MOTI_API_URL`). AI·의학 정보 예시는 예시로 구분합니다. 별도 메뉴의 AI 총평은 `server/.env`의 `ANTHROPIC_API_KEY`로 Claude를 호출합니다([AI 총평](docs/ai-review.md)). 아이디 찾기·비밀번호 재설정은 가입 때 받은 이메일로 보내며 `server/.env`의 SMTP 설정이 있어야 동작합니다. BYOK, 오프라인 저장·동기화, HTTPS는 후속 작업입니다. 저장 계약과 복구·삭제 정책은 [database/README.md](database/README.md)를 확인합니다.
 
 **기존 DB 주의:** `server/schema.sql`은 테이블을 삭제하는 초기화 SQL입니다. 보존할 데이터가 있는 DB에 실행하지 않습니다. `front/database_schema.sql`도 현재 서버와 구조가 다릅니다.
 

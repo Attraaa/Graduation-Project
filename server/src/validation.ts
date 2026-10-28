@@ -23,6 +23,13 @@ export function password(value: unknown, name = '비밀번호'): string {
   return result;
 }
 
+/** Plain lowercase addresses only: lookups do not depend on the column collation, and quoted or commented forms never reach the mailer. */
+export function email(value: unknown, name = '이메일'): string {
+  const result = text(value, name, 255).toLowerCase();
+  if (!/^[a-z0-9._%+-]+@[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}$/.test(result)) throw new HttpError(400, `${name} 형식을 확인해 주세요.`);
+  return result;
+}
+
 export function integer(value: unknown, name: string, min: number, max: number): number {
   if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < min || value > max) {
     throw new HttpError(400, `${name}은(는) ${min}~${max} 사이의 정수여야 합니다.`);

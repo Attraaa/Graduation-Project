@@ -11,7 +11,7 @@ export const getCurrentUser = (): CurrentUser | null => readSession()?.user ?? n
 export const isDuplicateId = async (username: string) =>
   (await apiRequest<{ exists: boolean }>(`/api/auth/check/${encodeURIComponent(username.trim())}`)).exists;
 
-export const registerUser = async (user: { username: string; nickname: string; password: string }): Promise<Result> => {
+export const registerUser = async (user: { username: string; nickname: string; email: string; password: string }): Promise<Result> => {
   try {
     const { message } = await apiRequest<{ message: string }>('/api/auth/register', { method: 'POST', body: user });
     return { ok: true, message };
@@ -62,6 +62,32 @@ export const changePassword = async (currentPassword: string, newPassword: strin
     return { ok: true, message };
   } catch (error) { return failure(error); }
 };
+
+const messageRequest = async (path: string, method: string, body: unknown, timeoutMs?: number): Promise<Result> => {
+  try {
+    const { message } = await apiRequest<{ message: string }>(path, { method, body, timeoutMs });
+    return { ok: true, message };
+  } catch (error) { return failure(error); }
+};
+// The server waits for the mail server before answering, which can take longer than the default 15 seconds.
+const MAIL_TIMEOUT_MS = 30_000;
+
+/** Mails the IDs registered to this address. The answer is the same whether or not one exists. */
+export const findId = (email: string) => messageRequest('/api/auth/find-id', 'POST', { email: email.trim() }, MAIL_TIMEOUT_MS);
+
+/** Mails a 6-digit code when the ID and its registered address match. The answer is the same either way. */
+export const requestPasswordReset = (username: string, email: string) =>
+  messageRequest('/api/auth/password-reset', 'POST', { username: username.trim(), email: email.trim() }, MAIL_TIMEOUT_MS);
+
+export const resetPassword = (username: string, code: string, newPassword: string) =>
+  messageRequest('/api/auth/password-reset/confirm', 'POST', { username: username.trim(), code: code.trim(), newPassword });
+
+/** The recovery address can reset the password, so changing it needs the current password. */
+export const changeEmail = (email: string, currentPassword: string) =>
+  messageRequest('/api/auth/me/email', 'PUT', { email: email.trim(), currentPassword });
+
+/** The registered recovery address, or null when the account has none. */
+export const readAccountEmail = async () => (await apiRequest<{ email: string | null }>('/api/auth/me')).email || null;
 
 export const clearStatistics = async () => {
   const owner = getCurrentUser()?.id;

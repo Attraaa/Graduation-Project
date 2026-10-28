@@ -67,6 +67,7 @@ front와 server는 각각 `package.json`과 `package-lock.json`을 유지합니�
 | cors / dotenv | 2.8.6 / 16.6.1 | 요청 출처·환경 설정 |
 | jsonwebtoken | 9.0.3 | 인증 토큰 |
 | @anthropic-ai/sdk | 0.133.0 | AI 총평의 Claude 호출. `package.json`에 정확히 고정, 배포 서버에서도 `npm ci` 필요 |
+| nodemailer | 10.1.7 | 아이디 찾기·비밀번호 재설정 메일(SMTP). 10.1.3 이하의 주소 파싱 취약점(GHSA-8c8m-p3m8-cjg8 외 2건)이 고쳐진 버전으로 정확히 고정, 배포 서버에서도 `npm ci` 필요 |
 | tsx / typescript | 4.22.3 / 6.0.3 | 개발 실행·컴파일 |
 | @types/node | 24.13.3 | Node API 타입 선언 |
 | qs | 6.16.0 | 전이 의존성 보안 갱신; `overrides` 지정 |
