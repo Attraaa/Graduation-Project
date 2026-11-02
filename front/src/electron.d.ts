@@ -1,8 +1,14 @@
-export {}
+import type { DisplayInfo } from './features/dual-monitor/layout'
 
 declare global {
   interface Window {
     motiWindow?: { setTheme: (theme: 'light' | 'dark') => Promise<void> }
+    motiDisplays?: {
+      list: () => Promise<DisplayInfo[]>
+      showTarget: (displayId: string) => Promise<void>
+      hideTarget: () => Promise<void>
+      onChanged: (listener: () => void) => () => void
+    }
     motiKeyboard?: {
       start: (external?: boolean) => Promise<{ origin: string; token: string }>
       stop: () => Promise<void>

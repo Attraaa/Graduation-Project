@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'">
+  <title>모니터 방향 등록 · Moti</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; user-select: none; }
+    body { display: flex; align-items: center; justify-content: center; font-family: 'Inter', system-ui, sans-serif; }
+    .card {
+      display: flex; flex-direction: column; align-items: center; gap: 18px; padding: 26px 30px;
+      border-radius: 24px; background: rgba(29, 36, 51, 0.88); color: #ffffff; box-shadow: 0 16px 40px rgba(0, 0, 0, 0.28);
+    }
+    .dot { position: relative; width: 26px; height: 26px; border-radius: 50%; background: #58cc02; }
+    .dot::after {
+      content: ''; position: absolute; inset: -14px; border-radius: 50%; border: 3px solid #58cc02;
+      animation: pulse 1.2s ease-out infinite;
+    }
+    @keyframes pulse { from { transform: scale(0.6); opacity: 1; } to { transform: scale(1.5); opacity: 0; } }
+    p { margin: 0; text-align: center; font-size: 15px; font-weight: 700; line-height: 1.5; }
+    small { display: block; font-size: 12px; font-weight: 500; color: #c7ccd6; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="dot" aria-hidden="true"></div>
+    <p>이 점을 바라봐 주세요<small>고개를 이 화면 쪽으로 돌린 채 잠시 유지합니다</small></p>
+  </div>
+</body>
+</html>

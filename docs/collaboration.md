@@ -72,6 +72,10 @@ README와 docs/collaboration.md, docs/evaluation.md를 읽어.
 
 안구 계산·정책·영상 처리는 `front/src/features/eye/`가 소유합니다. 2026-10-10부터 독립 `EyeSession` 화면은 제거하고 `EyeMonitor(shared)`가 상체의 기존 변환 영상과 스트림을 빌립니다. 카메라 시작/해제는 `PostureMonitor`가 소유하고 깜빡임은 `PostureMetrics`에서 빈도와 평균으로 표시합니다. 공통 기록·서버 계약은 연결 담당자가 조정합니다. 안구 정책 변경은 `eyePolicy.ts`, 안구 테스트, [eye-mode.md](eye-mode.md)를 함께 갱신합니다. 안구 결과는 공통 MySQL/HTTP 경계에 저장하고 기존 안구 통계·학습이력에서 조회합니다.
 
+## 듀얼 모니터 담당 경계 (2026-11-02)
+
+`front/src/features/dual-monitor/`가 고개 방향 해석, 모니터 방향 등록·저장, 보는 화면 판정과 화면별 시간, 상체 상세 카드를 소유합니다. 숫자는 `screenSettings.ts`에 모읍니다. 입력은 `EyeMonitor`의 `onHeadPose`(같은 Face Landmarker 결과)이며 안구 측정·정책은 바꾸지 않습니다. 모니터 목록과 등록용 점 창은 `front/electron/displays.ts`와 main/preload의 `displays:*` IPC가 담당합니다. 상체 점수·회전 보류·기록 계약을 바꾸지 않으므로 정책 버전을 올리지 않았습니다. 화면별 기준 자세나 화면별 시간 저장처럼 점수/기록 계약을 바꾸는 후속 작업은 해당 담당 경계와 함께 진행합니다. [가이드](dual-monitor.md)
+
 ## 상체 통합 담당 경계 (2026-10-02)
 
 사용자가 선택하는 상체 화면은 `upper_body` 하나이며 목·어깨를 동시에 계산합니다. `modes/turtle.ts`와 `shoulder.ts`는 독립 부위 정책으로 유지하고, 조정값은 `scoreSettings.ts` 상단에 모읍니다. 한 카메라의 관측을 두 evaluation 상태와 두 저장 sink에 전달합니다. 가중치·상하 gain·보호 설정 해시가 정책 ID에 포함되며, 공식 변경 시 정책 버전도 올립니다. 현재 회전 보류·상하 양방향 감도·복귀 확인은 점수/습관 v6이고 기준 스키마는 v2입니다. 기존 저장 부위 키와 데이터는 보존합니다. `sustainedDeviation.ts`는 목의 시간 감점을 소유하고, `scoring.ts`는 어깨의 비선형 변환을 소유합니다. [수치 조절 기준](posture-score-tuning.md)을 함께 갱신합니다.

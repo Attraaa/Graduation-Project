@@ -12,11 +12,14 @@ import { useCameraSettings } from '../camera/context';
 import { imageSignature } from '../camera/profile';
 import type { EyeSensitivity } from './eyePolicy';
 import { watchPreparation } from '../session/modelPreparation';
+import { readHeadPose, type HeadPose } from '../dual-monitor/headPose';
 
 export type EyeUpdate = { measurement: EyeSnapshot; phase: 'loading' | 'calibrating' | 'observing' | 'unavailable' | 'error'; message: string };
 
-export default function EyeMonitor({ active, deviceId, reference, eyeReference, sensitivity = 'normal', onUpdate, onSample, shared = false, paused = false }: {
+export default function EyeMonitor({ active, deviceId, reference, eyeReference, sensitivity = 'normal', onUpdate, onSample, onHeadPose, shared = false, paused = false }: {
   onSample: (at: number, snapshot: EyeSnapshot) => void;
+  /** Head direction of the same frame for the dual-monitor screen tracker; must keep a stable identity. */
+  onHeadPose?: (at: number, pose: HeadPose | null, cameraKey: string) => void;
   active: boolean; deviceId: string; reference: number; eyeReference: number; sensitivity?: EyeSensitivity; onUpdate: (update: EyeUpdate) => void;
   shared?: boolean; paused?: boolean;
 }) {
@@ -93,7 +96,7 @@ export default function EyeMonitor({ active, deviceId, reference, eyeReference, 
         const files = await FilesetResolver.forVisionTasks(new URL('mediapipe/face/wasm', base).href);
         return initializeMediaPipe(() => FaceLandmarker.createFromOptions(files, {
           baseOptions: { modelAssetPath: new URL('models/face_landmarker.task', base).href, delegate: 'CPU' },
-          runningMode: 'VIDEO', numFaces: 2, outputFaceBlendshapes: true,
+          runningMode: 'VIDEO', numFaces: 2, outputFaceBlendshapes: true, outputFacialTransformationMatrixes: true,
           minFaceDetectionConfidence: 0.6, minFacePresenceConfidence: 0.6, minTrackingConfidence: 0.6,
         }), true);
       },
@@ -118,6 +121,7 @@ export default function EyeMonitor({ active, deviceId, reference, eyeReference, 
               const { observation, reason } = readEyes(result, video.videoWidth, video.videoHeight);
               const current = engine.sample(now, observation);
               onSample(now, current);
+              onHeadPose?.(now, readHeadPose(result), `${activeDeviceId}:${imageSignature(runtime.current.profile)}`);
               lastVideoTime = video.currentTime;
               lastFrameAt = now;
               // Analyze every available frame; render cards at most 10 times per second.
@@ -158,7 +162,7 @@ export default function EyeMonitor({ active, deviceId, reference, eyeReference, 
       engine.sample(performance.now(), null);
       runner.stop();
     };
-  }, [active, shared, deviceId, onUpdate, onSample, startWebcam, stopWebcam, videoRef, connect, detach, runtime]);
+  }, [active, shared, deviceId, onUpdate, onSample, onHeadPose, startWebcam, stopWebcam, videoRef, connect, detach, runtime]);
   if (shared) return null;
   return (
     <div className="relative overflow-hidden rounded-2xl bg-surface-muted">

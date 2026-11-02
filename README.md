@@ -70,3 +70,5 @@ AGENTS.md와 README.md를 먼저 읽고, docs/architecture.md, docs/product-deci
 Windows의 `eye.cmd` 브라우저 시연도 상체 화면으로 연결합니다. 이 명령은 프론트만 설치하므로 Electron/키보드 실행에는 기존 `setup.cmd`를 사용하세요. 안구 집계의 서버 저장·통계·학습이력 계약은 유지합니다.
 
 기능·모델·실행·검증 한계 및 팀원의 브랜치 적용 방법은 [docs/eye-mode.md](docs/eye-mode.md)를 참고하세요.
+
+2026-11-02 듀얼 모니터: 상체 상세에서 모니터마다 고개 방향을 한 번 등록하면, 측정 중 지금 보는 화면과 화면별 시간을 보여 주고 옆 화면을 볼 때 경고 대신 보는 화면을 안내합니다. 얼굴 방향 기준이며 시선 추적·점수 변경은 아닙니다. [docs/dual-monitor.md](docs/dual-monitor.md)

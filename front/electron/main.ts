@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, powerMonitor } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, powerMonitor, screen } from 'electron'
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
 import { existsSync } from 'node:fs'
@@ -9,6 +9,7 @@ import { trustedRecordUrl } from './recordHandlers'
 import { readKeyboardSettings, chooseKeyboardApp, updateKeyboardSettings } from './keyboardSettings'
 import { cameraSettingsUrl, canOpenCameraSettings } from './cameraWindow'
 import { windowAppearance } from './windowAppearance'
+import { describeDisplays, findDisplay, targetBounds } from './displays'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -37,6 +38,8 @@ const recordsPageUrl = process.env.VITE_DEV_SERVER_URL || pathToFileURL(path.joi
 let win: BrowserWindow | null
 let splash: BrowserWindow | null
 let cameraWindow: BrowserWindow | null = null
+let targetWindow: BrowserWindow | null = null
+let targetTimer: ReturnType<typeof setTimeout> | undefined
 let windowTheme: 'light' | 'dark' = 'light'
 let keyboardProcess: ChildProcessWithoutNullStreams | null = null
 let keyboardService: { origin: string; token: string } | null = null
@@ -177,6 +180,36 @@ ipcMain.handle('keyboard-service:stop', event => { trustedAppWindow(event); stop
 ipcMain.handle('keyboard-settings:read', event => { trustedAppWindow(event); return readKeyboardSettings() })
 ipcMain.handle('keyboard-settings:choose', event => { trustedAppWindow(event); return chooseKeyboardApp(win!) })
 ipcMain.handle('keyboard-settings:update', (event, input: unknown) => { trustedAppWindow(event); return updateKeyboardSettings(input) })
+// Dual-monitor registration: the renderer gets plain monitor data and may show one click-through target.
+const closeTarget = () => {
+  clearTimeout(targetTimer); targetTimer = undefined
+  const target = targetWindow
+  targetWindow = null
+  if (target && !target.isDestroyed()) target.destroy()
+}
+const listDisplays = () => describeDisplays(screen.getAllDisplays(), screen.getPrimaryDisplay().id,
+  win && !win.isDestroyed() ? screen.getDisplayMatching(win.getBounds()).id : null)
+ipcMain.handle('displays:list', event => { trustedAppWindow(event); return listDisplays() })
+ipcMain.handle('displays:hide-target', event => { trustedAppWindow(event); closeTarget() })
+ipcMain.handle('displays:show-target', (event, displayId: unknown) => {
+  trustedAppWindow(event)
+  const display = findDisplay(screen.getAllDisplays(), displayId)
+  if (!display) throw new Error('연결된 모니터를 찾지 못했습니다.')
+  closeTarget()
+  const target = new BrowserWindow({ ...targetBounds(display.workArea), frame: false, transparent: true, resizable: false, movable: false,
+    minimizable: false, maximizable: false, focusable: false, skipTaskbar: true, alwaysOnTop: true, hasShadow: false, show: false,
+    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true } })
+  targetWindow = target
+  target.setIgnoreMouseEvents(true)
+  target.setAlwaysOnTop(true, 'screen-saver')
+  target.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+  target.webContents.on('will-navigate', navigation => navigation.preventDefault())
+  target.once('ready-to-show', () => { if (targetWindow === target) target.showInactive() })
+  target.on('closed', () => { if (targetWindow === target) targetWindow = null })
+  // Never leave a stray overlay when the renderer stops asking (crash, reload).
+  targetTimer = setTimeout(closeTarget, 30_000)
+  void target.loadFile(path.join(publicDirectory, 'display-target.html'))
+})
 ipcMain.handle('window:set-theme', (event, theme: unknown) => {
   trustedAppWindow(event)
   const appearance = windowAppearance(theme)
@@ -231,7 +264,7 @@ function createWindow() {
     child.webContents.on('will-navigate', (event, url) => { if (url !== cameraSettingsUrl(recordsPageUrl)) event.preventDefault() })
     child.on('closed', () => { if (cameraWindow === child) cameraWindow = null })
   })
-  win.on('closed', () => { cameraWindow?.destroy(); cameraWindow = null })
+  win.on('closed', () => { cameraWindow?.destroy(); cameraWindow = null; closeTarget() })
   win.on('close', event => {
     if (allowClose) return
     event.preventDefault()
@@ -284,9 +317,14 @@ app.on('activate', () => {
 
 if (ownsInstance) app.whenReady().then(() => {
   createWindow()
-  const halt = () => { cameraWindow?.close(); stopKeyboardService(); win?.webContents.send('keyboard-service:halt') }
+  const halt = () => { cameraWindow?.close(); closeTarget(); stopKeyboardService(); win?.webContents.send('keyboard-service:halt') }
   powerMonitor.on('suspend', halt)
   powerMonitor.on('lock-screen', halt)
+  const displaysChanged = () => { if (win && !win.isDestroyed()) win.webContents.send('displays:changed') }
+  screen.on('display-added', displaysChanged)
+  screen.on('display-removed', displaysChanged)
+  // Work-area changes (taskbar) do not move monitors; the renderer keys layouts on display bounds.
+  screen.on('display-metrics-changed', (_event, _display, changed) => { if (changed.some(metric => metric !== 'workArea')) displaysChanged() })
 })
 app.on('second-instance', () => { win?.restore(); win?.focus() })
 app.on('before-quit', stopKeyboardService)

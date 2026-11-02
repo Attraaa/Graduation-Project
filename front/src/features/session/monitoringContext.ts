@@ -5,6 +5,7 @@ import type { EyeUpdate } from '../eye/EyeMonitor';
 import type { KeyboardMonitorSnapshot } from '../keyboard/monitorTypes';
 import type { useSessionControls } from './useSessionControls';
 import type { TrendPoint } from './trend';
+import type { DualMonitorView } from '../dual-monitor/useDualMonitor';
 
 export type MonitoringMode = 'upper_body' | 'keyboard';
 type Session = {
@@ -14,7 +15,7 @@ type Session = {
   trend: TrendPoint[];
 };
 export interface MonitoringState {
-  upper: Session & { snapshot: MonitorSnapshot; eye: EyeUpdate; recalibrate: () => void };
+  upper: Session & { snapshot: MonitorSnapshot; eye: EyeUpdate; recalibrate: () => void; screens: DualMonitorView };
   keyboard: Session & { snapshot: KeyboardMonitorSnapshot; remap: () => void };
 }
 export const MonitoringContext = createContext<MonitoringState | null>(null);

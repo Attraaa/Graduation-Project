@@ -18,6 +18,17 @@ contextBridge.exposeInMainWorld('motiKeyboard', {
   },
 })
 
+contextBridge.exposeInMainWorld('motiDisplays', {
+  list: () => ipcRenderer.invoke('displays:list'),
+  showTarget: (displayId: string) => ipcRenderer.invoke('displays:show-target', displayId),
+  hideTarget: () => ipcRenderer.invoke('displays:hide-target'),
+  onChanged: (listener: () => void) => {
+    const handle = () => listener()
+    ipcRenderer.on('displays:changed', handle)
+    return () => { ipcRenderer.removeListener('displays:changed', handle) }
+  },
+})
+
 // Records are stored on the API server; main only asks the renderer to flush them before closing.
 contextBridge.exposeInMainWorld('motiRecords', {
   onClosing: (listener: () => Promise<boolean>) => {

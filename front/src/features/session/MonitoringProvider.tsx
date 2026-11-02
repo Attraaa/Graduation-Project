@@ -17,6 +17,7 @@ import { livePressScore } from '../keyboard/liveScore';
 import { useSessionControls } from './useSessionControls';
 import { MonitoringContext, type MonitoringMode, type MonitoringState } from './monitoringContext';
 import { appendTrend, type TrendPoint } from './trend';
+import { useDualMonitor } from '../dual-monitor/useDualMonitor';
 
 const initialEye = (): EyeUpdate => ({ measurement: emptyEyeSnapshot(), phase: 'loading', message: '' });
 // Sensitivities chosen in Settings, read when an upper-body run starts and fixed for that run.
@@ -25,6 +26,7 @@ const readSensitivity = () => ({ posture: readPostureSensitivity(), eye: readEye
 export default function MonitoringProvider({ children }: { children: ReactNode }) {
   const upper = useSessionControls('upper_body');
   const keyboard = useSessionControls('keyboard');
+  const screens = useDualMonitor({ active: upper.isRunning && !upper.isPaused, run: upper.run });
   const [sensitivity, setSensitivity] = useState(readSensitivity);
   const [snapshot, setSnapshot] = useState(createMonitorSnapshot);
   const [eye, setEye] = useState(initialEye);
@@ -80,7 +82,7 @@ export default function MonitoringProvider({ children }: { children: ReactNode }
     return () => window.removeEventListener('moti-stop-measurement', stop);
   }, [stopUpper, stopKeyboard]);
   const base: BaseState = {
-    upper: { controls: { ...upper, pause: () => { upper.pause(); setUpperTrend(points => appendTrend(points, { at: performance.now(), neck: null, shoulder: null, keyboard: null })); } }, snapshot, eye, trend: upperTrend, start: startUpper, recalibrate: () => { setUpperTrend([]); setReferenceRequest(value => value + 1); } },
+    upper: { controls: { ...upper, pause: () => { upper.pause(); setUpperTrend(points => appendTrend(points, { at: performance.now(), neck: null, shoulder: null, keyboard: null })); } }, snapshot, eye, screens, trend: upperTrend, start: startUpper, recalibrate: () => { setUpperTrend([]); setReferenceRequest(value => value + 1); } },
     keyboard: { controls: { ...keyboard, pause: () => { keyboard.pause(); setKeyboardTrend(points => appendTrend(points, { at: performance.now(), neck: null, shoulder: null, keyboard: null })); } }, snapshot: keys, trend: keyboardTrend, start: startKeyboard, remap: () => setRemap(value => value + 1) },
   };
   return <CameraProvider modeId="upper_body" deviceId={upper.deviceId} cameraLabel={deviceLabel(upper)} paused={upper.isPaused} onOpen={openCamera}>
@@ -110,7 +112,7 @@ function MonitoringRuntime({ base, children, upperCamera, portal, configMode, se
     <div hidden aria-hidden="true">
       <CameraContext.Provider value={upperCamera}>
         <PostureMonitor key={upper.run} isRunning={upper.isRunning} paused={upper.isPaused} referenceRequest={referenceRequest} deviceId={upper.deviceId} onUpdate={onPosture} recordCapture={beginPostureRecording} sensitivity={sensitivity.posture} />
-        <EyeMonitor key={`eye:${upper.run}`} shared active={upper.isRunning && upperCamera.connected} paused={upper.isPaused} deviceId={upper.deviceId} reference={0} eyeReference={referenceRequest} sensitivity={sensitivity.eye} onUpdate={onEyeUpdate} onSample={onEyeSample} />
+        <EyeMonitor key={`eye:${upper.run}`} shared active={upper.isRunning && upperCamera.connected} paused={upper.isPaused} deviceId={upper.deviceId} reference={0} eyeReference={referenceRequest} sensitivity={sensitivity.eye} onUpdate={onEyeUpdate} onSample={onEyeSample} onHeadPose={base.upper.screens.onHeadPose} />
       </CameraContext.Provider>
       <CameraContext.Provider value={keyboardCamera}>
         <KeyboardMonitor key={keyboard.run} isRunning={keyboard.isRunning} paused={keyboard.isPaused} deviceId={keyboard.deviceId} onUpdate={onKeyboard} remapRequest={remapRequest} external />
