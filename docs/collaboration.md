@@ -74,7 +74,7 @@ README와 docs/collaboration.md, docs/evaluation.md를 읽어.
 
 ## 듀얼 모니터 담당 경계 (2026-11-02)
 
-`front/src/features/dual-monitor/`가 고개 방향 해석, 모니터 방향 등록·저장, 보는 화면 판정과 화면별 시간, 상체 상세 카드를 소유합니다. 숫자는 `screenSettings.ts`에 모읍니다. 입력은 `EyeMonitor`의 `onHeadPose`(같은 Face Landmarker 결과)이며 안구 측정·정책은 바꾸지 않습니다. 모니터 목록과 등록용 점 창은 `front/electron/displays.ts`와 main/preload의 `displays:*` IPC가 담당합니다. 상체 점수·회전 보류·기록 계약을 바꾸지 않으므로 정책 버전을 올리지 않았습니다. 화면별 기준 자세나 화면별 시간 저장처럼 점수/기록 계약을 바꾸는 후속 작업은 해당 담당 경계와 함께 진행합니다. [가이드](dual-monitor.md)
+`front/src/features/dual-monitor/`가 고개 방향 해석, 모니터 방향 등록·저장, 보는 화면 판정과 화면별 시간, 상체 상세 카드를 소유합니다. 숫자는 `screenSettings.ts`에 모읍니다. 입력은 `EyeMonitor`의 `onHeadPose`(같은 Face Landmarker 결과)이며 안구 측정·정책은 바꾸지 않습니다. 옆 모니터 기준 자세의 수집과 프레임별 기준 선택은 `front/src/features/posture/viewReferences.ts`, 옆 모니터 비교 규칙(상대 회전·귀 폭 단서 제외)은 `scoreSettings.ts`의 `SIDE_VIEW`가 소유하며 점수 정책을 목 v8·어깨 v7로 올렸습니다. 모니터 목록과 점 창은 `front/electron/displays.ts`와 main/preload의 `displays:*` IPC가 담당합니다. 화면별 시간·점수 저장처럼 기록 계약을 바꾸는 후속 작업은 기록 담당 경계와 함께 진행합니다. [가이드](dual-monitor.md)
 
 ## 상체 통합 담당 경계 (2026-10-02)
 

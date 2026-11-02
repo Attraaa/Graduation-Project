@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import CameraProvider from '../camera/CameraProvider';
 import { CameraContext, useCameraSettings, type CameraContextValue } from '../camera/context';
@@ -18,6 +18,7 @@ import { useSessionControls } from './useSessionControls';
 import { MonitoringContext, type MonitoringMode, type MonitoringState } from './monitoringContext';
 import { appendTrend, type TrendPoint } from './trend';
 import { useDualMonitor } from '../dual-monitor/useDualMonitor';
+import type { ViewTarget } from '../posture/viewReferences';
 
 const initialEye = (): EyeUpdate => ({ measurement: emptyEyeSnapshot(), phase: 'loading', message: '' });
 // Sensitivities chosen in Settings, read when an upper-body run starts and fixed for that run.
@@ -26,10 +27,16 @@ const readSensitivity = () => ({ posture: readPostureSensitivity(), eye: readEye
 export default function MonitoringProvider({ children }: { children: ReactNode }) {
   const upper = useSessionControls('upper_body');
   const keyboard = useSessionControls('keyboard');
-  const screens = useDualMonitor({ active: upper.isRunning && !upper.isPaused, run: upper.run });
   const [sensitivity, setSensitivity] = useState(readSensitivity);
   const [snapshot, setSnapshot] = useState(createMonitorSnapshot);
   const [eye, setEye] = useState(initialEye);
+  const [skipViewRequest, setSkipViewRequest] = useState(0);
+  const collecting = upper.isRunning && !upper.isPaused && snapshot.viewCalibration && !snapshot.viewCalibration.waiting ? snapshot.viewCalibration.id : null;
+  const screens = useDualMonitor({ active: upper.isRunning && !upper.isPaused, run: upper.run, collectingView: collecting });
+  // Each side monitor of a valid layout gets its own posture reference in every upper-body run.
+  const viewTargets = useMemo(() => screens.layout && !screens.issue
+    ? screens.layout.screens.filter(screen => !screen.main).map(({ id, label }) => ({ id, label })) : [], [screens.layout, screens.issue]);
+  const viewsReady = eye.measurement.calibrated || eye.phase === 'error';
   const [keys, setKeys] = useState(initialKeyboardSnapshot);
   const [remap, setRemap] = useState(0);
   const [referenceRequest, setReferenceRequest] = useState(0);
@@ -82,12 +89,12 @@ export default function MonitoringProvider({ children }: { children: ReactNode }
     return () => window.removeEventListener('moti-stop-measurement', stop);
   }, [stopUpper, stopKeyboard]);
   const base: BaseState = {
-    upper: { controls: { ...upper, pause: () => { upper.pause(); setUpperTrend(points => appendTrend(points, { at: performance.now(), neck: null, shoulder: null, keyboard: null })); } }, snapshot, eye, screens, trend: upperTrend, start: startUpper, recalibrate: () => { setUpperTrend([]); setReferenceRequest(value => value + 1); } },
+    upper: { controls: { ...upper, pause: () => { upper.pause(); setUpperTrend(points => appendTrend(points, { at: performance.now(), neck: null, shoulder: null, keyboard: null })); } }, snapshot, eye, screens, trend: upperTrend, start: startUpper, recalibrate: () => { setUpperTrend([]); setReferenceRequest(value => value + 1); }, skipView: () => setSkipViewRequest(value => value + 1) },
     keyboard: { controls: { ...keyboard, pause: () => { keyboard.pause(); setKeyboardTrend(points => appendTrend(points, { at: performance.now(), neck: null, shoulder: null, keyboard: null })); } }, snapshot: keys, trend: keyboardTrend, start: startKeyboard, remap: () => setRemap(value => value + 1) },
   };
   return <CameraProvider modeId="upper_body" deviceId={upper.deviceId} cameraLabel={deviceLabel(upper)} paused={upper.isPaused} onOpen={openCamera}>
     {error && <p role="alert" className="text-sm text-danger">{error}</p>}
-    <KeyboardCamera base={base} openCamera={openCamera} portal={portal} configMode={configMode} setConfigMode={setConfigMode} onPosture={onPosture} onKeyboard={onKeyboard} onEyeUpdate={onEyeUpdate} onEyeSample={onEyeSample} remapRequest={remap} referenceRequest={referenceRequest} sensitivity={sensitivity}>{children}</KeyboardCamera>
+    <KeyboardCamera base={base} openCamera={openCamera} portal={portal} configMode={configMode} setConfigMode={setConfigMode} onPosture={onPosture} onKeyboard={onKeyboard} onEyeUpdate={onEyeUpdate} onEyeSample={onEyeSample} remapRequest={remap} referenceRequest={referenceRequest} sensitivity={sensitivity} viewTargets={viewTargets} viewsReady={viewsReady} skipViewRequest={skipViewRequest}>{children}</KeyboardCamera>
   </CameraProvider>;
 }
 
@@ -96,14 +103,14 @@ type RuntimeProps = { base: BaseState; children: ReactNode; openCamera: (mode: s
   portal: HTMLElement | null; configMode: MonitoringMode; setConfigMode: (mode: MonitoringMode) => void;
   onPosture: (value: MonitorSnapshot) => void; onKeyboard: (value: KeyboardMonitorSnapshot) => void;
   onEyeUpdate: (value: EyeUpdate) => void; onEyeSample: (at: number, value: EyeSnapshot) => void; remapRequest: number; referenceRequest: number;
-  sensitivity: ReturnType<typeof readSensitivity> };
+  sensitivity: ReturnType<typeof readSensitivity>; viewTargets: readonly ViewTarget[]; viewsReady: boolean; skipViewRequest: number };
 const deviceLabel = (session: ReturnType<typeof useSessionControls>) => session.devices.find(device => device.deviceId === session.deviceId)?.label || '기본 카메라';
 function KeyboardCamera(props: RuntimeProps) {
   const upperCamera = useCameraSettings();
   const { controls } = props.base.keyboard;
   return <CameraProvider modeId="keyboard" deviceId={controls.deviceId} cameraLabel={deviceLabel(controls)} paused={controls.isPaused} onOpen={props.openCamera}><MonitoringRuntime {...props} upperCamera={upperCamera} /></CameraProvider>;
 }
-function MonitoringRuntime({ base, children, upperCamera, portal, configMode, setConfigMode, onPosture, onKeyboard, onEyeUpdate, onEyeSample, remapRequest, referenceRequest, sensitivity }: RuntimeProps & { upperCamera: CameraContextValue }) {
+function MonitoringRuntime({ base, children, upperCamera, portal, configMode, setConfigMode, onPosture, onKeyboard, onEyeUpdate, onEyeSample, remapRequest, referenceRequest, sensitivity, viewTargets, viewsReady, skipViewRequest }: RuntimeProps & { upperCamera: CameraContextValue }) {
   const keyboardCamera = useCameraSettings();
   const upper = base.upper.controls, keyboard = base.keyboard.controls;
   const session = configMode === 'upper_body' ? upper : keyboard;
@@ -111,7 +118,7 @@ function MonitoringRuntime({ base, children, upperCamera, portal, configMode, se
   return <MonitoringContext.Provider value={{ upper: { ...base.upper, camera: upperCamera }, keyboard: { ...base.keyboard, camera: keyboardCamera } }}>
     <div hidden aria-hidden="true">
       <CameraContext.Provider value={upperCamera}>
-        <PostureMonitor key={upper.run} isRunning={upper.isRunning} paused={upper.isPaused} referenceRequest={referenceRequest} deviceId={upper.deviceId} onUpdate={onPosture} recordCapture={beginPostureRecording} sensitivity={sensitivity.posture} />
+        <PostureMonitor key={upper.run} isRunning={upper.isRunning} paused={upper.isPaused} referenceRequest={referenceRequest} deviceId={upper.deviceId} onUpdate={onPosture} recordCapture={beginPostureRecording} sensitivity={sensitivity.posture} viewTargets={viewTargets} viewsReady={viewsReady} skipViewRequest={skipViewRequest} />
         <EyeMonitor key={`eye:${upper.run}`} shared active={upper.isRunning && upperCamera.connected} paused={upper.isPaused} deviceId={upper.deviceId} reference={0} eyeReference={referenceRequest} sensitivity={sensitivity.eye} onUpdate={onEyeUpdate} onSample={onEyeSample} onHeadPose={base.upper.screens.onHeadPose} />
       </CameraContext.Provider>
       <CameraContext.Provider value={keyboardCamera}>

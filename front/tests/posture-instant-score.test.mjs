@@ -85,9 +85,10 @@ test('held-pose scores and averages are independent of frame density', () => {
   close(dense.averageScore, sparse.averageScore); close(dense.validMs, sparse.validMs);
 });
 
-test('the new neck policy resets old timed scores while shoulder and habit policies stay compatible', () => {
-  assert.match(neck.version, /^upper-body-neck-v7-/);
-  assert.equal(shoulder.version, 'upper-body-shoulder-v6-9o3ijg');
+test('a new neck policy resets old timed scores while the habit policy stays compatible', () => {
+  // Side-monitor references (dual monitor) moved both score policies to new versions.
+  assert.match(neck.version, /^upper-body-neck-v8-/);
+  assert.match(shoulder.version, /^upper-body-shoulder-v7-/);
   assert.equal(HABIT_POLICY.version, 'weighted-reference-deviation-v6');
   const old = { ...run(10000), scorePolicyVersion: 'upper-body-neck-v6-1fzxkw0', currentScore: 20, lastScore: 20 };
   const state = feed(old, 10100);

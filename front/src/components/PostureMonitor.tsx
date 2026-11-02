@@ -6,6 +6,7 @@ import { advanceCalibration, createCalibration } from '../features/posture/calib
 import { advanceObservation, createObservation, interruptObservation } from '../features/posture/observation';
 import { advanceEvaluation, createEvaluation, habitPolicy, interruptEvaluation } from '../features/posture/evaluation';
 import { createMonitorSnapshot } from '../features/posture/monitorTypes';
+import { advanceViewCalibration, createViewCalibration, currentViewTarget, interruptViewCalibration, skipViewTarget, type ViewTarget } from '../features/posture/viewReferences';
 import type { MonitorSnapshot } from '../features/posture/monitorTypes';
 import { turtleScorePolicy } from '../features/posture/modes/turtle';
 import { shoulderScorePolicy } from '../features/posture/modes/shoulder';
@@ -22,17 +23,32 @@ interface PostureMonitorProps {
   recordCapture?: (start: CaptureStart) => CaptureSink;
   /** "자세 무너짐 민감도" from Settings; fixed for the whole run. */
   sensitivity?: number;
+  /** Side monitors of the registered dual-monitor layout; each gets its own reference this session. */
+  viewTargets?: readonly ViewTarget[];
+  /** Side references start after the blink calibration so the two prompts never compete. */
+  viewsReady?: boolean;
+  skipViewRequest?: number;
 }
 
-const PostureMonitor = ({ isRunning, paused = false, referenceRequest = 0, deviceId, onUpdate, recordCapture, sensitivity }: PostureMonitorProps) => {
+const NO_VIEWS: readonly ViewTarget[] = [];
+const PostureMonitor = ({ isRunning, paused = false, referenceRequest = 0, deviceId, onUpdate, recordCapture, sensitivity, viewTargets = NO_VIEWS, viewsReady = true, skipViewRequest = 0 }: PostureMonitorProps) => {
   const pausedRef = useRef(paused);
   const interrupt = useRef<() => void>(() => {});
   const recollect = useRef<() => void>(() => {});
+  const skipView = useRef<() => void>(() => {});
   const previousReference = useRef(referenceRequest);
+  const previousSkip = useRef(skipViewRequest);
+  // Read per frame, so layout or calibration changes never restart the camera session.
+  const viewTargetsRef = useRef(viewTargets);
+  const viewsReadyRef = useRef(viewsReady);
   useEffect(() => { pausedRef.current = paused; interrupt.current(); }, [paused]);
   useEffect(() => {
     if (previousReference.current !== referenceRequest) { previousReference.current = referenceRequest; recollect.current(); }
   }, [referenceRequest]);
+  useEffect(() => {
+    if (previousSkip.current !== skipViewRequest) { previousSkip.current = skipViewRequest; skipView.current(); }
+  }, [skipViewRequest]);
+  useEffect(() => { viewTargetsRef.current = viewTargets; viewsReadyRef.current = viewsReady; }, [viewTargets, viewsReady]);
   const latest = useRef<MonitorSnapshot>(createMonitorSnapshot());
   const publish = useCallback((snapshot: MonitorSnapshot) => {
     latest.current = snapshot;
@@ -47,6 +63,9 @@ const PostureMonitor = ({ isRunning, paused = false, referenceRequest = 0, devic
     if (!isRunning) return;
     const abort = new AbortController();
     let calibration = createCalibration();
+    // Side-monitor references, rebuilt when the front reference or the registered monitors change.
+    let views = createViewCalibration(NO_VIEWS);
+    let viewsKey: string | null = null;
     let lastUiAt = -Infinity;
     let observation = createObservation();
     const habit = habitPolicy(sensitivity);
@@ -92,6 +111,7 @@ const PostureMonitor = ({ isRunning, paused = false, referenceRequest = 0, devic
     };
     interrupt.current = () => {
       if (!calibration.reference) calibration = createCalibration();
+      views = interruptViewCalibration(views);
       observation = interruptObservation(observation);
       neck = interruptEvaluation(neck);
       shoulder = interruptEvaluation(shoulder);
@@ -105,10 +125,12 @@ const PostureMonitor = ({ isRunning, paused = false, referenceRequest = 0, devic
       recording.forEach(sink => sink?.finish(at));
       recording = beginRecord(at); recordedReference = null;
       calibration = createCalibration(); observation = createObservation();
+      views = createViewCalibration(NO_VIEWS); viewsKey = null;
       neck = createEvaluation(turtleScorePolicy, habit); shoulder = createEvaluation(shoulderScorePolicy, habit);
       resumeAt = at;
       publish({ ...createMonitorSnapshot(), phase: 'calibrating' });
     };
+    skipView.current = () => { views = skipViewTarget(views); };
     const setup = async () => {
       preparing('camera');
       const stream = await startWebcam(deviceId || undefined);
@@ -174,9 +196,16 @@ const PostureMonitor = ({ isRunning, paused = false, referenceRequest = 0, devic
           sourceId: `${track.id}:${capturedGeneration}`, timestampMs: capturedAtMs,
         };
         calibration = advanceCalibration(calibration, frame);
-        observation = advanceObservation(observation, calibration.reference, frame);
         const reference = calibration.reference;
         const referenceKey = reference ? `${reference.completedAtMs}:${reference.widthPx}:${reference.heightPx}` : null;
+        if (reference) {
+          const targets = viewTargetsRef.current;
+          const key = `${referenceKey}|${targets.map(target => target.id).join(',')}`;
+          if (key !== viewsKey) { views = createViewCalibration(targets); viewsKey = key; }
+          if (viewsReadyRef.current && currentViewTarget(views)) views = advanceViewCalibration(views, frame, reference);
+        }
+        // Records follow the front reference only; switching between monitor references stays in one record.
+        observation = advanceObservation(observation, reference, frame, views.references);
         if (recordedReference && recordedReference !== referenceKey) {
           recording.forEach(sink => sink?.finish(capturedAtMs));
           recording = beginRecord(capturedAtMs);
@@ -188,6 +217,7 @@ const PostureMonitor = ({ isRunning, paused = false, referenceRequest = 0, devic
         shoulder = advanceEvaluation(shoulder, observation, shoulderScorePolicy, habit);
         recording[0]?.sample(capturedAtMs, neck);
         recording[1]?.sample(capturedAtMs, shoulder);
+        const collecting = currentViewTarget(views);
         const snapshot: MonitorSnapshot = {
           phase: calibration.reference ? (observation.delta ? 'observing' : 'unavailable') : 'calibrating',
           progress: calibration.progress,
@@ -196,6 +226,10 @@ const PostureMonitor = ({ isRunning, paused = false, referenceRequest = 0, devic
           delta: observation.delta,
           evidence: { head: observation.headEvidence, trunk: observation.trunk.estimate, modelEligible: reference?.baseTrunkUpright === true },
           neck, shoulder,
+          view: observation.delta ? observation.reference?.view ?? null : null,
+          viewCalibration: reference && collecting ? { id: collecting.id, label: collecting.label, index: views.index, total: views.targets.length,
+            progress: views.calibration.progress, reason: views.calibration.reason, waiting: !viewsReadyRef.current } : null,
+          views: views.results,
         };
         if (receivedAtMs - lastUiAt >= 200 || (observation.delta === null && latest.current.delta !== null)) {
           lastUiAt = receivedAtMs;
@@ -232,6 +266,7 @@ const PostureMonitor = ({ isRunning, paused = false, referenceRequest = 0, devic
       abort.abort();
       interrupt.current = () => {};
       recollect.current = () => {};
+      skipView.current = () => {};
       const finishedAt = performance.now();
       recording.forEach(sink => sink?.finish(finishedAt));
       clearInterval(watchdog);

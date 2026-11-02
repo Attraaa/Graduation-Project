@@ -52,7 +52,7 @@ Electron 개발 앱의 키보드 모드는 로컬 Python 프로세스를 자동 
 | `front/src/features/session/` | 두 모드의 지속 런타임·시작/일시정지/재개/중지·활성 시간·캔버스 복사 미리보기·실시간 그래프·공통 상세 틀. 장치 선택은 카메라 설정 창에 저장 |
 | `front/src/features/camera/`, `front/electron/cameraWindow.ts` | 모드·실제 카메라별 구도 자동 저장, 확대·이동까지 공통 변환 영상으로 분석, 동일 스트림의 별도 설정 창, 수동 키보드 외곽/방향 UI. [계약](camera-settings.md) |
 | `front/src/features/posture/PostureSession.tsx` | 목·어깨 점수/평균과 깜빡임 빈도/평균을 짧은 카드로 표시. 기준 재수집·상태·목/어깨 그래프 |
-| `front/src/features/dual-monitor/` | 얼굴 변환 행렬의 고개 방향(`headPose.ts`), 모니터별 방향 등록·저장·무효화(`layout.ts`), 보는 화면 판정·화면별 시간·배치 안내 조건(`tracker.ts`), 숫자 설정(`screenSettings.ts`), 런타임 상태(`useDualMonitor.ts`)와 상체 상세 카드(`DualMonitorPanel.tsx`). 점수·회전 보류 정책을 바꾸지 않음. [가이드](dual-monitor.md) |
+| `front/src/features/dual-monitor/` | 얼굴 변환 행렬의 고개 방향(`headPose.ts`), 모니터별 방향 등록·저장·무효화(`layout.ts`), 보는 화면 판정·화면별 시간·배치 안내 조건(`tracker.ts`), 숫자 설정(`screenSettings.ts`), 런타임 상태(`useDualMonitor.ts`)와 상체 상세 카드(`DualMonitorPanel.tsx`). 옆 모니터 기준 자세의 수집·선택은 `posture/viewReferences.ts`가 소유. [가이드](dual-monitor.md) |
 | `front/src/features/posture/PostureMetrics.tsx` | 목·어깨 현재/세션 평균과 깜빡임 빈도/평균을 짧은 카드로 표시. 점수 산식·임계값을 소유하지 않음 |
 | `front/src/features/posture/monitorTypes.ts` | 카메라와 독립된 상태·점수·습관 표시 계약 |
 | `front/src/components/PostureMonitor.tsx` | 웹캠·모델·기준 수집 연결, 오버레이, 누락/오류 상태 전달 |
@@ -101,7 +101,7 @@ Electron 개발 앱의 키보드 모드는 로컬 Python 프로세스를 자동 
 
 상체 계산은 `AppLayout → MonitoringProvider → PostureMonitor → useWebcam/useMediaPipe → calibration → observation → scoring/evaluation → MonitorSnapshot` 순서입니다. `EyeMonitor(shared) → Face Landmarker → measurement`는 같은 변환 캔버스를 빌려 깜빡임을 계산하며 별도 카메라를 열거나 상체 트랙을 종료하지 않습니다. `PostureSession/PostureMetrics`는 공통 상태를 표시합니다. 기준 다시 잡기는 스트림을 유지하며 자세 기준/기록 구간을 새로 수집하고 깜빡임 누적은 보존합니다. 일시정지는 관측 연속성을 끊고 기준·평균을 유지하며, 중지는 트랙·모델을 해제하고 종료 배치를 보냅니다. 페이지 이동은 계속 관찰합니다. 기존 안구 서버 집계와 통계·이력은 유지하며 휴식 UI는 제거했습니다.
 
-같은 Face Landmarker 결과의 얼굴 변환 행렬은 `EyeMonitor → onHeadPose → useDualMonitor(MonitoringProvider)`로 전달되어 등록한 모니터 중 지금 보는 화면과 화면별 시간을 계산합니다. 옆 모니터를 보는 동안 목·어깨 점수는 지금처럼 보류하고, 상체 상세의 안내 문구만 보는 화면으로 바뀝니다. 등록 방향은 이 기기의 localStorage에만 저장하며 서버 기록 계약은 바뀌지 않습니다. [듀얼 모니터](dual-monitor.md)
+같은 Face Landmarker 결과의 얼굴 변환 행렬은 `EyeMonitor → onHeadPose → useDualMonitor(MonitoringProvider)`로 전달되어 등록한 모니터 중 지금 보는 화면과 화면별 시간을 계산합니다. 등록한 옆 모니터 목록은 `PostureMonitor`로 넘어가, 정면 기준과 깜빡임 보정 뒤 모니터마다 기준 자세를 한 번 더 모읍니다(`posture/viewReferences.ts`). 관측은 프레임마다 회전 비율이 가장 가까운 기준과 비교하고, 옆 모니터 기준에서는 회전을 그 기준과의 차이로 판정하며 귀 폭 단서를 쓰지 않습니다(점수 정책 목 v8·어깨 v7). 등록 방향은 이 기기의 localStorage, 옆 모니터 기준은 세션 메모리에만 있으며 서버 기록 계약은 바뀌지 않습니다. [듀얼 모니터](dual-monitor.md)
 
 키보드는 `MonitoringProvider → KeyboardMonitor → loopback Python service → runtime adapter → finger policy → aggregate recording` 순서이며 `KeyboardSession`은 화면입니다. Electron main은 빈 로컬 포트와 세션 토큰으로 `.venv` Python을 실행합니다. 기본 입력은 Moti 화면의 물리 `code`이고 설정에서 승인한 일반 앱은 시작 때 함께 관찰합니다. 빈 승인 목록은 Moti 관찰만 실행합니다. 일시정지는 입력/프레임·승인 앱 관찰을 멈추고 서버의 임시 프레임/입력 큐를 비우며 재개 때 맵을 새로 확인하고 기존 세션 집계를 이어갑니다. 승인 경로·foreground 권한과 미승인·관리자·확인 불가 앱 제외 경계는 유지합니다.
 

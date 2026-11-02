@@ -36,6 +36,8 @@ export interface FrontalMeasurement extends FrontalMetrics {
   shoulderSpanPx: number;
   earHeightPx: number;
   yawRatio: number;
+  /** Signed nose offset from the ear midpoint / ear span (image right positive); yawRatio is its size. */
+  yawSigned: number;
   /** Both ears and shoulders, in pixels, for capture-time velocity. */
   motionPoints: readonly { x: number; y: number }[];
   sourceId: string;
@@ -50,7 +52,7 @@ export interface FrontalMeasurement extends FrontalMetrics {
 
 export type CalibrationReason = 'invalid-frame' | 'missing-landmarks' | 'low-confidence'
   | 'out-of-frame' | 'shoulders-too-close' | 'moving' | 'interrupted' | 'camera-changed'
-  | 'invalid-time' | 'ears-too-close' | 'head-turned' | 'body-turned';
+  | 'invalid-time' | 'ears-too-close' | 'head-turned' | 'body-turned' | 'facing-front';
 
 export interface CalibrationOptions {
   durationMs: number;
@@ -96,6 +98,10 @@ export interface CalibrationReference {
   completedAtMs: number;
   sampleCount: number;
   metrics: FrontalMetrics;
+  /** Median signed yaw of the samples. Side-monitor references compare later frames against it. */
+  yawSigned?: number;
+  /** Set only for a reference collected while looking at another monitor (dual monitor). */
+  view?: { id: string; label: string };
 }
 
 export interface CalibrationState {
@@ -158,6 +164,7 @@ export function extractFrontalMeasurement(
   const earCenterX = (leftEar.x + rightEar.x) / 2;
   const earCenterY = (leftEar.y + rightEar.y) / 2;
   const earHeightPx = (shoulderCenterY - earCenterY) * heightPx;
+  const yawSigned = (nose.x - earCenterX) * widthPx / earSpanPx;
   return {
     valid: true,
     measurement: {
@@ -165,7 +172,7 @@ export function extractFrontalMeasurement(
       trunkLabel: classifyTrunk(landmarks, frame.worldLandmarks).label,
       sourceId, widthPx, heightPx, timestampMs, shoulderCenterX, shoulderCenterY,
       earSpanPx, shoulderSpanPx, earHeightPx,
-      yawRatio: Math.abs(nose.x - earCenterX) * widthPx / earSpanPx,
+      yawRatio: Math.abs(yawSigned), yawSigned,
       motionPoints: [leftEar, rightEar, left, right].map(point => ({ x: point.x * widthPx, y: point.y * heightPx })),
       shoulderWidthFrameWidths: shoulderSpanPx / widthPx,
       earOffsetShoulderWidths: (earCenterX - shoulderCenterX) * widthPx / shoulderSpanPx,
@@ -255,6 +262,7 @@ export function advanceCalibration(
       baseTrunkUpright: samples.every(value => value.trunkLabel === 'upright'),
       startedAtMs: samples[0].timestampMs, completedAtMs: sample.timestampMs,
       sampleCount: samples.length, metrics,
+      yawSigned: median(samples.map(value => value.yawSigned)),
     },
   };
 }

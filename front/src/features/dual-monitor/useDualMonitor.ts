@@ -22,13 +22,12 @@ export type DualMonitorView = {
 
 const PUBLISH_MS = 250;
 const desktop = () => window.motiDisplays;
-/** Shows the target on the monitor being registered, or hides it. Failures fall back to the in-app guide. */
-const syncTarget = (state: RegistrationState | null) => {
+/** Shows the target on one monitor, or hides it. Failures fall back to the in-app guide. */
+const pointAt = (displayId: string | null | undefined) => {
   const api = desktop();
-  if (!api) return;
-  const displayId = state?.status === 'collecting' ? state.targets[state.step]?.displayId : null;
-  void (displayId ? api.showTarget(displayId) : api.hideTarget()).catch(() => {});
+  if (api) void (displayId ? api.showTarget(displayId) : api.hideTarget()).catch(() => {});
 };
+const syncTarget = (state: RegistrationState | null) => pointAt(state?.status === 'collecting' ? state.targets[state.step]?.displayId : null);
 const registrationView = (state: RegistrationState | null): RegistrationView | null => state && {
   step: state.step, total: state.targets.length, progress: state.progress, issue: state.issue, status: state.status,
   manual: state.targets[0]?.displayId === null,
@@ -38,7 +37,11 @@ const registrationView = (state: RegistrationState | null): RegistrationView | n
  * Owns the per-device monitor layout and the per-run screen time. Frames arrive through `onHeadPose`
  * (stable identity, refs only); the view is published at most every PUBLISH_MS while the run is active.
  */
-export function useDualMonitor({ active, run }: { active: boolean; run: number }): DualMonitorView {
+export function useDualMonitor({ active, run, collectingView = null }: {
+  active: boolean; run: number;
+  /** Screen id whose posture reference the upper-body run is collecting; its monitor shows the target. */
+  collectingView?: string | null;
+}): DualMonitorView {
   const [layout, setLayout] = useState<ScreenLayout | null>(() => readLayout());
   // undefined while the desktop app answers; null outside the desktop app.
   const [displays, setDisplays] = useState<DisplayInfo[] | null | undefined>(() => desktop() ? undefined : null);
@@ -115,6 +118,10 @@ export function useDualMonitor({ active, run }: { active: boolean; run: number }
   }, [setRegistration]);
 
   useEffect(() => { tracker.current = createScreenTracker(); }, [run]);
+  // Registration owns the target while it runs; afterwards it follows the side reference being collected.
+  useEffect(() => {
+    if (!registration.current) pointAt(collectingView?.startsWith('display:') ? collectingView.slice('display:'.length) : null);
+  }, [collectingView]);
 
   useEffect(() => {
     if (!active) return;

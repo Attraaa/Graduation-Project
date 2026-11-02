@@ -127,7 +127,7 @@ test('turning intervals remain excluded from persisted scores and old policy rec
       for (const field of ['validMs', 'scoreTimeSum', 'deviationMs', 'deviationEpisodeCount', 'longestContinuousMs'])
         close(stored[field], latest.evaluations[index][field]);
       assert.ok(stored.validMs < stored.runMs);
-      assert.match(stored.scorePolicyVersion, policies[index].mode === 'turtle' ? /-v7-/ : /-v6-/);
+      assert.match(stored.scorePolicyVersion, policies[index].mode === 'turtle' ? /-v8-/ : /-v7-/);
     });
     assert.equal(db.detail('demo', old.record.id).record.scorePolicyVersion, 'upper-body-neck-v3-old');
   }

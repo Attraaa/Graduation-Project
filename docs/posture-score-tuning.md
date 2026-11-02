@@ -74,6 +74,10 @@
 
 목과 같은 움직임·2초 유예·점진 하락 보호를 거칩니다. 어깨에는 시간 추가 감점을 중복 적용하지 않았습니다. 각도만으로 0점까지 내려가므로 이번에는 비선형 감도의 효과를 먼저 확인합니다.
 
+## 옆 모니터 기준 (2026-11-02, 듀얼 모니터)
+
+`scoreSettings.ts`의 `SIDE_VIEW = { relativeYaw: true, headWidthCue: false }`입니다. 옆 모니터 기준과 비교할 때 회전은 그 기준과의 회전 비율 차이(`YAW_LIMIT` 0.15)로 판정하고, 귀 폭 단서는 끕니다. 목은 추정 깊이·귀–어깨 높이·몸통 보조로, 어깨는 기존 산식으로 계산합니다. 이 설정을 해시에 넣어 점수 정책이 목 `upper-body-neck-v8-gjin2q`, 어깨 `upper-body-shoulder-v7-1dh2rtx`로 바뀌었습니다(아래 v6 ID는 이전 기록). `headWidthCue`를 켜면 고개를 기준보다 10° 덜 돌릴 때 귀 폭이 약 9% 넓어져 목이 감점됩니다. 그래서 실측 보정 없이 켜지 않습니다. [듀얼 모니터](dual-monitor.md)
+
 ## UI·버전·검증
 
 실제 상체 화면은 main의 카메라 → 기존 목/어깨/깜빡임 카드 → 추이 그래프 구조를 사용합니다. 로딩 경과·실제 오류 안내만 유지합니다. 추가했던 점수 근거 패널은 제품 화면에서 제외했고 개발용 `front/tests/posture-browser.html`에서만 사용합니다. 별도 데이터 검사실 `reports/posture-augmentation/model-inspector.html`도 그대로 사용할 수 있습니다.

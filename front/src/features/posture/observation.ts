@@ -1,12 +1,14 @@
 import { DEFAULT_CALIBRATION_OPTIONS, extractFrontalMeasurement } from './calibration.ts';
 import type { CalibrationFrame, CalibrationReason, CalibrationReference, FrontalMeasurement } from './calibration.ts';
-import { OBSERVATION_FILTER, YAW_LIMIT } from './scoreSettings.ts';
+import { OBSERVATION_FILTER, SIDE_VIEW, YAW_LIMIT } from './scoreSettings.ts';
 import { relativeHeadEvidence, trunkContribution } from './relativeHead.ts';
 import { advanceTrunkTracker, classifyTrunk, createTrunkTracker, type TrunkTracker } from './trunkClassifier.ts';
+import { chooseReference } from './viewReferences.ts';
 
 /**
  * [역할: 카메라 좌표를 비교 가능한 변화량으로 바꾸기]
  * 입력: 이번 프레임의 코·귀·어깨 좌표 + 세션 시작 때 수집한 기준(reference).
+ * 듀얼 모니터의 옆 모니터 기준이 있으면 고개 방향이 가장 가까운 기준과 비교합니다.
  * 출력: 변화량(delta), 움직임 속도, 실제로 관찰한 시간. 점수는 아직 계산하지 않습니다.
  * 한 프레임은 카메라에서 전달된 한 시점의 관측 결과입니다.
  */
@@ -21,7 +23,7 @@ export interface PostureDeltas {
   shoulderTilt: number;
   // 각 시점의 어깨 폭으로 정규화한 귀-어깨 간격 변화의 절댓값.
   shoulderShrug: number;
-  // 코의 좌우 치우침 / 귀 폭. 회전 판정 보류에 사용하는 비율입니다.
+  // 코의 좌우 치우침 / 귀 폭. 회전 판정 보류에 사용하는 비율입니다. 옆 모니터 기준에서는 그 기준과의 차이입니다.
   yawRatio: number;
 }
 
@@ -33,6 +35,7 @@ export interface ObservationState {
   // 마지막으로 처리한 시각과 마지막으로 유효했던 시각을 따로 기억합니다.
   lastTimestampMs: number | null;
   lastValidAtMs: number | null;
+  // 이번 프레임을 비교한 기준(정면 또는 옆 모니터). 기준이 바뀌면 연속 시간을 잇지 않습니다.
   reference: CalibrationReference | null;
   // null = 측정 불가, 각 항목의 0 = 유효하게 측정했지만 해당 변화가 없음.
   delta: PostureDeltas | null;
@@ -58,12 +61,13 @@ export function interruptObservation(previous: ObservationState): ObservationSta
 /** 프레임이 들어올 때마다 이전 상태를 읽고 새 상태를 반환합니다. 이전 객체를 직접 바꾸지 않습니다. */
 export function advanceObservation(
   previous: ObservationState,
-  reference: CalibrationReference | null,
+  front: CalibrationReference | null,
   frame: CalibrationFrame,
+  views: readonly CalibrationReference[] = [],
 ): ObservationState {
   const { timestampMs } = frame;
   // 우선 현재 값을 비웁니다. 아래 검사를 모두 통과해야 다시 유효한 값을 채웁니다.
-  const cleared = { ...interruptObservation(previous), reference };
+  const cleared = { ...interruptObservation(previous), reference: front };
   if (!Number.isFinite(timestampMs) || timestampMs < 0
     || (previous.lastTimestampMs !== null && timestampMs <= previous.lastTimestampMs)) {
     // 중복·역행 프레임은 제외합니다. 마지막 시각을 되돌리지 않아 시간을 중복 가산하지 않습니다.
@@ -73,13 +77,20 @@ export function advanceObservation(
   // calibration.ts의 공통 함수가 좌표·가시성을 검사하고 픽셀 거리/비율을 계산합니다.
   const current = extractFrontalMeasurement(frame);
   if (!current.valid) return { ...next, reason: current.reason };
-  if (!reference) return { ...next, reason: null };
+  if (!front) return { ...next, reason: null };
+  // 고개 방향이 가장 가까운 기준(정면 또는 옆 모니터)과만 비교합니다.
+  const reference = chooseReference(front, views, current.measurement);
+  const side = reference.view !== undefined;
+  // 정면 기준은 기존처럼 회전 크기, 옆 모니터 기준은 그 기준을 모을 때의 회전량과의 차이로 판정합니다.
+  const turned = side && SIDE_VIEW.relativeYaw
+    ? Math.abs(current.measurement.yawSigned - (reference.yawSigned ?? 0)) : current.measurement.yawRatio;
+  const chosen = { ...next, reference };
   if (reference.sourceId !== frame.sourceId || reference.widthPx !== frame.widthPx || reference.heightPx !== frame.heightPx) {
-    return { ...next, reason: 'camera-changed' };
+    return { ...chosen, reason: 'camera-changed' };
   }
-  if (timestampMs < reference.completedAtMs) return { ...next, reason: 'invalid-time' };
+  if (timestampMs < reference.completedAtMs) return { ...chosen, reason: 'invalid-time' };
   // 회전 중에는 delta를 만들지 않습니다. 회전 진입·복귀를 가로지르는 시간도 연결하지 않습니다.
-  if (current.measurement.yawRatio > YAW_LIMIT) return { ...next, reason: 'head-turned' };
+  if (turned > YAW_LIMIT) return { ...chosen, reason: 'head-turned' };
 
   // 같은 기준에서, 연속된 유효 관측 사이 간격이 500ms 이하일 때만 시간을 더합니다.
   // 첫 프레임·누락 후 첫 프레임·긴 공백은 비교할 연결 구간이 없어 0초를 더합니다.
@@ -91,8 +102,10 @@ export function advanceObservation(
     ? gapMs / 1000 : 0;
   const measurement = current.measurement;
   // 각 시점의 어깨 폭으로 나눠 단순한 영상 확대/축소를 제거합니다.
-  const headEvidence = relativeHeadEvidence(measurement.earSpanPx / reference.baseEarSpanPx,
-    measurement.shoulderSpanPx / reference.baseShoulderSpanPx, reference.baseHeadDepth, measurement.headDepth);
+  const shoulderScale = measurement.shoulderSpanPx / reference.baseShoulderSpanPx;
+  // 옆 모니터 기준에서는 회전에 민감한 귀 폭을 쓰지 않습니다(귀 배율 = 어깨 배율이면 폭 단서는 0).
+  const earScale = side && !SIDE_VIEW.headWidthCue ? shoulderScale : measurement.earSpanPx / reference.baseEarSpanPx;
+  const headEvidence = relativeHeadEvidence(earScale, shoulderScale, reference.baseHeadDepth, measurement.headDepth);
   const heightDifference = reference.baseEarHeightPx / reference.baseShoulderSpanPx
     - measurement.earHeightPx / measurement.shoulderSpanPx;
   const heightChange = Math.sign(heightDifference) * Math.max(0, Math.abs(heightDifference) - headEvidence.tolerance);
@@ -114,7 +127,7 @@ export function advanceObservation(
     shoulderTilt: Math.abs(Math.asin(Math.max(-1, Math.min(1, measurement.shoulderHeightDifferenceShoulderWidths)))
       - Math.asin(Math.max(-1, Math.min(1, reference.metrics.shoulderHeightDifferenceShoulderWidths)))),
     shoulderShrug: Math.abs(heightChange),
-    yawRatio: measurement.yawRatio,
+    yawRatio: turned,
   };
   const deltaWindow = [...(addedSeconds > 0 ? previous.deltaWindow : [])
     .filter(sample => timestampMs - sample.at <= OBSERVATION_FILTER.windowMs), { at: timestampMs, delta: raw }]
@@ -131,7 +144,7 @@ export function advanceObservation(
   delta.torsoForward = trunkContribution(reference.baseTrunkUpright === true,
     trunk.estimate.label === 'forward', delta.headForward, delta.neckSlump);
   return {
-    ...next,
+    ...chosen,
     observedSeconds: previous.observedSeconds + addedSeconds,
     lastValidAtMs: timestampMs,
     reason: null,

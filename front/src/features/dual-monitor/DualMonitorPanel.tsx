@@ -1,5 +1,6 @@
 import { Lightbulb, Monitor } from 'lucide-react';
 import type { RegistrationIssue } from './layout';
+import type { ViewResult } from '../posture/viewReferences';
 import type { ScreenAdvice, ScreenSummary } from './tracker';
 import type { DualMonitorView } from './useDualMonitor';
 
@@ -27,14 +28,18 @@ const adviceText = (advice: ScreenAdvice) => advice.kind === 'side-heavy'
     : '정면 모니터를 중심으로 쓰고 있습니다. 지금 배치를 유지해도 좋습니다.';
 
 /** Presentation only: registration, current screen and per-screen time come from useDualMonitor. */
-export default function DualMonitorPanel({ view, isRunning, isPaused }: { view: DualMonitorView; isRunning: boolean; isPaused: boolean }) {
+export default function DualMonitorPanel({ view, isRunning, isPaused, references = [] }: {
+  view: DualMonitorView; isRunning: boolean; isPaused: boolean;
+  /** Side-monitor posture references of the current upper-body run. */
+  references?: readonly ViewResult[];
+}) {
   const { layout, issue, registration } = view;
   const canRegister = isRunning && !isPaused;
   return <section aria-label="듀얼 모니터" className="space-y-3 rounded-2xl border border-border bg-surface p-4">
     <div className="flex flex-wrap items-start justify-between gap-2">
       <div>
         <h2 className="flex items-center gap-2 font-bold text-heading"><Monitor size={18} />듀얼 모니터</h2>
-        <p className="mt-1 text-xs text-muted">얼굴 방향으로 지금 보는 화면을 구분합니다. 눈동자 시선 추적은 아닙니다.</p>
+        <p className="mt-1 text-xs text-muted">얼굴 방향으로 지금 보는 화면을 구분하고, 화면마다 잡은 기준 자세로 점수를 계산합니다. 눈동자 시선 추적은 아닙니다.</p>
       </div>
       {layout && !issue && !registration && <div className="flex gap-2">
         <button type="button" className={button} disabled={!canRegister} onClick={view.register}>다시 등록</button>
@@ -43,7 +48,7 @@ export default function DualMonitorPanel({ view, isRunning, isPaused }: { view: 
     </div>
     {registration ? <Registration view={view} canRegister={canRegister} />
       : !layout || issue ? <Intro view={view} canRegister={canRegister} />
-        : <Usage view={view} running={canRegister} />}
+        : <Usage view={view} running={canRegister} references={references} />}
   </section>;
 }
 
@@ -56,7 +61,7 @@ function Intro({ view, canRegister }: { view: DualMonitorView; canRegister: bool
     {view.issue && <p role="status" className="rounded-xl bg-surface-muted p-3 text-sm text-heading">
       {view.issue === 'camera' ? '카메라나 영상 설정이 바뀌어 등록한 방향을 쓸 수 없습니다.' : '모니터 연결이나 배치가 바뀌어 등록한 방향을 쓸 수 없습니다.'} 다시 등록해 주세요.
     </p>}
-    <p className="text-sm text-muted">{how} 등록하면 옆 화면을 볼 때 경고 대신 보고 있는 화면을 표시하고, 화면별 사용 시간을 알려 드립니다.</p>
+    <p className="text-sm text-muted">{how} 등록하면 측정을 시작할 때마다 옆 모니터의 기준 자세도 함께 잡아, 그 화면을 볼 때도 목·어깨 점수를 계산합니다. 화면별 사용 시간도 알려 드립니다.</p>
     <div className="flex flex-wrap items-center gap-3">
       <button type="button" className={primaryButton} disabled={!canRegister} onClick={view.register}>모니터 방향 등록</button>
       {view.issue && <button type="button" className={button} onClick={view.forget}>등록 해제</button>}
@@ -81,7 +86,9 @@ function Registration({ view, canRegister }: { view: DualMonitorView; canRegiste
   </div>;
 }
 
-function Usage({ view, running }: { view: DualMonitorView; running: boolean }) {
+const REFERENCE_TEXT: Record<ViewResult['status'], string> = { ready: '기준 있음', failed: '기준을 잡지 못함', skipped: '건너뜀' };
+
+function Usage({ view, running, references }: { view: DualMonitorView; running: boolean; references: readonly ViewResult[] }) {
   const screens = view.layout!.screens;
   const summary: ScreenSummary | null = view.summary;
   const color = (id: string) => {
@@ -99,6 +106,7 @@ function Usage({ view, running }: { view: DualMonitorView; running: boolean }) {
         {currentLabel}{current !== null && summary ? ` · ${duration(summary.currentMs)}째` : ''}
       </span>
     </div>
+    <ReferenceStatus screens={screens} references={references} running={running} />
     {!summary || summary.observedMs <= 0 ? <p className="text-sm text-muted">상체 측정 중 얼굴이 보이면 화면별 시간이 여기에 쌓입니다. 등록한 화면: {screens.map(screen => screen.label).join(', ')}</p> : <>
       <div role="img" aria-label={`화면별 시간 ${shares.map(share => `${share.label} ${percent(share.share)}`).join(', ')}`} className="flex h-3 overflow-hidden rounded-full bg-track">
         {shares.map(share => <span key={share.id} style={{ width: `${share.share * 100}%`, backgroundColor: color(share.id) }} />)}
@@ -114,4 +122,14 @@ function Usage({ view, running }: { view: DualMonitorView; running: boolean }) {
         : <p className="text-xs text-muted">5분 이상 관찰하면 화면 배치 안내를 보여 드립니다.</p>}
     </>}
   </div>;
+}
+
+/** Which monitors have their own reference in this run; side monitors without one stay on hold while watched. */
+function ReferenceStatus({ screens, references, running }: { screens: { id: string; label: string; main: boolean }[]; references: readonly ViewResult[]; running: boolean }) {
+  if (!running) return null;
+  return <p className="text-xs text-muted">이번 측정의 기준 자세 · {screens.map(screen => {
+    const result = references.find(item => item.id === screen.id);
+    const state = screen.main ? '기준 있음' : result ? REFERENCE_TEXT[result.status] : '대기';
+    return `${screen.label} ${state}`;
+  }).join(' · ')}</p>;
 }

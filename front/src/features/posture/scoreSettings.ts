@@ -22,6 +22,10 @@ export const SHOULDER_CURVE = Object.freeze({ kneeDegrees: 4, doublingDegrees: 3
 // 코가 양 귀의 중점에서 얼마나 옆으로 벗어났는지 / 귀 폭. 0.15는 회전 각도가 아닙니다.
 // 이 비율을 넘으면 귀 좌표 비교를 믿기 어려워 목·어깨 모두 판정을 보류합니다.
 export const YAW_LIMIT = 0.15;
+// 듀얼 모니터의 옆 모니터 기준: 그 모니터를 볼 때 따로 모은 기준과만 비교합니다.
+// 회전은 그 기준의 회전량과의 차이로 판정하고(같은 YAW_LIMIT), 고개를 돌린 상태의 귀 폭은 회전에 민감해
+// 목 전진의 폭 단서는 쓰지 않습니다. 추정 깊이·귀-어깨 높이·어깨 기울기 단서는 정면과 같습니다.
+export const SIDE_VIEW = Object.freeze({ relativeYaw: true, headWidthCue: false });
 // MediaPipe의 추정 3D 양어깨 깊이 차이 / 3D 어깨 폭. 실제 회전 각도는 아닙니다.
 export const BODY_YAW_LIMIT = 0.55;
 export const OBSERVATION_FILTER = Object.freeze({ samples: 3, windowMs: 250 });
@@ -44,7 +48,7 @@ export const MOTION_PROTECTION = Object.freeze({
 });
 
 /**
- * 설정을 짧은 문자열 ID로 바꿉니다. 예: upper-body-shoulder-v6-<해시>.
+ * 설정을 짧은 문자열 ID로 바꿉니다. 예: upper-body-shoulder-v7-<해시>.
  * 해시 = 설정 내용에서 계산한 구분값입니다. 설정이 달라지면 ID도 달라집니다.
  * 서로 다른 규칙으로 계산한 기록을 통계에서 섞지 않기 위해 저장합니다.
  * 아래 반복문은 ID를 만드는 과정이며 점수 계산식은 아닙니다.
@@ -55,8 +59,10 @@ export function scoreSettingsVersion(part: 'neck' | 'shoulder', weights: object,
     verticalGain: part === 'shoulder' ? SHOULDER_VERTICAL_GAIN : 1,
     shoulderCurve: part === 'shoulder' ? SHOULDER_CURVE : null,
     // 시간 누적 감점은 없습니다. 어깨 v6의 기존 해시 입력은 유지합니다.
-    sustained: null });
+    sustained: null,
+    // 옆 모니터 기준 비교(듀얼 모니터)를 추가하며 목 v8, 어깨 v7로 올렸습니다.
+    sideView: SIDE_VIEW });
   let hash = 2166136261;
   for (const char of text) hash = Math.imul(hash ^ char.charCodeAt(0), 16777619);
-  return `upper-body-${part}-${part === 'neck' ? 'v7' : 'v6'}-${(hash >>> 0).toString(36)}`;
+  return `upper-body-${part}-${part === 'neck' ? 'v8' : 'v7'}-${(hash >>> 0).toString(36)}`;
 }

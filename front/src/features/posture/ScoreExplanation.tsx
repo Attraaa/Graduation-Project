@@ -18,6 +18,7 @@ const reasons: Record<NonNullable<MonitorSnapshot['reason']>, string> = {
   'camera-changed': '카메라 구도가 바뀌어 기준을 다시 수집합니다.', 'interrupted': '영상이 끊겨 관찰을 보류합니다.',
   'invalid-time': '연속된 영상 시각을 확인할 수 없습니다.', 'ears-too-close': '귀 사이 폭이 너무 작게 보입니다.',
   'head-turned': '얼굴이 돌아가 비교를 보류합니다.', 'body-turned': '몸통이 돌아가 비교를 보류합니다.',
+  'facing-front': '옆 모니터 기준을 모으는 중인데 아직 정면을 보고 있습니다.',
 };
 
 function protectionText(result: EvaluationSummary) {

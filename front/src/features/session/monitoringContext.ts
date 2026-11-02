@@ -15,7 +15,7 @@ type Session = {
   trend: TrendPoint[];
 };
 export interface MonitoringState {
-  upper: Session & { snapshot: MonitorSnapshot; eye: EyeUpdate; recalibrate: () => void; screens: DualMonitorView };
+  upper: Session & { snapshot: MonitorSnapshot; eye: EyeUpdate; recalibrate: () => void; screens: DualMonitorView; skipView: () => void };
   keyboard: Session & { snapshot: KeyboardMonitorSnapshot; remap: () => void };
 }
 export const MonitoringContext = createContext<MonitoringState | null>(null);
