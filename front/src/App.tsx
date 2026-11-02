@@ -7,6 +7,7 @@ import FindPassword from './pages/FindPassword';
 import Dashboard from './pages/Dashboard';
 import Statistics from './pages/Statistics';
 import Settings from './pages/Settings';
+import AiReview from './pages/AiReview';
 import AppLayout from './components/layout/AppLayout';
 import LearningSession from './pages/LearningSession';
 import LearningHistory from './pages/LearningHistory';
@@ -43,6 +44,7 @@ function App() {
               <Route path="/learn/:modeId" element={<LearningSession />} />
               <Route path="/statistics" element={<Statistics />} />
               <Route path="/history" element={<LearningHistory />} />
+              <Route path="/ai-review" element={<AiReview />} />
               <Route path="/settings" element={<Settings />} />
             </Route>
           </Routes>

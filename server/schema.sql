@@ -10,6 +10,7 @@ DROP TABLE IF EXISTS `Session`;
 DROP TABLE IF EXISTS `user`;
 
 -- 기존 서버 테이블도 초기화 (재생성 위해)
+DROP TABLE IF EXISTS password_reset_codes;
 DROP TABLE IF EXISTS eye_batches;
 DROP TABLE IF EXISTS eye_buckets;
 DROP TABLE IF EXISTS eye_records;
@@ -250,3 +251,13 @@ CREATE TABLE eye_batches (
   PRIMARY KEY (record_id, sequence),
   FOREIGN KEY (record_id) REFERENCES eye_records(id) ON DELETE CASCADE
 ) DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_bin;
+
+-- 17. 비밀번호 재설정 인증 코드 (migrations/004_password_reset_codes.sql과 같은 정의)
+-- 사용자당 최근 코드 하나. 코드는 해시만 저장하고, 다시 요청하면 코드와 시도 횟수를 새로 씁니다.
+CREATE TABLE password_reset_codes (
+  user_id    INT      NOT NULL PRIMARY KEY,
+  code_hash  CHAR(64) NOT NULL,
+  expires_at DATETIME NOT NULL,
+  attempts   INT      NOT NULL DEFAULT 0,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);

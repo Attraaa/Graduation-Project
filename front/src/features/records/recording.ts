@@ -4,6 +4,7 @@ import { emptyTotals } from '../../../../database/contracts';
 import type { RecordMode } from '../../../../database/contracts';
 import { getCurrentUser } from '../../utils/authStore';
 import { recordsApi, recordValue } from './api';
+import { recordsChanged } from './refresh';
 
 export interface CaptureStart { id?: string; mode: RecordMode; scorePolicyVersion: string; habitPolicyVersion: string; at: number; epoch: number }
 export interface CaptureSink { sample(at: number, evaluation: CaptureEvaluation): void; finish(at: number): void }
@@ -36,7 +37,7 @@ async function save(entry: Active) {
         if (!batch) break;
         await recordValue(recordsApi().write(batch));
         entry.collector.acknowledge();
-        if (batch.record.status !== 'running') { active.delete(entry); break; }
+        if (batch.record.status !== 'running') { active.delete(entry); recordsChanged(); break; }
       } while (entry.stopped || entry.collector.hasPending);
       entry.error = null;
       announce('측정 기록이 서버에 저장되었습니다.');
@@ -85,15 +86,22 @@ export async function finishRecordings() {
   }
   await retryRecordings();
 }
-export function discardDeletedRecordings(owner: string) {
+/** Stops every measurement and saves its last batch while the login token is still there (window close, logout). */
+export async function stopAndSaveRecordings() {
+  window.dispatchEvent(new Event('moti-stop-measurement'));
+  await finishRecordings();
+}
+function discardRecordings(owner: string, next: string) {
   participants.forEach(item => item.discard(owner));
   for (const entry of active) if (entry.collector.record.owner === owner) {
     clearInterval(entry.timer); entry.stopped = true; entry.collector.finish(performance.now()); active.delete(entry);
   }
-  announce('현재 계정 기록을 삭제했습니다. 새 측정부터 다시 저장됩니다.');
+  announce(next);
 }
+export const discardDeletedRecordings = (owner: string) => discardRecordings(owner, '현재 계정 기록을 삭제했습니다. 새 측정부터 다시 저장됩니다.');
+/** After a logout the user accepted despite a failed save: nothing of that account is retried under the next login. */
+export const discardUnsavedRecordings = (owner: string) => discardRecordings(owner, '측정한 기록은 서버에 저장됩니다.');
 
 if (typeof window !== 'undefined') window.motiRecords?.onClosing(async () => {
-  window.dispatchEvent(new Event('moti-stop-measurement'));
-  try { await finishRecordings(); return true; } catch { return false; }
+  try { await stopAndSaveRecordings(); return true; } catch { return false; }
 });

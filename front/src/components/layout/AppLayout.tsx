@@ -4,8 +4,8 @@ import Sidebar from '../Sidebar';
 import MonitoringProvider from '../../features/session/MonitoringProvider';
 
 // App routes share one shell; each page owns only the content inside Outlet.
-// Widget pages (dashboard, statistics, history, settings) need a wider canvas; other pages keep their reading width.
-const WIDE_PAGES = ['/dashboard', '/statistics', '/history', '/settings'];
+// Widget pages (dashboard, statistics, history, AI review, settings) need a wider canvas; other pages keep their reading width.
+const WIDE_PAGES = ['/dashboard', '/statistics', '/history', '/ai-review', '/settings'];
 
 const AppLayout = () => {
   const pathname = useLocation().pathname;

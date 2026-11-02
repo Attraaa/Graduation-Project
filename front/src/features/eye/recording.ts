@@ -4,6 +4,7 @@ import { emptyEyeTotals } from '../../../../database/eye';
 import { getCurrentUser } from '../../utils/authStore';
 import { recordsApi, recordValue } from '../records/api';
 import { registerRecorder, announceRecording } from '../records/recording';
+import { recordsChanged } from '../records/refresh';
 import { eyePolicyVersion } from './eyePolicy';
 import type { EyeSensitivity } from './eyePolicy';
 
@@ -22,7 +23,7 @@ async function save(entry: Active): Promise<void> {
         await recordValue(recordsApi().writeEye(batch));
         if (!active.has(entry)) return;
         entry.collector.acknowledge();
-        if (batch.record.status !== 'running') { active.delete(entry); break; }
+        if (batch.record.status !== 'running') { active.delete(entry); recordsChanged(); break; }
       } while (entry.collector.record.status !== 'running' || entry.collector.hasPending);
       entry.error = null; announceRecording('안구 기록이 서버에 저장되었습니다.');
     } catch (error) {

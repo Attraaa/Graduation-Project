@@ -11,6 +11,7 @@ const Register = () => {
   const [formData, setFormData] = useState({
     nickname: '',
     userId: '',
+    email: '',
     password: '',
     confirmPassword: ''
   });
@@ -34,8 +35,8 @@ const Register = () => {
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.nickname.trim() || !formData.userId.trim() || !formData.password || !formData.confirmPassword) {
-      void notify({ title: '입력 확인', message: '닉네임, 아이디, 비밀번호, 비밀번호 확인을 모두 입력해 주세요.', tone: 'warning' });
+    if (!formData.nickname.trim() || !formData.userId.trim() || !formData.email.trim() || !formData.password || !formData.confirmPassword) {
+      void notify({ title: '입력 확인', message: '닉네임, 아이디, 이메일, 비밀번호, 비밀번호 확인을 모두 입력해 주세요.', tone: 'warning' });
       return;
     }
     if(formData.password !== formData.confirmPassword) {
@@ -45,6 +46,7 @@ const Register = () => {
     const result = await registerUser({
       username: formData.userId.trim(),
       nickname: formData.nickname.trim(),
+      email: formData.email.trim(),
       password: formData.password,
     });
     await notify({ title: result.ok ? '가입 완료' : '가입 실패', message: result.message, tone: result.ok ? 'success' : 'warning' });
@@ -91,6 +93,19 @@ const Register = () => {
                 {idMessage}
               </p>
             )}
+          </div>
+          <div>
+            <input
+              type="email"
+              name="email"
+              placeholder="이메일"
+              autoComplete="email"
+              className="w-full rounded-2xl border-2 border-gray-200 bg-gray-50 px-4 py-4 font-bold text-gray-700 outline-none transition focus:border-[#1cb0f6] focus:bg-white"
+              value={formData.email}
+              onChange={handleChange}
+              required
+            />
+            <p className="mt-2 text-sm font-bold text-gray-500">아이디·비밀번호를 찾을 때 이 이메일로 보내 드려요.</p>
           </div>
           <input
             type="password"

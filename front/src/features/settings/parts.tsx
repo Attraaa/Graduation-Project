@@ -1,4 +1,5 @@
-import type { ReactNode } from 'react';
+import { useEffect, type ReactNode } from 'react';
+import { X } from 'lucide-react';
 
 export const INPUT = 'h-10 w-full rounded-xl border border-border bg-surface-muted px-3 text-sm text-heading placeholder:text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-secondary/40';
 const BUTTON_BASE = 'inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-xl px-4 text-sm font-semibold transition disabled:cursor-default disabled:opacity-40';
@@ -26,6 +27,32 @@ export function SettingsCard({ title, note, icon, iconClass = 'bg-track text-hea
       </div>
       {children}
     </section>
+  );
+}
+
+/**
+ * A form window over the settings page, in the same frame as the app dialog. Escape or the close button cancels.
+ * It sits below the dialog layer, so close it before showing a notice.
+ */
+export function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+  useEffect(() => {
+    const cancel = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', cancel);
+    return () => window.removeEventListener('keydown', cancel);
+  }, [onClose]);
+  return (
+    <div className="fixed inset-0 z-[90] flex items-center justify-center bg-gray-900/35 px-5 backdrop-blur-sm">
+      <section role="dialog" aria-modal="true" aria-label={title} className="w-full max-w-sm space-y-4 rounded-3xl border-2 border-border bg-surface p-6 shadow-2xl">
+        <div className="flex items-center justify-between gap-4">
+          <h2 className="text-lg font-extrabold text-heading">{title}</h2>
+          <button type="button" onClick={onClose} aria-label="닫기"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-muted transition hover:bg-nav-active hover:text-heading">
+            <X size={20} />
+          </button>
+        </div>
+        {children}
+      </section>
+    </div>
   );
 }
 

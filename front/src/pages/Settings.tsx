@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { Activity, Bell, Check, Database, Eye, KeyRound, Palette, Trash2, User } from 'lucide-react';
-import { changePassword, clearStatistics, getCurrentUser, updateCurrentUser } from '../utils/authStore';
+import { Activity, Bell, Check, Database, Eye, Palette, Trash2, User } from 'lucide-react';
+import { clearStatistics, getCurrentUser, updateCurrentUser } from '../utils/authStore';
 import { useDialog } from '../components/dialog/useDialog';
 import type { EyeSensitivity } from '../features/eye/eyePolicy';
 import KeyboardSettings from '../features/keyboard/KeyboardSettings';
+import AccountSecurity from '../features/settings/AccountSecurity';
 import { POSTURE_SENSITIVITY } from '../features/posture/evaluation';
-import { BUTTON, BUTTON_DANGER, BUTTON_STRONG, Field, INPUT, Segmented, SettingsCard, Slider, Switch } from '../features/settings/parts';
+import { BUTTON, BUTTON_DANGER, Field, INPUT, Segmented, SettingsCard, Slider, Switch } from '../features/settings/parts';
 import { readEyeSensitivity, readPostureSensitivity, writeEyeSensitivity, writePostureSensitivity } from '../features/settings/preferences';
 
 type Theme = 'light' | 'dark';
@@ -69,8 +70,6 @@ const Settings = () => {
   const [darkMode, setDarkMode] = useState(localStorage.getItem('postureAI.theme') === 'dark');
   const [nickname, setNickname] = useState(currentUser?.nickname ?? '');
   const [savedNickname, setSavedNickname] = useState(nickname);
-  const [currentPassword, setCurrentPassword] = useState('');
-  const [nextPassword, setNextPassword] = useState('');
   const [alertFrequency, setAlertFrequency] = useState(localStorage.getItem('postureAI.alertFrequency') ?? '10');
   const [alertStrength, setAlertStrength] = useState(localStorage.getItem('postureAI.alertStrength') ?? 'normal');
   const [scoreThreshold, setScoreThreshold] = useState(Number(localStorage.getItem('postureAI.scoreThreshold') ?? 70));
@@ -87,19 +86,6 @@ const Settings = () => {
     const result = await updateCurrentUser(nickname);
     if (result.ok) setSavedNickname(nickname.trim());
     await notify({ title: result.ok ? '변경 완료' : '변경 실패', message: result.message, tone: result.ok ? 'success' : 'warning' });
-  };
-
-  const handlePasswordChange = async () => {
-    if (!nextPassword || nextPassword.length < 6) {
-      await notify({ title: '비밀번호 확인', message: '새 비밀번호는 6자 이상 입력해 주세요.', tone: 'warning' });
-      return;
-    }
-    const result = await changePassword(currentPassword, nextPassword);
-    await notify({ title: result.ok ? '변경 완료' : '변경 실패', message: result.message, tone: result.ok ? 'success' : 'warning' });
-    if (result.ok) {
-      setCurrentPassword('');
-      setNextPassword('');
-    }
   };
 
   const handleClearStatistics = async () => {
@@ -145,17 +131,7 @@ const Settings = () => {
           <button type="button" onClick={handleAccountSave} className={`${BUTTON} mt-auto w-full`}>닉네임 변경</button>
         </SettingsCard>
 
-        <SettingsCard title="비밀번호" icon={<KeyRound size={18} />}>
-          <Field label="현재 비밀번호" htmlFor="settings-current-password">
-            <input id="settings-current-password" type="password" value={currentPassword}
-              onChange={event => setCurrentPassword(event.target.value)} className={INPUT} />
-          </Field>
-          <Field label="새 비밀번호 (6자 이상)" htmlFor="settings-next-password">
-            <input id="settings-next-password" type="password" value={nextPassword}
-              onChange={event => setNextPassword(event.target.value)} className={INPUT} />
-          </Field>
-          <button type="button" onClick={handlePasswordChange} className={`${BUTTON_STRONG} mt-auto w-full`}>비밀번호 변경</button>
-        </SettingsCard>
+        <AccountSecurity />
 
         <SettingsCard title="화면 테마" note="누르면 바로 바뀌어요" icon={<Palette size={18} />}>
           <div role="group" aria-label="테마" className="grid flex-1 grid-cols-2 gap-3">

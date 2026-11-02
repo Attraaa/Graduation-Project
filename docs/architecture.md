@@ -64,15 +64,16 @@ Electron 개발 앱의 키보드 모드는 로컬 Python 프로세스를 자동 
 | `front/src/features/posture/modes/turtle.ts`, `modes/shoulder.ts` | 부위별 가중합 정책·버전. 조정 상수는 scoreSettings.ts |
 | `front/src/features/posture/scoring.ts` | 귀·어깨 비율을 부위별 가중합으로 0–100 환산하는 순수 함수 |
 | `front/src/features/posture/evaluation.ts` | 유효 시간 가중 평균·연속 관찰·기준 이탈 구간의 순수 집계 |
-| `front/src/utils/apiClient.ts`, `authStore.ts` | API 주소·JWT 세션 보관·401 처리, 서버 회원가입/로그인/계정 변경 |
+| `front/src/utils/apiClient.ts`, `authStore.ts` | API 주소·JWT 세션 보관·401 처리, 서버 회원가입/로그인/계정 변경, 이메일로 아이디 찾기·비밀번호 재설정(`pages/FindId.tsx`, `FindPassword.tsx`) |
 | `database/contracts.ts`, `keyboard.ts`, `eye.ts`, `eyeRecorder.ts`, `recorder.ts`, `aggregation.ts` | 자세·키보드 직렬화 계약·순수 집계. 프론트와 서버가 같은 검증기를 사용 |
-| `front/src/features/records/` | 저장 배치/실패 재시도·HTTP 기록 API·조회 상태·목/어깨 표시 어댑터. AI/의학 예시는 별도 컴포넌트 |
+| `front/src/features/records/` | 저장 배치/실패 재시도·HTTP 기록 API·조회 상태·목/어깨 표시 어댑터. 측정의 마지막 배치가 저장되면 `refresh.ts`가 신호를 보내고 `useRecordQuery`가 열린 화면(홈·통계·학습이력)을 이전 값을 유지한 채 다시 불러옴. AI/의학 예시는 별도 컴포넌트 |
 | `front/src/pages/Statistics.tsx`, `front/src/features/statistics/` | 통계(7/30일, 직전 같은 길이 기간 비교, 상체·키보드·안구 탭). `period.ts`가 세 출처 응답으로 기간 값을 계산하는 순수 함수, `useStatisticsData.ts`가 불러옴. 키보드 탭은 `features/keyboard/KeyboardStatistics.tsx`(계산은 키보드 담당). [설계](superpowers/specs/2026-10-06-stats-history-redesign-design.md) |
 | `front/src/pages/LearningHistory.tsx`, `front/src/features/history/` | 학습이력(주간·월간 달력, 시작일별 기록 줄, 오른쪽 상세, 기록 없는 날). `calendar.ts`가 달력·기록 줄·앞뒤 기록을 계산하고 `currentPolicies.ts`가 "이전 기준"을 판단. 세 모드의 세션 상세를 여기서 봄(키보드는 `KeyboardRecordDetail`) |
-| `front/src/pages/Settings.tsx`, `front/src/features/settings/` | 설정. 대시보드와 같은 카드 격자(계정, 비밀번호, 화면 테마, 알림, 상체·안구·키보드 모드 카드, 데이터 관리). `parts.tsx`가 카드·입력 캡션·구분 버튼·스위치·슬라이더를 제공함. `features/keyboard/KeyboardSettings.tsx`는 기존 UI와 관찰 동작을 유지하며 격자 배치만 맞춤. `preferences.ts`가 모드별 민감도(상체 자세 무너짐 10–100%, 안구 깜빡임 낮음/보통/높음)를 이 기기에 저장하고, `MonitoringProvider`가 상체 실행을 시작할 때 읽어 그 실행의 습관·깜빡임 정책에 고정. 테마·알림도 바꾸는 즉시 저장하며, 알림 값과 경고 점수 기준은 측정에는 쓰이지 않음 |
+| `front/src/pages/Settings.tsx`, `front/src/features/settings/` | 설정. 대시보드와 같은 카드 격자(계정, 비밀번호·이메일, 화면 테마, 알림, 상체·안구·키보드 모드 카드, 데이터 관리). `parts.tsx`가 카드·입력 캡션·구분 버튼·스위치·슬라이더·입력 창(`Modal`)을 제공함. `AccountSecurity.tsx`는 등록 이메일을 보여 주고, 이메일 변경(현재 비밀번호)과 비밀번호 재설정(등록 이메일의 코드 확인 → 새 비밀번호)을 창으로 엶. 재설정 단계는 `hooks/usePasswordReset.ts`를 로그인 화면의 비밀번호 찾기와 함께 씀. `features/keyboard/KeyboardSettings.tsx`는 기존 UI와 관찰 동작을 유지하며 격자 배치만 맞춤. `preferences.ts`가 모드별 민감도(상체 자세 무너짐 10–100%, 안구 깜빡임 낮음/보통/높음)를 이 기기에 저장하고, `MonitoringProvider`가 상체 실행을 시작할 때 읽어 그 실행의 습관·깜빡임 정책에 고정. 테마·알림도 바꾸는 즉시 저장하며, 알림 값과 경고 점수 기준은 측정에는 쓰이지 않음 |
+| `front/src/pages/AiReview.tsx`, `front/src/features/ai-review/` | AI 총평(별도 메뉴 `/ai-review`, 최종 위치 미정). 통계와 같은 기간 수치를 `input.ts`가 요청 형태로 바꾸고 보내기 전에 모두 표시하며, `ReviewCards.tsx`가 총평·잘한 점·개선할 점을 표시. 저장하지 않음. [안내](ai-review.md) |
 | `front/src/features/keyboard/KeyboardRecordDetail.tsx`, `KeyboardKeyExploration.tsx`, `keyExploration.ts` | 키보드 세션 상세 표시, 통계/이력 공용 히트맵·선택 키 표시, DOM 없는 키별 집계·연습 순위. 카메라/실시간 점수 정책을 소유하지 않음 |
 | `features/records/StatisticsData.tsx`, `features/eye/EyeStatistics.tsx`, `EyeRecordData.tsx`의 `EyeStatisticsData`, `records/views.ts`의 `historyView`·`historyGraph` | 2026-10-07 통계·학습이력 개편 뒤 쓰지 않지만 되돌리기용으로 남김(기존 테스트 유지) |
-| `server/src/server.ts`, `config.ts` | 환경 검증 후 서버 시작. JWT 비밀값 자동 기본값 없음 |
+| `server/src/server.ts`, `config.ts` | 환경 검증 후 서버 시작. JWT 비밀값 자동 기본값 없음. AI 총평 키(`ANTHROPIC_API_KEY`)는 선택 |
 | `server/src/app.ts`, `http.ts` | API 조립과 공통 비동기 오류 응답 |
 | `server/src/validation.ts` | HTTP 입력을 런타임에서 검사 |
 | `server/src/routes/` | HTTP 계약/인증/응답 변환 |
@@ -80,6 +81,7 @@ Electron 개발 앱의 키보드 모드는 로컬 Python 프로세스를 자동 
 | `server/src/services/statistics.ts` | 오늘·달력의 세션 수 가중 평균. 누락 평균과 실제 0점 구분 |
 | `server/src/repositories/sessions.ts` | MySQL SQL, 행 잠금, 트랜잭션, 통계 집계, 지표·날짜별 측정 데이터 기록/조회 |
 | `server/src/routes/feedback.ts` | 날짜·모드 단위 피드백 기록/조회. 서버가 요약을 만들지는 않음 |
+| `server/src/routes/ai.ts`, `services/aiReview.ts` | AI 총평 `POST /api/ai/review`(토큰 사용자만, 계정당 시간당 10회). 숫자·키 코드만 검사해 받고 `ANTHROPIC_API_KEY`로 Claude를 호출. 키가 없으면 503, 결과는 저장하지 않음. [안내](ai-review.md) |
 | `server/src/routes/records.ts`, `repositories/records.ts`, `migrations/002_record_tables.sql` | 앱 기록 API(토큰 사용자만), MySQL 트랜잭션 저장·조회·삭제 세대 |
 | `server/migrations/` | 기존 DB에 적용하는 변경. `schema.sql`은 새 DB용 전체 정의 |
 | `server/test/` | 입력·인증·HTTP 오류·세션 재시도/소유권 회귀 검사 |
@@ -147,6 +149,7 @@ Python은 손끝 후보와 프레임 시간차를 반환하고 앱의 `ansi-qwer
 
 - `GET`/`PUT /api/auth/me/settings` — `users.settings` JSON을 통째로 읽고 씁니다. 서버는 항목 이름을 해석하지 않고 개수(50개)·값 종류·전체 크기(4KB)만 제한합니다. 화면이 설정을 늘려도 서버를 고치지 않습니다.
 - `POST`/`GET /api/feedback` — (사용자, 날짜, 모드) 단위 기록입니다. 서버는 요약을 생성하지 않으며 저장된 문장은 저장한 쪽이 쓴 것입니다.
+- `PUT /api/auth/me/email`, `POST /api/auth/find-id`, `POST /api/auth/password-reset`(+`/verify`, `/confirm`) — 가입 이메일로 아이디 찾기·비밀번호 재설정(2026-10-24, 코드 먼저 확인은 2026-10-28). 경로는 `routes/recovery.ts`, 발송은 `services/mail.ts`(SMTP)이며 설정이 없으면 메일 경로만 503입니다. 코드·제한 규칙은 [database 안내](../database/README.md)를 따릅니다.
 
 결정성·누락·임계값·자정의 자동 검증 결과와 실제 DB 검증 한계는 [evaluation.md](evaluation.md)에 정리했습니다. 키보드 평가는 이번 검증에서 제외했습니다.
 

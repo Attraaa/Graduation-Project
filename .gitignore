@@ -18,4 +18,6 @@
 
 # Personal local workspace
 /seop/
-/graphify-out/
+
+# graphify knowledge graph output
+graphify-out/
