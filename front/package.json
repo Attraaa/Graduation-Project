@@ -15,7 +15,7 @@
     "predev": "node scripts/copy-mediapipe.mjs",
     "prebuild": "node scripts/copy-mediapipe.mjs",
     "typecheck": "tsc -b",
-    "package": "npm run build && electron-builder --win",
+    "package": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File ../scripts/package-windows.ps1",
     "check": "npm run typecheck && npm run lint",
     "test": "node --test tests/*.test.mjs",
     "dev:browser": "vite --mode browser",
@@ -31,6 +31,12 @@
     "files": [
       "dist",
       "dist-electron"
+    ],
+    "extraResources": [
+      {
+        "from": "../keyboard-detect/dist/moti-keyboard",
+        "to": "keyboard"
+      }
     ],
     "win": {
       "icon": "public/icon.ico",

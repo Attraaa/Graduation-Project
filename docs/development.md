@@ -34,7 +34,7 @@ Node/npm, uv, Python을 찾아 따로 설치할 필요가 없습니다. [toolcha
 | `.\moti.cmd keyboard` | Python 키보드/손가락 콘솔 테스트, 전역 키 수집 비활성 |
 | `.\moti.cmd keyboard-web` | Python 웹 테스트 서버, 기본 주소 `http://127.0.0.1:5055` |
 | `.\moti.cmd check` | 프론트 타입·린트·테스트, 서버 빌드·테스트, Python import/모델 검사 |
-| `.\moti.cmd package` | 프론트/Electron 빌드 후 Windows 설치 패키징 |
+| `.\moti.cmd package` | Python 키보드 분석기 빌드·실행 검사 후 프론트/Electron과 Windows x64 설치 패키징 |
 
 현재 로그인은 서버 계정을 사용하며 목·어깨·키보드·안구 기록은 JWT로 서버 MySQL에 저장합니다. 이전 `database/sqlite/posture.sqlite` 파일은 보존하지만 더 이상 읽거나 쓰지 않습니다. 홈 카드의 **시작**으로 상체와 키보드를 실행하며 각각 일시정지/재개/중지합니다. 상체는 목·어깨와 안구를 같은 영상에서 분석하고 키보드는 다른 카메라에서 동시에 실행할 수 있습니다. 상세는 카드의 설정 아이콘, 모드별 장치 선택은 상세의 **카메라 설정**에서 열며 선택을 다음 실행에도 유지합니다. 키보드 시작은 로컬 Python 분석기를 자동 실행하고 Moti 입력과 설정에 추가한 승인 앱을 관찰합니다. 승인 목록이 비어 있어도 시작할 수 있고 관리자·미승인 앱은 제외합니다. 키보드는 문자 원문 대신 날짜·키·손가락·판정별 횟수를 저장합니다. 안구의 기존 실행/유효 시간·깜빡임·안내 집계와 과거 휴식 기록은 통계·학습이력에서 유지하지만 새 휴식 UI는 없습니다. Windows의 `eye.cmd` 브라우저 시연도 상체 화면으로 연결합니다. 사용 흐름은 [monitoring.md](monitoring.md), 설치·촬영 한계는 [eye-mode.md](eye-mode.md)를 참고합니다.
 
@@ -70,7 +70,9 @@ npm run build
 
 MediaPipe Pose의 스크립트·WASM·모델은 고정 npm 패키지에서 `public/mediapipe/pose`로 복사되고 UI 빌드에 포함됩니다. 복사는 설치와 dev/build 전에 실행됩니다. 생성 폴더를 직접 수정하지 않습니다.
 
-`front/Dockerfile`은 이전 웹 배포 실험 설정이며 Windows 개발 표준이 아닙니다. 현재 Electron 패키징 대상에는 Python 런타임·키보드 모델이 포함되지 않으므로 설치 파일만으로 키보드 분석을 제공한다고 안내하지 않습니다.
+`front/Dockerfile`은 이전 웹 배포 실험 설정이며 Windows 개발 표준이 아닙니다. Windows의 `moti.cmd package`와 `front`의 `npm run package`는 `scripts/package-windows.ps1`로 같은 작업을 실행합니다. 먼저 `scripts/package-keyboard.ps1`이 잠긴 PyInstaller로 Python 키보드 분석기와 런타임·모델·키 맵을 만들고, 별도 임시 작업 폴더와 시스템 PATH만 사용하는 자식 프로세스로 시작·토큰 거부·합성 프레임의 손/YOLO 추론·수동 61키 맵·입력 결과·일시정지를 검사합니다. 실패하면 설치 파일 생성을 중단합니다. 분석기는 `resources/keyboard/moti-keyboard.exe`와 `_internal/` 폴더로 함께 설치됩니다. 설정 캐시는 사용자 `LOCALAPPDATA/Moti/keyboard/` 아래에 두며 설치 폴더에 쓰지 않습니다. 설치 사용자는 개발 환경용 `setup.cmd`를 실행할 필요가 없습니다.
+
+키보드 실행 환경 약 940MiB를 포함해 압축하므로 `build`보다 여러 분 더 걸립니다. 콘솔은 `[1/4]` 분석기 빌드·검사 → `[2/4]` 앱 빌드 → `[3/4]` 설치 파일 압축 → `[4/4]` 결과 저장을 표시합니다. 마지막 **`Setup complete: …`**가 나오고 명령이 성공해야 이번 설치 파일 생성이 완료된 것입니다. 기존 Setup 파일의 존재만으로 성공을 판단하지 않습니다. 패키징은 실행마다 새로운 `front/.moti-cache/package-<고유 ID>/`에서 로컬의 잠긴 Electron 배포본을 재사용하므로, 기존 `release/win-unpacked/resources/app.asar` 잠금과 Electron zip 해제 후 rename 문제를 피합니다. 완성된 Setup과 blockmap만 `front/release/`에 복사하고 임시 폴더는 정리합니다. Windows가 임시 파일을 잡고 있으면 정리 경고를 내고 남겨 두지만 완료된 Setup은 사용할 수 있습니다.
 
 ## 5. 이번 작업에서 확인한 결과
 
@@ -323,3 +325,21 @@ macOS의 `scripts/moti.sh check`에서 프론트 타입·린트·221개 테스�
 설정의 "비밀번호 · 이메일" 카드는 등록 이메일만 보여 주고 입력 칸을 없앴습니다. "이메일 변경"은 새 이메일과 현재 비밀번호를 받는 창을, "비밀번호 재설정"은 등록 이메일로 코드를 보내 확인한 뒤 새 비밀번호(확인 칸 포함)를 받는 창을 엽니다. 이메일이 없는 계정은 재설정 대신 이메일 등록 안내를 봅니다. 로그인 화면의 비밀번호 찾기도 같은 세 단계로 바꾸고, 두 화면이 `hooks/usePasswordReset.ts`를 함께 씁니다. 서버에는 코드만 확인하는 `POST /api/auth/password-reset/verify`를 추가했습니다. 확인도 입력 횟수를 먼저 차감하지만 맞힌 확인은 되돌려 주므로, 확인을 거친 사용자가 마지막 재설정 단계에서 5회 제한에 걸리지 않습니다.
 
 macOS의 `scripts/moti.sh check`에서 프론트 타입·린트·222개 테스트와 서버 빌드·62개 테스트를 통과했습니다. 실제 MySQL이 필요한 7개는 제외됐고, Python 단계는 이 환경에서 실행하지 못했습니다. 임시 MySQL 9.6으로는 서버 80개 테스트를 모두 통과했습니다(실제 SQL 시나리오와 004 포함). 화면은 같은 로컬 하네스와 headless Chrome으로 17개 항목을 확인했습니다. 비밀번호 찾기와 설정 창 모두 코드 확인 전에는 새 비밀번호 칸이 없었고, 틀린 코드·불일치 확인·틀린 현재 비밀번호(로그인과 창 유지)를 안내했습니다. 재설정한 비밀번호로 로그인되었고, 이메일 없는 계정의 안내와 등록(다크), 390px 창까지 확인했습니다. 실제 SMTP 발송은 확인하지 않았습니다.
+
+## 2026-11-07 Windows 설치 파일에 키보드 분석기 동봉
+
+`moti.cmd package`가 먼저 잠긴 `build` 그룹의 PyInstaller 6.22.3으로 분석기 전체 폴더를 만들고 실행 검사를 통과한 뒤 Electron 패키징을 진행하도록 변경했습니다. Python·CPU 추론 DLL·MediaPipe 그래프와 손 모델·YOLO `best.pt`·61키 JSON을 `resources/keyboard/`에 포함합니다. torchvision 0.29의 간접 로드 대상인 `_C_stable.pyd`, `image_stable.pyd`도 명시적으로 수집합니다. 기본 개발 의존성·분석 정책·서버 저장 계약은 변경하지 않았습니다.
+
+Windows x64에서 `setup.cmd`, `moti.cmd check`를 완료했습니다. 프론트 타입·린트·222개 테스트, 서버 빌드·62개 테스트, Python 16개 테스트와 import/모델 검사를 통과했습니다. 실제 MySQL 검사 7개는 기존처럼 별도 접속 설정이 없어 제외됐습니다. 분석기 자체는 임시 작업 폴더·시스템 PATH만으로 시작하고, 잘못된 토큰 거부·MediaPipe 합성 프레임·YOLO 실제 추론·수동 61키 맵·물리 코드 입력의 결과 전달·일시정지를 검사했습니다. 카메라와 전역 입력 수집, API/DB는 사용하지 않았습니다.
+
+`moti.cmd package`의 분석기 검사와 UI/Electron 빌드는 통과했지만 기존 출력의 `app.asar` 잠금으로 패키징이 중단됐습니다. 별도 출력 폴더에서도 Electron zip 해제 후 rename 오류가 발생해, 같은 잠긴 버전의 로컬 `front/node_modules/electron/dist`를 재사용해 NSIS 생성을 완료했습니다. 재현 명령은 프로젝트 Node로 `node_modules/electron-builder/cli.js --win --x64 --config.directories.output=release/keyboard-bundled --config.electronDist=node_modules/electron/dist`를 `front`에서 실행하는 것입니다. 결과 Setup과 blockmap을 기본 `front/release/`에도 복사하고 SHA-256 일치를 확인했습니다. 새 `Moti Setup 0.0.0.exe`는 484,829,796바이트이며 SHA-256은 `2130fc83462af94397f7924b325bdea62082b042cd986dd40f0858fa2ce22d1c`입니다.
+
+생성된 `release/keyboard-bundled/win-unpacked/Moti.exe`를 별도 사용자 프로필로 실행해 실제 `file://…/app.asar` 렌더러 → preload → main의 키보드 시작·중지 IPC와, 그 분석기로의 WebSocket 인증·합성 프레임 추론을 확인했습니다. 전역 키 수집은 꺼져 있었고 검증용 앱과 분석기는 종료했습니다. 동봉된 exe·모델·맵·torchvision 네이티브 파일의 SHA-256도 검사한 원본과 일치했습니다. 로그는 `reports/keyboard-package/`에 보관합니다. 설치 마법사의 실제 설치·제거, 개발 도구 없는 다른 PC, 실제 손캠·키보드 판정 정확도 검증은 별도로 남아 있습니다. 로그인·기록·AI·메일 기능의 원격 서버 설정은 이번 작업에서 변경하거나 검증하지 않았습니다.
+
+### 같은 날 후속 — 기본 package 명령의 잠금 회피와 완료 표시
+
+후속 실행을 확인했을 때 `release`의 Setup은 15:24 파일 그대로였고 패키징 프로세스는 없었습니다. 기존 두 출력 폴더의 `app.asar`가 다른 프로세스에 잡혀 있는 것도 확인했습니다. 앞서 수동 빌드에서 적용한 우회가 기본 명령에는 반영되지 않아, `npm run package`가 `scripts/package-windows.ps1`을 통해 항상 새 임시 폴더·로컬 Electron 배포본을 사용하도록 변경했습니다. 완료 파일만 기본 `release`에 복사하고 네 단계와 최종 완료 경로를 표시합니다.
+
+반복 분석의 추가 원인은 PyInstaller가 `excludes` 목록에 `__main__`을 추가해 캐시에 저장하지만 spec에는 이 값이 없어, 매번 `Building because excludes changed`로 전체 분석을 다시 수행하는 것이었습니다. 같은 위치에 명시해 저장된 실제 Analysis 캐시와 목록이 같음을 검사했습니다. 소스·의존성이 바뀌면 여전히 필요한 재분석은 수행합니다.
+
+수정된 기본 경로로 `moti.cmd package`를 실행해 내부의 `npm run package` 전체가 종료 코드 0과 `Setup complete: F:\gr\front\release\Moti Setup 0.0.0.exe`로 완료됐습니다. 분석기 추론/입력 검사와 프론트/Electron 빌드, NSIS 생성, Setup·blockmap 복사, 임시 폴더 정리까지 확인했습니다. 15:51에 생성된 새 파일은 484,830,187바이트이며 SHA-256은 `55b4ce184643fe3a41f5e070b278e3fda364737bcb1e51746fe994f4d74020d0`입니다. 로그는 `reports/keyboard-package/package-current.log`에 있습니다. 제품 런타임 변경은 없으며 이번 검증에서 기존 전체 단위 테스트는 반복하지 않았습니다.

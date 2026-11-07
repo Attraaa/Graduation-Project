@@ -37,6 +37,8 @@ Electron 개발 앱의 키보드 모드는 로컬 Python 프로세스를 자동 
 | --- | --- |
 | `toolchain.json`, `scripts/setup.ps1`, `scripts/toolchain.ps1` | 정확한 도구 버전, 검증된 다운로드, 프로젝트 전용 환경 설치 |
 | `scripts/moti.ps1` | 앱/API/Python 실행과 검사 명령 묶음 |
+| `scripts/package-windows.ps1` | 새 임시 폴더에서 로컬 Electron 배포본으로 설치 파일 생성 후 `front/release/`에 완성 파일만 복사. 빌드 단계·완료 경로 표시 |
+| `scripts/package-keyboard.ps1`, `keyboard-detect/packaging/` | Windows x64 Python 분석기·모델·네이티브 라이브러리 묶음 생성. 실행 검사를 통과한 전체 폴더를 Electron `extraResources`의 `keyboard/`에 동봉 |
 | `front/electron/main.ts` | 창·스플래시, Python 키보드 프로세스, 신뢰 창 IPC·종료 전 기록 flush 요청 |
 | `front/electron/preload.ts` | 키보드 시작·중지, motiRecords 종료 flush 및 주 창 전용 테마 IPC 경계 |
 | `front/vite.config.ts` | UI와 Electron 빌드, CommonJS preload 출력, 브라우저 검증 모드 |
@@ -96,7 +98,7 @@ Electron 개발 앱의 키보드 모드는 로컬 Python 프로세스를 자동 
 
 상체 계산은 `AppLayout → MonitoringProvider → PostureMonitor → useWebcam/useMediaPipe → calibration → observation → scoring/evaluation → MonitorSnapshot` 순서입니다. `EyeMonitor(shared) → Face Landmarker → measurement`는 같은 변환 캔버스를 빌려 깜빡임을 계산하며 별도 카메라를 열거나 상체 트랙을 종료하지 않습니다. `PostureSession/PostureMetrics`는 공통 상태를 표시합니다. 기준 다시 잡기는 스트림을 유지하며 자세 기준/기록 구간을 새로 수집하고 깜빡임 누적은 보존합니다. 일시정지는 관측 연속성을 끊고 기준·평균을 유지하며, 중지는 트랙·모델을 해제하고 종료 배치를 보냅니다. 페이지 이동은 계속 관찰합니다. 기존 안구 서버 집계와 통계·이력은 유지하며 휴식 UI는 제거했습니다.
 
-키보드는 `MonitoringProvider → KeyboardMonitor → loopback Python service → runtime adapter → finger policy → aggregate recording` 순서이며 `KeyboardSession`은 화면입니다. Electron main은 빈 로컬 포트와 세션 토큰으로 `.venv` Python을 실행합니다. 기본 입력은 Moti 화면의 물리 `code`이고 설정에서 승인한 일반 앱은 시작 때 함께 관찰합니다. 빈 승인 목록은 Moti 관찰만 실행합니다. 일시정지는 입력/프레임·승인 앱 관찰을 멈추고 서버의 임시 프레임/입력 큐를 비우며 재개 때 맵을 새로 확인하고 기존 세션 집계를 이어갑니다. 승인 경로·foreground 권한과 미승인·관리자·확인 불가 앱 제외 경계는 유지합니다.
+키보드는 `MonitoringProvider → KeyboardMonitor → loopback Python service → runtime adapter → finger policy → aggregate recording` 순서이며 `KeyboardSession`은 화면입니다. Electron main은 빈 로컬 포트와 세션 토큰으로 개발 시 `.venv` Python을, 설치 앱에서는 `resources/keyboard/moti-keyboard.exe`를 실행합니다. 설치 분석기는 Python·CPU 추론 라이브러리·모델·키 맵을 함께 배포하며 사용자에게 별도 Python 설치를 요구하지 않습니다. 기본 입력은 Moti 화면의 물리 `code`이고 설정에서 승인한 일반 앱은 시작 때 함께 관찰합니다. 빈 승인 목록은 Moti 관찰만 실행합니다. 일시정지는 입력/프레임·승인 앱 관찰을 멈추고 서버의 임시 프레임/입력 큐를 비우며 재개 때 맵을 새로 확인하고 기존 세션 집계를 이어갑니다. 승인 경로·foreground 권한과 미승인·관리자·확인 불가 앱 제외 경계는 유지합니다.
 
 안구 v3는 3초간 열린 양쪽 눈·거리 기준을 수집하고 안내된 양안 깜빡임 3회로 개인별 판정 기준을 정합니다. `blinkCalibration.ts`가 순수 기준 수집·양안 주기를, `EyeCalibrationGuide.tsx`가 홈/상체 상세에서 보정 진행을 안내합니다. 민감도는 설정 화면의 안구 카드에서 고르고(기본 보통), 공통 모니터링 런타임이 상체 시작 때 읽어 측정·저장에 같은 값을 쓰며 그 실행 동안 고정합니다. `EyeCalibrationPanel.tsx`는 현재 화면에서 쓰지 않으며 민감도 선택 없이 기준 수집 안내만 남아 있습니다. 새 기록은 `eye-habits-v3:low|normal|high`이고 기존 v2 및 다른 민감도와 합산하지 않습니다. 개인 눈 기준은 세션 메모리에만 두며, 교정 동작은 측정 횟수·유효 시간에서 제외합니다. 기준 재수집과 짧은 프레임의 보호 조건은 안구 가이드를 따릅니다.
 

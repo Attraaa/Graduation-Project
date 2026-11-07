@@ -82,6 +82,7 @@ front와 server는 각각 `package.json`과 `package-lock.json`을 유지합니�
 | --- | --- | --- |
 | 기본 | OpenCV, NumPy, MediaPipe, YOLO, PyTorch, pynput 등 | `uv sync --locked` |
 | `web` extra | 기본 + Flask, Flask-SocketIO, simple-websocket | 표준 setup의 `--extra web` |
+| `build` 그룹 | PyInstaller 6.22.3와 잠긴 빌드 의존성 | Windows 설치 파일 생성 시 `--group build --extra web` |
 | `dev` 그룹 | Roboflow 등 모델 개발 도구 | 필요한 개발자만 `--group dev --extra web` 추가 |
 
 `default-groups=[]`이므로 모델 개발 도구는 기본 설치에서 제외됩니다. 최종 setup에서 기본+web **68개 패키지** 설치/동기화를 확인했습니다. 잠금에는 선택하지 않은 dev 그룹도 기록되므로 잠금의 전체 패키지 수와 설치 수는 같을 필요가 없습니다. [uv 잠금과 동기화](https://docs.astral.sh/uv/concepts/projects/sync/)
@@ -132,7 +133,9 @@ Python의 `mp.solutions.hands`와 브라우저의 기존 `Pose`는 Legacy API입
 
 MySQL 드라이버와 기존 저장소 구현은 남아 있지만 최종 서버 DB 제품·버전·운영 환경은 미정입니다. setup은 MySQL 설치나 스키마 실행을 하지 않습니다. 특히 `server/schema.sql`은 기존 테이블을 삭제하므로 일반 설치 과정으로 실행하면 안 됩니다.
 
-Windows 설치 파일 생성 경로는 `moti.cmd package`입니다. Electron 개발 앱은 프로젝트 `.venv`의 Python 키보드 분석기를 자동 실행하지만, 현재 설치 패키지에는 `dist`와 `dist-electron`, 로컬 브라우저 MediaPipe 자원만 들어갑니다. **Python 실행 파일·키보드 분석 코드·YOLO 모델, 원격 서버·DB는 아직 포함되지 않습니다.** 설치 파일만으로 키보드 분석과 서버 저장이 동작한다고 안내하면 안 됩니다. 다음 배포 작업에서 Python을 Windows exe로 고정하고 모델/맵과 함께 `extraResources`에 넣은 뒤 깨끗한 PC에서 검사해야 합니다.
+Windows 설치 파일 생성 경로는 `moti.cmd package`입니다. 개발 앱은 프로젝트 `.venv`의 Python 분석기를 자동 실행합니다. 설치 파일 생성 시에는 `scripts/package-keyboard.ps1`이 잠긴 `build` 그룹으로 PyInstaller를 실행해 `keyboard-detect/dist/moti-keyboard/`에 Python 실행 환경·분석 코드·CPU PyTorch/OpenCV·MediaPipe 모델·`best.pt`·`perfect_map.json`을 묶습니다. 분석기 실행 검사를 통과하면 Electron `extraResources`가 **폴더 전체**를 `resources/keyboard/`에 복사합니다. 사용자는 별도 Python·Node·CUDA 설치 없이 키보드 분석기를 실행하는 구조입니다. 실행 파일 옆 `_internal` 폴더도 필수이며, 빌드는 Windows x64에서 수행합니다. 자원 배치는 [PyInstaller 공식 가이드](https://pyinstaller.org/en/stable/runtime-information.html)를 따릅니다. 깨끗한 PC의 실제 손캠·설치 검증은 별도입니다.
+
+원격 API 서버·MySQL·서버의 AI 키와 SMTP 설정은 설치 파일에 넣지 않습니다. 로그인·기록 저장·통계·AI 총평·메일 복구에는 인터넷과 운영 서버 구성이 필요합니다. Python 패키징 빌드 도구는 기본 setup 대상에 추가하지 않으며 `package` 명령이 필요한 그룹을 동기화합니다.
 
 기존 `front/Dockerfile`은 현재 Windows 데스크톱 팀의 표준 설치 경로가 아닙니다. 원격 서버 배포 환경, Python 동봉 방식, SQLite 서버 동기화는 [제품 결정](product-decisions.md)과 [로드맵](roadmap.md)에 따라 구체화합니다.
 
