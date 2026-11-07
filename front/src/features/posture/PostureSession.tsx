@@ -19,8 +19,9 @@ export default function PostureSession() {
       <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="font-bold text-heading">상체 카메라</h2><SessionStatus modeId="upper_body" /></div>
       <div className="mx-auto w-full max-w-2xl"><MonitoringPreview modeId="upper_body" /></div>
       {controls.isRunning && !controls.isPaused && snapshot.phase === 'calibrating' && <div className="rounded-xl bg-surface-muted p-3"><p className="mb-2 text-sm text-muted">얼굴과 양쪽 어깨가 보이도록 정면을 보고 기준 자세를 잠시 유지해 주세요.</p><progress aria-label="기준 자세 수집 진행률" value={snapshot.progress} max={1} className="h-2 w-full accent-primary" /></div>}
-      {controls.isRunning && snapshot.phase === 'unavailable' && !controls.isPaused && <p role="status" className="text-sm text-muted">얼굴과 양쪽 어깨가 화면에 보이도록 정면을 향해 주세요.</p>}
-      {controls.isRunning && snapshot.phase === 'error' && <p role="alert" className="text-sm text-danger">카메라·분석 연결을 확인한 뒤 중지하고 다시 시작해 주세요.</p>}
+      {controls.isRunning && snapshot.phase === 'unavailable' && !controls.isPaused && <p role="status" className="text-sm text-muted">{snapshot.reason === 'body-turned' ? '몸통이 옆으로 돌아가 있어 점수 계산을 잠시 멈췄습니다. 얼굴과 어깨를 정면으로 향해 주세요.' : '얼굴과 양쪽 어깨가 화면에 보이도록 정면을 향해 주세요.'}</p>}
+      {controls.isRunning && snapshot.phase === 'loading' && <p role="status" className="text-sm text-muted">{snapshot.message}</p>}
+      {controls.isRunning && snapshot.phase === 'error' && <p role="alert" className="text-sm text-danger">{snapshot.message || '카메라·분석 연결을 확인한 뒤 중지하고 다시 시작해 주세요.'}</p>}
       {controls.isRunning && upper.eye.phase === 'error' && <p role="alert" className="text-sm text-danger">깜빡임 분석: {upper.eye.message}</p>}
       {controls.isRunning && !controls.isPaused && upper.eye.phase === 'calibrating' && <EyeCalibrationGuide measurement={upper.eye.measurement} />}
       <PostureMetrics snapshot={snapshot} eye={upper.eye.measurement} isRunning={controls.isRunning} />

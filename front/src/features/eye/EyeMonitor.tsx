@@ -11,6 +11,7 @@ import { initializeMediaPipe } from '../session/mediaPipeInitialization';
 import { useCameraSettings } from '../camera/context';
 import { imageSignature } from '../camera/profile';
 import type { EyeSensitivity } from './eyePolicy';
+import { watchPreparation } from '../session/modelPreparation';
 
 export type EyeUpdate = { measurement: EyeSnapshot; phase: 'loading' | 'calibrating' | 'observing' | 'unavailable' | 'error'; message: string };
 
@@ -64,8 +65,9 @@ export default function EyeMonitor({ active, deviceId, reference, eyeReference, 
       onSample(at, snapshot);
       onUpdate({ measurement: snapshot, phase, message });
     };
-    invalidate('얼굴 모델을 불러오고 있습니다. 처음에는 잠시 걸릴 수 있습니다.', 'loading');
+    const stopPreparation = watchPreparation('face', message => invalidate(message, 'loading'));
     const fail = (error: unknown) => {
+      stopPreparation();
       cancelled = true;
       cancelAnimationFrame(frameId);
       invalidate(error instanceof Error ? error.message : String(error), 'error');
@@ -101,6 +103,7 @@ export default function EyeMonitor({ active, deviceId, reference, eyeReference, 
         readyAt = performance.now();
         await video.play();
         if (cancelled) return;
+        stopPreparation();
         const process = (now: number) => {
           if (cancelled) return;
           try {
@@ -148,6 +151,7 @@ export default function EyeMonitor({ active, deviceId, reference, eyeReference, 
     return () => {
       cancelled = true;
       window.clearInterval(watchdog);
+      stopPreparation();
       document.removeEventListener('visibilitychange', onVisibility);
       cancelAnimationFrame(frameId);
       removeTrackListener();

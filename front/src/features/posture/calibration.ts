@@ -1,13 +1,17 @@
-import { YAW_LIMIT } from './scoreSettings.ts';
+import { BODY_YAW_LIMIT, YAW_LIMIT } from './scoreSettings.ts';
+import { headDepth } from './relativeHead.ts';
+import { classifyTrunk, type TrunkClass } from './trunkClassifier.ts';
 
 export interface PoseLandmark {
   x: number;
   y: number;
+  z?: number;
   visibility?: number;
 }
 
 export interface CalibrationFrame {
   landmarks?: readonly PoseLandmark[];
+  worldLandmarks?: readonly PoseLandmark[];
   widthPx: number;
   heightPx: number;
   /** Active track plus acquisition revision; stream/transform changes need a new identity. */
@@ -26,6 +30,8 @@ export interface FrontalMetrics {
 }
 
 export interface FrontalMeasurement extends FrontalMetrics {
+  headDepth: readonly [number, number] | null;
+  trunkLabel: TrunkClass | null;
   earSpanPx: number;
   shoulderSpanPx: number;
   earHeightPx: number;
@@ -44,7 +50,7 @@ export interface FrontalMeasurement extends FrontalMetrics {
 
 export type CalibrationReason = 'invalid-frame' | 'missing-landmarks' | 'low-confidence'
   | 'out-of-frame' | 'shoulders-too-close' | 'moving' | 'interrupted' | 'camera-changed'
-  | 'invalid-time' | 'ears-too-close' | 'head-turned';
+  | 'invalid-time' | 'ears-too-close' | 'head-turned' | 'body-turned';
 
 export interface CalibrationOptions {
   durationMs: number;
@@ -77,6 +83,9 @@ export const DEFAULT_CALIBRATION_OPTIONS: Readonly<CalibrationOptions> = {
 
 export interface CalibrationReference {
   schemaVersion: 2;
+  /** Session-only optional evidence; old references remain usable with 2D geometry. */
+  baseHeadDepth?: readonly [number, number] | null;
+  baseTrunkUpright?: boolean;
   baseEarSpanPx: number;
   baseShoulderSpanPx: number;
   baseEarHeightPx: number;
@@ -130,6 +139,13 @@ export function extractFrontalMeasurement(
   if (points.some(point => ![point.x, point.y].every(value => Number.isFinite(value) && value >= 0 && value <= 1))) {
     return { valid: false, reason: 'out-of-frame' };
   }
+  // Optional depth evidence rejects a rotated torso whose narrowed 2D shoulders would
+  // otherwise look like relative head growth. Missing 3D retains the 2D quality checks.
+  const worldLeft = frame.worldLandmarks?.[11], worldRight = frame.worldLandmarks?.[12];
+  if (worldLeft && worldRight && [worldLeft.x, worldLeft.y, worldLeft.z, worldRight.x, worldRight.y, worldRight.z].every(Number.isFinite)) {
+    const span = Math.hypot(worldLeft.x - worldRight.x, worldLeft.y - worldRight.y, worldLeft.z! - worldRight.z!);
+    if (span > 1e-6 && Math.abs(worldLeft.z! - worldRight.z!) / span > BODY_YAW_LIMIT) return { valid: false, reason: 'body-turned' };
+  }
   const shoulderSpanPx = Math.hypot((left.x - right.x) * widthPx, (left.y - right.y) * heightPx);
   // Reject a near side-on/collapsed horizontal span instead of dividing by a tiny denominator.
   if (Math.abs(left.x - right.x) < options.minShoulderWidthFrameWidths) {
@@ -145,6 +161,8 @@ export function extractFrontalMeasurement(
   return {
     valid: true,
     measurement: {
+      headDepth: headDepth(frame.worldLandmarks),
+      trunkLabel: classifyTrunk(landmarks, frame.worldLandmarks).label,
       sourceId, widthPx, heightPx, timestampMs, shoulderCenterX, shoulderCenterY,
       earSpanPx, shoulderSpanPx, earHeightPx,
       yawRatio: Math.abs(nose.x - earCenterX) * widthPx / earSpanPx,
@@ -231,6 +249,10 @@ export function advanceCalibration(
       baseEarSpanPx: median(samples.map(value => value.earSpanPx)),
       baseShoulderSpanPx: median(samples.map(value => value.shoulderSpanPx)),
       baseEarHeightPx: median(samples.map(value => value.earHeightPx)),
+      baseHeadDepth: samples.every(value => value.headDepth !== null)
+        && [0, 1].every(i => Math.max(...samples.map(value => value.headDepth![i])) - Math.min(...samples.map(value => value.headDepth![i])) <= options.maxMetricRangeShoulderWidths)
+        ? [median(samples.map(value => value.headDepth![0])), median(samples.map(value => value.headDepth![1]))] : null,
+      baseTrunkUpright: samples.every(value => value.trunkLabel === 'upright'),
       startedAtMs: samples[0].timestampMs, completedAtMs: sample.timestampMs,
       sampleCount: samples.length, metrics,
     },

@@ -15,7 +15,7 @@ import { MOTION_PROTECTION } from './scoreSettings.ts';
 // 가중 편차 0.15 이상이 2초 이어지면 1회 확정, 이후 0.10 이하이면 해당 이탈 구간 종료.
 // 진입·종료 기준을 다르게 두어 경계에서 흔들릴 때 횟수가 반복 증가하지 않게 합니다.
 export const HABIT_POLICY = Object.freeze({
-  version: 'weighted-reference-deviation-v3',
+  version: 'weighted-reference-deviation-v6',
   enterDelta: 0.15,
   exitDelta: 0.10,
   minDurationMs: 2000,
@@ -151,8 +151,8 @@ export function advanceEvaluation(
   if (current.score === null) return next;
   // 유지할 점수는 마지막 표시 점수입니다. 측정 이력이 처음이면 실제 원점수를 사용합니다.
   const held = base.lastScore ?? current.score;
-  const moving = observation.velocityPxPerSecond !== null
-    && observation.velocityPxPerSecond > MOTION_PROTECTION.velocityPxPerSecond;
+  const moving = observation.velocityShoulderWidthsPerSecond !== null
+    && observation.velocityShoulderWidthsPerSecond > MOTION_PROTECTION.velocityShoulderWidthsPerSecond;
   if (moving) {
     // 빠르게 움직일 때는 마지막 점수를 유지합니다. 이력이 없으면 null로 기다립니다.
     next.protection = 'moving';
@@ -166,7 +166,7 @@ export function advanceEvaluation(
       next.protection = 'grace';
       next.currentScore = held;
     } else {
-      // 2초를 넘긴 시간만 감점합니다. 원점수보다 더 낮게 깎지는 않습니다.
+      // 2초를 넘긴 시간만 원점수 쪽으로 낮춥니다. 도달한 뒤에는 더 감점하지 않습니다.
       // 예: 마지막 100점, 원점수 60점, 감점 구간 0.1초 → 100 - 35 × 0.1 = 96.5점.
       const penaltyMs = Math.min(elapsedMs, next.staticDeviationMs - MOTION_PROTECTION.graceMs);
       next.currentScore = Math.max(current.score, held - MOTION_PROTECTION.penaltyPointsPerSecond * penaltyMs / 1000);
