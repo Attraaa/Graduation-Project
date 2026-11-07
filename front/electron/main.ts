@@ -35,7 +35,6 @@ let closingTimer: ReturnType<typeof setTimeout> | undefined
 const recordsPageUrl = process.env.VITE_DEV_SERVER_URL || pathToFileURL(path.join(distDirectory, 'index.html')).href
 
 let win: BrowserWindow | null
-let splash: BrowserWindow | null
 let cameraWindow: BrowserWindow | null = null
 let windowTheme: 'light' | 'dark' = 'light'
 let keyboardProcess: ChildProcessWithoutNullStreams | null = null
@@ -189,17 +188,6 @@ ipcMain.handle('window:set-theme', (event, theme: unknown) => {
 })
 
 function createWindow() {
-  // Create Splash Screen
-  splash = new BrowserWindow({
-    width: 350,
-    height: 400,
-    transparent: true,
-    frame: false,
-    alwaysOnTop: true,
-    icon: path.join(publicDirectory, 'icon.png')
-  })
-  splash.loadFile(path.join(publicDirectory, 'splash.html'))
-
   win = new BrowserWindow({
     width: 1100,
     height: 800,
@@ -244,15 +232,9 @@ function createWindow() {
     win?.webContents.send('main-process-message', (new Date).toLocaleString())
   })
 
-  // Show when ready and after animation
+  // Show as soon as the main window is ready.
   win.once('ready-to-show', () => {
-    setTimeout(() => {
-      if (splash) {
-        splash.close()
-        splash = null
-      }
-      win?.show()
-    }, 2800) // Wait 2.8s for the CSS progress bar to complete
+    win?.show()
   })
 
   if (process.env.VITE_DEV_SERVER_URL) {
