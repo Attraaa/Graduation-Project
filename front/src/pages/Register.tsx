@@ -105,7 +105,7 @@ const Register = () => {
               onChange={handleChange}
               required
             />
-            <p className="mt-2 text-sm font-bold text-gray-500">아이디·비밀번호를 찾을 때 이 이메일로 보내 드려요.</p>
+            <p className="mt-2 text-sm font-bold text-gray-500">아이디를 찾거나 비밀번호를 재설정할 때 이 이메일로 보내 드려요.</p>
           </div>
           <input
             type="password"

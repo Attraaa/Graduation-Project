@@ -122,12 +122,12 @@ export default function AccountSecurity() {
   return (
     <SettingsCard title="비밀번호 · 이메일" icon={<KeyRound size={18} />}>
       <div className="space-y-1">
-        <p className="text-xs font-semibold text-muted">이메일 (아이디·비밀번호 찾기용)</p>
+        <p className="text-xs font-semibold text-muted">이메일 (아이디 찾기·비밀번호 재설정용)</p>
         <p className="truncate text-sm font-semibold text-heading">
           {savedEmail ?? (savedEmail === null ? '등록된 이메일 없음' : '불러오는 중…')}
         </p>
       </div>
-      {savedEmail === null && <p className="text-xs font-semibold text-danger">등록된 이메일이 없어요. 등록해야 아이디·비밀번호를 찾을 수 있어요.</p>}
+      {savedEmail === null && <p className="text-xs font-semibold text-danger">등록된 이메일이 없어요. 등록해야 아이디 찾기와 비밀번호 재설정을 할 수 있어요.</p>}
       <p className="text-xs text-muted">비밀번호는 등록된 이메일로 받은 인증 코드를 확인한 뒤 새로 정해요.</p>
       <div className="mt-auto grid grid-cols-2 gap-2">
         <button type="button" onClick={() => setOpen('email')} className={BUTTON}>{savedEmail === null ? '이메일 등록' : '이메일 변경'}</button>

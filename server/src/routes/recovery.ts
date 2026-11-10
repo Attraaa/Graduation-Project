@@ -76,7 +76,7 @@ export function createRecoveryRouter(pool: Pool, mailer: Mailer | null) {
         to: address,
         subject: '[Moti] 아이디 안내',
         text: `이 이메일로 가입한 Moti 아이디입니다.\n\n${rows.map(row => `- ${row.username}`).join('\n')}\n\n`
-          + `비밀번호가 기억나지 않으면 로그인 화면의 '비밀번호 찾기'를 이용해 주세요.\n${NOT_REQUESTED}`,
+          + `비밀번호가 기억나지 않으면 로그인 화면의 '비밀번호 재설정'을 이용해 주세요.\n${NOT_REQUESTED}`,
       });
     }
     res.json({ message: '입력한 이메일로 가입한 아이디가 있으면 메일로 보냈습니다. 메일함을 확인해 주세요.' });
@@ -103,7 +103,7 @@ export function createRecoveryRouter(pool: Pool, mailer: Mailer | null) {
       await send(mail, key, {
         to: address,
         subject: '[Moti] 비밀번호 재설정 인증 코드',
-        text: `Moti 비밀번호 재설정 인증 코드: ${code}\n\n로그인 화면의 '비밀번호 찾기'에 ${CODE_MINUTES}분 안에 입력해 주세요.\n`
+        text: `Moti 비밀번호 재설정 인증 코드: ${code}\n\n코드를 요청한 Moti 화면에 ${CODE_MINUTES}분 안에 입력해 주세요.\n`
           + `${NOT_REQUESTED} 비밀번호는 바뀌지 않습니다.`,
       });
     }

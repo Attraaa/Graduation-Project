@@ -41,7 +41,7 @@ const FindPassword = () => {
           <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-[#ffc800] shadow-sm">
             <KeyRound size={40} className="text-white" />
           </div>
-          <h1 className="text-center text-3xl font-black text-[#b38300]">비밀번호 찾기</h1>
+          <h1 className="text-center text-3xl font-black text-[#b38300]">비밀번호 재설정</h1>
           <p className="text-center text-gray-500 font-bold">
             아이디와 가입할 때 등록한 이메일을 입력하면 인증 코드를 보내 드립니다.
           </p>

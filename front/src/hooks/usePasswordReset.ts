@@ -4,7 +4,7 @@ import { requestPasswordReset, resetPassword, verifyResetCode } from '../utils/a
 export type ResetStep = 'request' | 'verify' | 'reset';
 
 /**
- * The steps shared by "비밀번호 찾기" and the settings reset window: mail a code, check it, then set the
+ * The steps shared by the login screen's "비밀번호 재설정" and the settings reset window: mail a code, check it, then set the
  * new password. The new-password step opens only after the server accepts the code.
  */
 export function usePasswordReset() {

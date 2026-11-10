@@ -61,7 +61,7 @@ const Login = () => {
           <div className="flex justify-center gap-4 text-sm font-bold text-gray-600">
             <Link to="/find-id" className="hover:text-[#1cb0f6] transition">아이디 찾기</Link>
             <span>|</span>
-            <Link to="/find-password" className="hover:text-[#1cb0f6] transition">비밀번호 찾기</Link>
+            <Link to="/find-password" className="hover:text-[#1cb0f6] transition">비밀번호 재설정</Link>
           </div>
 
           <div className="space-y-3 pt-4">

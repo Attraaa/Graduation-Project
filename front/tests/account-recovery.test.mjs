@@ -10,11 +10,13 @@ const bundle = await build({ stdin: { contents: [
   "export { default as FindId } from './src/pages/FindId.tsx';",
   "export { default as FindPassword } from './src/pages/FindPassword.tsx';",
   "export { default as Register } from './src/pages/Register.tsx';",
+  "export { default as Login } from './src/pages/Login.tsx';",
   "export { DialogProvider } from './src/components/AppDialog.tsx';",
   "export { MemoryRouter } from 'react-router-dom';",
   "export { findId, requestPasswordReset, verifyResetCode, resetPassword, changeEmail, readAccountEmail } from './src/utils/authStore.ts';",
 ].join('\n'), resolveDir: process.cwd() },
-  bundle: true, write: false, logLevel: 'error', platform: 'node', format: 'cjs', jsx: 'automatic', external: ['react', 'react-dom'] });
+  bundle: true, write: false, logLevel: 'error', platform: 'node', format: 'cjs', jsx: 'automatic', external: ['react', 'react-dom'],
+  loader: { '.svg': 'dataurl' } });
 const compiled = { exports: {} };
 new Function('module', 'exports', 'require', bundle.outputFiles[0].text)(compiled, compiled.exports, createRequire(import.meta.url));
 const app = compiled.exports;
@@ -48,8 +50,16 @@ test('finding an ID asks for the registered email', () => {
   assert.doesNotMatch(out, /지원하지 않습니다/);
 });
 
-test('finding a password asks for the ID and email first; the code and new-password steps come later', () => {
+test('the login screen offers finding the ID and resetting the password', () => {
+  const out = page(app.Login);
+  assert.match(out, /href="\/find-id"[^>]*>아이디 찾기<\/a>/);
+  assert.match(out, /href="\/find-password"[^>]*>비밀번호 재설정<\/a>/);
+  assert.doesNotMatch(out, /비밀번호 찾기/);
+});
+
+test('resetting a password asks for the ID and email first; the code and new-password steps come later', () => {
   const out = page(app.FindPassword);
+  assert.match(out, /<h1[^>]*>비밀번호 재설정<\/h1>/);
   assert.match(out, /<input type="text" placeholder="아이디"[^>]*required/);
   assert.match(out, /<input type="email" placeholder="이메일"[^>]*required/);
   assert.match(out, />인증 코드 받기<\/button>/);
