@@ -5,7 +5,7 @@ import type { RowDataPacket, ResultSetHeader } from 'mysql2';
 import { hashPassword } from '../auth.js';
 import { asyncHandler, HttpError } from '../http.js';
 import type { Mailer, MailMessage } from '../services/mail.js';
-import { bodyObject, email, password, text } from '../validation.js';
+import { bodyObject, email, password, sixDigitCode, text } from '../validation.js';
 
 const CODE_MINUTES = 10;
 const MAX_ATTEMPTS = 5;
@@ -14,12 +14,32 @@ const NOT_REQUESTED = '직접 요청하지 않았다면 이 메일은 무시해�
 const EXPIRED = '인증 코드가 만료되었거나 입력 횟수를 넘었습니다. 인증 코드를 다시 받아 주세요.';
 const WRONG_CODE = '인증 코드가 맞지 않습니다.';
 
+const newCode = () => String(randomInt(1_000_000)).padStart(6, '0');
 // Only a hash is stored. The user ID is part of it, so a code cannot be used for another account.
 const codeHash = (userId: number, code: string) => createHash('sha256').update(`${userId}:${code}`).digest('hex');
+// Likewise the address is part of an email code's hash, so it proves only the address it was mailed to.
+const emailCodeHash = (address: string, code: string) => createHash('sha256').update(`${address}:${code}`).digest('hex');
 
 /**
- * 아이디 찾기·비밀번호 재설정. 가입한 이메일로만 알려 주고, 응답으로는 계정이 있는지 드러내지 않습니다.
- * mailer가 없으면(서버에 SMTP 설정 없음) 메일을 보내는 두 경로가 503으로 알려 줍니다.
+ * Spends one attempt at the code mailed by POST /email-verification and deletes the code when it matches.
+ * Registration and email changes call it right before saving the address.
+ */
+export async function spendEmailCode(pool: Pool, address: string, code: string) {
+  // Spent before the comparison, so parallel guesses cannot exceed the limit.
+  const [spent] = await pool.query<ResultSetHeader>(
+    'UPDATE email_verification_codes SET attempts = attempts + 1 WHERE email = ? AND attempts < ? AND expires_at > NOW()',
+    [address, MAX_ATTEMPTS],
+  );
+  if (spent.affectedRows !== 1) throw new HttpError(400, EXPIRED);
+  const [used] = await pool.query<ResultSetHeader>(
+    'DELETE FROM email_verification_codes WHERE email = ? AND code_hash = ?', [address, emailCodeHash(address, code)],
+  );
+  if (!used.affectedRows) throw new HttpError(400, WRONG_CODE);
+}
+
+/**
+ * 이메일 인증·아이디 찾기·비밀번호 재설정. 찾기는 가입한 이메일로만 알려 주고, 응답으로는 계정이 있는지 드러내지 않습니다.
+ * mailer가 없으면(서버에 SMTP 설정 없음) 메일을 보내는 세 경로가 503으로 알려 주고, 그래서 가입과 이메일 변경도 할 수 없습니다.
  */
 export function createRecoveryRouter(pool: Pool, mailer: Mailer | null) {
   const router = Router();
@@ -47,9 +67,7 @@ export function createRecoveryRouter(pool: Pool, mailer: Mailer | null) {
   };
   const readCode = (input: Record<string, unknown>) => {
     const username = text(input.username, '아이디', 50);
-    const code = text(input.code, '인증 코드', 6);
-    if (!/^\d{6}$/.test(code)) throw new HttpError(400, '인증 코드는 6자리 숫자입니다.');
-    return { username, code };
+    return { username, code: sixDigitCode(input.code) };
   };
   /** Resolves to the user whose live code may now be compared, after spending one of its attempts. */
   const startAttempt = async (username: string) => {
@@ -64,6 +82,30 @@ export function createRecoveryRouter(pool: Pool, mailer: Mailer | null) {
     if (spent.affectedRows !== 1) throw new HttpError(400, EXPIRED);
     return user.id;
   };
+
+  // The address is not saved yet, so any address may ask. The code is what proves it belongs to the person registering it.
+  router.post('/email-verification', asyncHandler(async (req, res) => {
+    const mail = requireMailer();
+    const address = email(bodyObject(req.body).email);
+    const key = `verify:${address}`;
+    throttle(key);
+    const code = newCode();
+    // Codes for addresses that were never used are cleared here, so the table holds only live codes.
+    await pool.query('DELETE FROM email_verification_codes WHERE expires_at <= NOW()');
+    // A new request replaces the previous code and its attempts.
+    await pool.query(
+      `INSERT INTO email_verification_codes (email, code_hash, expires_at, attempts)
+       VALUES (?, ?, NOW() + INTERVAL ${CODE_MINUTES} MINUTE, 0) AS next
+       ON DUPLICATE KEY UPDATE code_hash = next.code_hash, expires_at = next.expires_at, attempts = 0`,
+      [address, emailCodeHash(address, code)],
+    );
+    await send(mail, key, {
+      to: address,
+      subject: '[Moti] 이메일 인증 코드',
+      text: `Moti 이메일 인증 코드: ${code}\n\n코드를 요청한 Moti 화면에 ${CODE_MINUTES}분 안에 입력해 주세요.\n${NOT_REQUESTED}`,
+    });
+    res.json({ message: `인증 코드를 메일로 보냈습니다. ${CODE_MINUTES}분 안에 입력해 주세요.` });
+  }));
 
   router.post('/find-id', asyncHandler(async (req, res) => {
     const mail = requireMailer();
@@ -92,7 +134,7 @@ export function createRecoveryRouter(pool: Pool, mailer: Mailer | null) {
     const [rows] = await pool.query<RowDataPacket[]>('SELECT id FROM users WHERE username = ? AND email = ?', [username, address]);
     const user = rows[0] as { id: number } | undefined;
     if (user) {
-      const code = String(randomInt(1_000_000)).padStart(6, '0');
+      const code = newCode();
       // A new request replaces the previous code and its attempts.
       await pool.query(
         `INSERT INTO password_reset_codes (user_id, code_hash, expires_at, attempts)

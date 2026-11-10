@@ -30,6 +30,13 @@ export function email(value: unknown, name = '이메일'): string {
   return result;
 }
 
+/** A mailed verification code. */
+export function sixDigitCode(value: unknown): string {
+  const code = text(value, '인증 코드', 6);
+  if (!/^\d{6}$/.test(code)) throw new HttpError(400, '인증 코드는 6자리 숫자입니다.');
+  return code;
+}
+
 export function integer(value: unknown, name: string, min: number, max: number): number {
   if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < min || value > max) {
     throw new HttpError(400, `${name}은(는) ${min}~${max} 사이의 정수여야 합니다.`);

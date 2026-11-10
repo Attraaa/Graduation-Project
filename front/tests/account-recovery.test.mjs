@@ -13,7 +13,7 @@ const bundle = await build({ stdin: { contents: [
   "export { default as Login } from './src/pages/Login.tsx';",
   "export { DialogProvider } from './src/components/AppDialog.tsx';",
   "export { MemoryRouter } from 'react-router-dom';",
-  "export { findId, requestPasswordReset, verifyResetCode, resetPassword, changeEmail, readAccountEmail } from './src/utils/authStore.ts';",
+  "export { findId, requestPasswordReset, verifyResetCode, resetPassword, requestEmailCode, changeEmail, readAccountEmail } from './src/utils/authStore.ts';",
 ].join('\n'), resolveDir: process.cwd() },
   bundle: true, write: false, logLevel: 'error', platform: 'node', format: 'cjs', jsx: 'automatic', external: ['react', 'react-dom'],
   loader: { '.svg': 'dataurl' } });
@@ -66,8 +66,12 @@ test('resetting a password asks for the ID and email first; the code and new-pas
   assert.doesNotMatch(out, /인증 코드 6자리|새 비밀번호|type="password"/);
 });
 
-test('registration asks for the email used to find the account', () => {
-  assert.match(page(app.Register), /<input type="email" placeholder="이메일"[^>]*required=""[^>]*name="email"/);
+test('registration asks for the email used to find the account and a code mailed to it', () => {
+  const out = page(app.Register);
+  assert.match(out, /<input type="email" placeholder="이메일"[^>]*required=""[^>]*name="email"/);
+  assert.match(out, /<button type="button"[^>]*>인증 코드 받기<\/button>/);
+  // The code field appears once a code was sent.
+  assert.doesNotMatch(out, /인증 코드 6자리/);
 });
 
 test('recovery requests send trimmed input and show the server answer', async t => {
@@ -78,11 +82,13 @@ test('recovery requests send trimmed input and show the server answer', async t 
   assert.deepEqual(await app.requestPasswordReset(' member ', ' a@example.com '), sent);
   assert.deepEqual(await app.verifyResetCode(' member ', ' 123456 '), sent);
   assert.deepEqual(await app.resetPassword(' member ', ' 123456 ', ' new password '), sent);
+  assert.deepEqual(await app.requestEmailCode(' a@example.com '), sent);
   assert.deepEqual(calls.map(({ url, method, body }) => [url, method, body]), [
     ['/api/auth/find-id', 'POST', { email: 'a@example.com' }],
     ['/api/auth/password-reset', 'POST', { username: 'member', email: 'a@example.com' }],
     ['/api/auth/password-reset/verify', 'POST', { username: 'member', code: '123456' }],
     ['/api/auth/password-reset/confirm', 'POST', { username: 'member', code: '123456', newPassword: ' new password ' }],
+    ['/api/auth/email-verification', 'POST', { email: 'a@example.com' }],
   ]);
 });
 
@@ -95,9 +101,9 @@ test('a server without mail settings shows its message instead of success', asyn
 test('a wrong current password for the email keeps the login', async t => {
   const stored = storage({ 'moti.session': SESSION });
   const calls = server(t, 400, { message: '현재 비밀번호를 확인해 주세요.' });
-  assert.deepEqual(await app.changeEmail(' New@Example.com ', 'wrong'), { ok: false, message: '현재 비밀번호를 확인해 주세요.' });
+  assert.deepEqual(await app.changeEmail(' New@Example.com ', ' 123456 ', 'wrong'), { ok: false, message: '현재 비밀번호를 확인해 주세요.' });
   assert.deepEqual(calls.map(({ url, method, body, authorization }) => [url, method, body, authorization]),
-    [['/api/auth/me/email', 'PUT', { email: 'New@Example.com', currentPassword: 'wrong' }, 'Bearer t']]);
+    [['/api/auth/me/email', 'PUT', { email: 'New@Example.com', code: '123456', currentPassword: 'wrong' }, 'Bearer t']]);
   assert.equal(stored.getItem('moti.session'), SESSION);
 });
 
