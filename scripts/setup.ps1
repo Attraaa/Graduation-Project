@@ -1,4 +1,4 @@
-param([switch]$ToolsOnly)
+param([switch]$ToolsOnly, [switch]$ForceInstall)
 # Use this PowerShell's modules even when a parent shell passes another version's PSModulePath.
 Import-Module (Join-Path $PSHOME 'Modules/Microsoft.PowerShell.Utility/Microsoft.PowerShell.Utility.psd1') -ErrorAction Stop
 Import-Module (Join-Path $PSHOME 'Modules/Microsoft.PowerShell.Archive/Microsoft.PowerShell.Archive.psd1') -ErrorAction Stop
@@ -25,12 +25,12 @@ function Get-VerifiedArchive {
     return $archive
 }
 
-$nodeArchive = Get-VerifiedArchive "https://nodejs.org/dist/v$($MotiToolchain.node)/node-v$($MotiToolchain.node)-win-x64.zip" "node-$($MotiToolchain.node).zip" $MotiToolchain.nodeWindowsX64Sha256
 if (-not (Test-Path -LiteralPath $MotiNode)) {
+    $nodeArchive = Get-VerifiedArchive "https://nodejs.org/dist/v$($MotiToolchain.node)/node-v$($MotiToolchain.node)-win-x64.zip" "node-$($MotiToolchain.node).zip" $MotiToolchain.nodeWindowsX64Sha256
     Expand-Archive -LiteralPath $nodeArchive -DestinationPath $MotiTools -Force
 }
-$uvArchive = Get-VerifiedArchive "https://github.com/astral-sh/uv/releases/download/$($MotiToolchain.uv)/uv-x86_64-pc-windows-msvc.zip" "uv-$($MotiToolchain.uv).zip" $MotiToolchain.uvWindowsX64Sha256
 if (-not (Test-Path -LiteralPath $MotiUv)) {
+    $uvArchive = Get-VerifiedArchive "https://github.com/astral-sh/uv/releases/download/$($MotiToolchain.uv)/uv-x86_64-pc-windows-msvc.zip" "uv-$($MotiToolchain.uv).zip" $MotiToolchain.uvWindowsX64Sha256
     Expand-Archive -LiteralPath $uvArchive -DestinationPath (Split-Path $MotiUv) -Force
 }
 Assert-MotiToolchain
@@ -39,7 +39,27 @@ if ($ToolsOnly) { exit 0 }
 
 foreach ($project in @('front', 'server')) {
     Push-Location (Join-Path $MotiRoot $project)
-    try { Invoke-MotiCommand $MotiNode @($MotiNpm, 'ci', '--no-fund') }
+    try {
+        $stamp = Join-Path (Get-Location).Path 'node_modules/.moti-install-fingerprint'
+        $fingerprint = (@('package.json', 'package-lock.json', (Join-Path $MotiRoot 'toolchain.json')) | ForEach-Object {
+            (Get-FileHash -LiteralPath $_ -Algorithm SHA256).Hash
+        }) -join ':'
+        $reuse = -not $ForceInstall -and (Test-Path -LiteralPath $stamp) -and (Get-Content -Raw -LiteralPath $stamp).Trim() -eq $fingerprint
+        if ($reuse) {
+            Write-Host "Checking existing $project dependencies..."
+            & $MotiNode $MotiNpm ls --all --offline *> $null
+            $reuse = $LASTEXITCODE -eq 0
+        }
+        if ($reuse) { Write-Host "$project dependencies unchanged; reusing installation." }
+        else {
+            # Write only after successful installation. A failed or removed tree is never cached.
+            if (Test-Path -LiteralPath $stamp) { Remove-Item -LiteralPath $stamp }
+            Write-Host "Installing locked $project dependencies (first install or changed inputs)..."
+            Invoke-MotiCommand $MotiNode @($MotiNpm, 'ci', '--no-fund')
+            [IO.File]::WriteAllText($stamp, $fingerprint)
+        }
+        if ($project -eq 'front') { Invoke-MotiCommand $MotiNode @('scripts/copy-mediapipe.mjs') }
+    }
     finally { Pop-Location }
 }
 

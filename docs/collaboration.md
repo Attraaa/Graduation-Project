@@ -64,12 +64,16 @@ README와 docs/collaboration.md, docs/evaluation.md를 읽어.
 
 목/어깨의 표시 차이는 `front/src/features/records/modes/turtle.ts`, `shoulder.ts`에 둡니다. `database/contracts.ts`(버전·직렬화), `recorder.ts`(시간 분할), `aggregation.ts`(순수 합산), `front/src/features/records/api.ts`(HTTP), `server/src/routes/records.ts`·`repositories/records.ts`(API·MySQL)는 공통 연결 담당자가 조정합니다. `database/` 계약을 바꾸면 서버도 같은 검증기를 쓰므로 서버를 다시 빌드·배포해야 합니다. 기록 기능이 점수/관측/카메라 정책을 소유하지 않습니다. 저장 경로와 복구·삭제 계약 변경은 [database/README.md](../database/README.md)와 해당 테스트를 함께 갱신합니다.
 
+## 학습된 상체 보조 담당 경계
+
+`relativeHead.ts`는 상대 머리 신호와 제한된 모델 기여 산식을 소유합니다. `trunkClassifier.ts`/`trunkModel.ts`는 골반이 관측되고 기준/품질/기하 조건이 맞을 때만 보조하며, 골반 없는 기본 측정은 계속 동작합니다. 모델을 갱신할 때 `scripts/posture/train_multiposture.py`, [모델 카드](posture-model-card.md), parity/사람별 검증 결과를 같이 갱신합니다. 로컬 검사 도구는 `scripts/posture/build_model_report.py`/`model_report.html`이 소유합니다. 개발용 테스트 화면의 `ScoreExplanation.tsx`는 실제 scoring 정책과 snapshot을 표시하며 산식을 독자적으로 소유하지 않습니다. 관측/점수 v6의 변경 이유와 재현 절차는 [상체 가이드](posture-augmentation.md)를 따릅니다.
+
 ## 안구 모드 담당 경계
 
 안구 계산·정책·영상 처리는 `front/src/features/eye/`가 소유합니다. 2026-10-10부터 독립 `EyeSession` 화면은 제거하고 `EyeMonitor(shared)`가 상체의 기존 변환 영상과 스트림을 빌립니다. 카메라 시작/해제는 `PostureMonitor`가 소유하고 깜빡임은 `PostureMetrics`에서 빈도와 평균으로 표시합니다. 공통 기록·서버 계약은 연결 담당자가 조정합니다. 안구 정책 변경은 `eyePolicy.ts`, 안구 테스트, [eye-mode.md](eye-mode.md)를 함께 갱신합니다. 안구 결과는 공통 MySQL/HTTP 경계에 저장하고 기존 안구 통계·학습이력에서 조회합니다.
 
 ## 상체 통합 담당 경계 (2026-10-02)
 
-사용자가 선택하는 상체 화면은 `upper_body` 하나이며 목·어깨를 동시에 계산합니다. `modes/turtle.ts`와 `shoulder.ts`는 독립 부위 정책으로 유지하고, 조정값은 `scoreSettings.ts` 상단에 모읍니다. 한 카메라의 관측을 두 evaluation 상태와 두 저장 sink에 전달합니다. 가중치·상하 gain·보호 설정 해시가 정책 ID에 포함되며, 공식 변경 시 정책 버전도 올립니다. 현재 회전 보류·상하 양방향 감도·복귀 확인은 점수/습관 v3이고 기준 스키마는 v2입니다. 기존 저장 부위 키와 데이터는 보존합니다.
+사용자가 선택하는 상체 화면은 `upper_body` 하나이며 목·어깨를 동시에 계산합니다. `modes/turtle.ts`와 `shoulder.ts`는 독립 부위 정책으로 유지하고, 조정값은 `scoreSettings.ts` 상단에 모읍니다. 한 카메라의 관측을 두 evaluation 상태와 두 저장 sink에 전달합니다. 가중치·상하 gain·보호 설정 해시가 정책 ID에 포함되며, 공식 변경 시 정책 버전도 올립니다. 현재 회전 보류·상하 양방향 감도·복귀 확인은 점수/습관 v6이고 기준 스키마는 v2입니다. 기존 저장 부위 키와 데이터는 보존합니다. `sustainedDeviation.ts`는 목의 시간 감점을 소유하고, `scoring.ts`는 어깨의 비선형 변환을 소유합니다. [수치 조절 기준](posture-score-tuning.md)을 함께 갱신합니다.
 
 안구 저장 통합은 `database/eye.ts`, `eyeRecorder.ts`, `front/src/features/eye/recording.ts`와 공통 HTTP 저장소/API가 소유합니다. 안구 표본/순수 정책과 서버 인증/SQL을 분리하며 서버 추가 테이블은 `server/migrations/003_eye_records.sql`을 따릅니다. 안구 통계·학습이력은 기존 상체·키보드 화면과 함께 유지합니다.

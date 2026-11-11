@@ -23,7 +23,7 @@
 
 [toolchain.ps1](../scripts/toolchain.ps1)은 해당 명령과 자식 프로세스에서만 프로젝트 도구 경로를 사용합니다. npm·uv 캐시, YOLO·Matplotlib 설정도 프로젝트 안에 둡니다. `moti.cmd`는 Node/npm 버전이 표준과 다르면 중단하므로 PC에 미리 설치된 다른 Node에 의존하지 않습니다.
 
-설치는 front/server의 `npm ci`, Python의 `uv sync --locked --managed-python --python 3.12.14 --extra web`을 실행합니다. `server/.env`가 없을 때만 예제를 복사하고 무작위 JWT 비밀값을 생성합니다. 기존 환경 파일을 덮어쓰거나 DB를 만들고 초기화하지 않습니다. DB 주소와 인증 정보는 별도 설정 대상입니다.
+설치는 front/server의 `npm ci`(성공 설치 지문과 전체 의존성 검사가 같으면 재사용), Python의 `uv sync --locked --managed-python --python 3.12.14 --extra web`을 실행합니다. `server/.env`가 없을 때만 예제를 복사하고 무작위 JWT 비밀값을 생성합니다. 기존 환경 파일을 덮어쓰거나 DB를 만들고 초기화하지 않습니다. DB 주소와 인증 정보는 별도 설정 대상입니다.
 
 Node 24 계열과 Python 3.12 계열은 기존 도구·분석 코드의 호환성을 유지하면서 정확한 패치 버전을 맞춘 선택입니다. 새 버전이 나와도 자동 전환하지 않고 아래 갱신 절차를 따릅니다. [Node 공식 다운로드](https://nodejs.org/en/download), [Python 3.12.14 릴리스](https://www.python.org/downloads/release/python-31214/), [uv의 Python 설치](https://docs.astral.sh/uv/guides/install-python/)
 

@@ -7,6 +7,8 @@ import electron from 'vite-plugin-electron'
 export default defineConfig(({ mode }) => ({
   base: './',
   cacheDir: './.vite-cache-screenshots',
+  optimizeDeps: { entries: ['index.html'] },
+  server: { watch: { ignored: ['**/.moti-cache/**', '**/.vite-cache*/**'] } },
   plugins: [
     tailwindcss(),
     react(),

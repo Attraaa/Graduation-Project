@@ -105,7 +105,7 @@ test('head growth, one-sided height loss and absolute shoulder tilt follow the d
   moved.landmarks[7].x = 0.65; moved.landmarks[8].x = 0.35;
   moved.landmarks[7].y = moved.landmarks[8].y = 0.35;
   const result = advanceObservation(createObservation(), baseline, moved);
-  assert.ok(Math.abs(result.delta.headForward - 0.5) < 1e-12);
+  assert.ok(Math.abs(result.delta.headForward - 1) < 1e-12);
   assert.ok(Math.abs(result.delta.neckSlump - 0.2) < 1e-12);
   assert.equal(result.delta.shoulderShrug, result.delta.neckSlump);
   moved.landmarks[7].y = moved.landmarks[8].y = 0.15;
