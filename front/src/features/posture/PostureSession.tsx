@@ -14,13 +14,19 @@ export default function PostureSession() {
   const { controls, snapshot } = upper;
   return <SessionFrame modeId="upper_body" camera={upper.camera}
     subtitle="목·어깨 점수와 분당 깜빡임을 함께 확인하세요."
-    actions={<><button type="button" disabled={!controls.isRunning || controls.isPaused} onClick={upper.recalibrate} className="flex min-h-10 items-center gap-2 rounded-xl border border-border bg-surface px-3 py-2 text-sm font-bold text-heading disabled:opacity-50"><RotateCcw size={16} />기준 다시 잡기</button><SessionActions modeId="upper_body" className="w-full sm:w-80" /></>}>
-    <section className="space-y-4 rounded-2xl border border-border bg-surface p-4">
-      <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="font-bold text-heading">상체 카메라</h2><SessionStatus modeId="upper_body" /></div>
-      <div className="mx-auto w-full max-w-2xl"><MonitoringPreview modeId="upper_body" /></div>
-      <MonitoringNotice modeId="upper_body" />
-      <PostureMetrics snapshot={snapshot} eye={upper.eye.measurement} isRunning={controls.isRunning} />
-    </section>
+    actions={<button type="button" disabled={!controls.isRunning || controls.isPaused} onClick={upper.recalibrate} className="session-tool"><RotateCcw size={15} />기준 다시 잡기</button>}>
+    <div className="session-workspace">
+      <section className="session-camera" aria-label="상체 카메라">
+        <div className="session-panel-heading"><h2>상체 카메라</h2><span>목 · 어깨 · 깜빡임</span></div>
+        <MonitoringPreview modeId="upper_body" detailed />
+        <div className="session-controlbar"><SessionStatus modeId="upper_body" detailed /><SessionActions modeId="upper_body" className="session-controls" /></div>
+      </section>
+      <aside className="session-insights" aria-label="상체 실시간 지표">
+        <div className="session-panel-heading"><h2>실시간 지표</h2><span>현재 / 세션 평균</span></div>
+        <PostureMetrics snapshot={snapshot} eye={upper.eye.measurement} isRunning={controls.isRunning} rows />
+        <div className="session-guidance"><h3>측정 안내</h3><MonitoringNotice modeId="upper_body" /></div>
+      </aside>
+    </div>
     <LiveScoreChart points={upper.trend} />
     <RecordingStatus errorsOnly />
   </SessionFrame>;

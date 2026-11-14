@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Settings2 } from 'lucide-react';
 import { getLearningMode } from '../../data/modes';
 import type { CameraContextValue } from '../camera/context';
+import './session.css';
 
 interface SessionFrameProps {
   modeId: string;
@@ -15,16 +16,14 @@ interface SessionFrameProps {
 export default function SessionFrame({ modeId, subtitle, children, camera, actions }: SessionFrameProps) {
   const navigate = useNavigate();
   const mode = getLearningMode(modeId);
-  const content = <div className="flex min-h-full flex-col gap-4 pb-4">
-      <header className="flex flex-col items-start gap-4">
-        <div>
-          <button onClick={() => navigate('/dashboard')} className="mb-3 flex items-center gap-1 text-sm font-bold text-muted">
-            <ArrowLeft size={17} /> 대시보드
-          </button>
-          <h1 className="text-2xl font-black text-heading">{mode.title}</h1>
-          <p className="mt-1 text-sm text-muted">{subtitle}</p>
+  const content = <div className="learning-session">
+      <button type="button" onClick={() => navigate('/dashboard')} className="session-back"><ArrowLeft size={15} /> 대시보드</button>
+      <header className="session-heading">
+        <div className="session-title">
+          <span className={`session-mode-icon ${modeId === 'keyboard' ? 'bg-mode-keyboard-soft text-mode-keyboard' : 'bg-mode-upper-soft text-mode-upper'}`}>{mode.icon}</span>
+          <div><h1>{mode.title}</h1><p>{subtitle}</p></div>
         </div>
-        <div className="flex w-full flex-wrap items-center gap-2"><button type="button" onClick={camera.open} className="flex min-h-10 items-center gap-2 rounded-xl border border-border bg-surface px-3 py-2 text-sm font-bold text-heading"><Settings2 size={17} />카메라 설정</button>{actions}</div>
+        <div className="session-tools"><button type="button" onClick={camera.open} className="session-tool"><Settings2 size={15} />카메라 설정</button>{actions}</div>
       </header>
       {children}
     </div>;

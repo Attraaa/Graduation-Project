@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { ArrowLeft, GripHorizontal } from 'lucide-react';
+import { Activity, ArrowUpRight, Keyboard, Pause, Play, Square } from 'lucide-react';
+import motiIcon from '../../assets/moti-icon.svg';
 import { commandAllowed, overlayTime, OVERLAY_MODES, type OverlayAction, type OverlayMode, type OverlayView } from './contract';
 
 export default function OverlayPanel() {
@@ -31,29 +32,37 @@ export default function OverlayPanel() {
     } catch { setMessage('본창 연결을 확인해 주세요.'); }
     finally { setPending(current => current[mode] === id ? { ...current, [mode]: undefined } : current); }
   };
-  return <main className="overlay-panel bg-background text-heading">
-    <header className="overlay-drag flex items-center justify-between gap-2">
-      <div className="flex items-center gap-2 font-extrabold"><GripHorizontal size={17} aria-hidden="true" />Moti</div>
-      <button type="button" onClick={() => { void window.motiOverlay?.back(); }} className="overlay-no-drag inline-flex h-8 items-center gap-1 rounded-lg border border-border bg-surface px-2 text-xs font-bold"><ArrowLeft size={14} />돌아가기</button>
+  return <main className="overlay-panel text-heading">
+    <header className="overlay-drag overlay-header">
+      <div className="overlay-brand"><img src={motiIcon} alt="" />Moti<span>모니터링</span></div>
+      <span className="overlay-connection"><i className={view.connected ? 'connected' : ''} />{view.connected ? '연결됨' : '연결 확인'}</span>
     </header>
     <div className="overlay-sections">
       {OVERLAY_MODES.map(mode => {
         const s = snapshot?.[mode];
         const paused = s?.paused ?? false;
-        return <section key={mode} aria-label={`${mode === 'upper_body' ? '상체' : '키보드'} 오버레이`} className="overlay-session rounded-xl border border-border bg-surface">
-          <div className="flex items-center justify-between gap-2"><h1 className="text-sm font-extrabold">{mode === 'upper_body' ? '상체' : '키보드'}</h1><span aria-label="세션 활성 시간" className="text-sm font-bold tabular-nums">{overlayTime(s?.seconds ?? 0)}</span></div>
-          <p role="status" title={s?.detail} className={`h-8 overflow-hidden text-xs leading-4 ${s?.error ? 'text-danger' : 'text-muted'}`}>{!view.connected ? '본창 연결 확인 필요' : s?.status}<br />{s?.detail}</p>
-          <div role="group" aria-label={`${mode === 'upper_body' ? '상체' : '키보드'} 측정 제어`} className="grid grid-cols-3 gap-2">
-            {(['start', paused ? 'resume' : 'pause', 'stop'] as const).map(action => <button key={action === 'resume' ? 'pause' : action} type="button"
+        const name = mode === 'upper_body' ? '상체' : '키보드';
+        return <section key={mode} aria-label={`${name} 오버레이`} className={`overlay-session ${mode === 'upper_body' ? 'overlay-upper' : 'overlay-keyboard'}`}>
+          <div className="overlay-session-top">
+            <div className="overlay-mode"><span className="overlay-mode-icon">{mode === 'upper_body' ? <Activity size={17} /> : <Keyboard size={17} />}</span><div><h1>{name}</h1><p role="status" title={!view.connected ? '본창 연결 확인 필요' : s?.status} className={s?.error ? 'text-danger' : ''}>{!view.connected ? '본창 연결 확인 필요' : s?.status}</p></div></div>
+            <div role="group" aria-label={`${name} 측정 제어`} className="overlay-controls">
+            {(['start', paused ? 'resume' : 'pause', 'stop'] as const).map(action => {
+              const label = action === 'start' ? '시작' : action === 'stop' ? '중지' : action === 'resume' ? '재개' : '일시정지';
+              return <button key={action === 'resume' ? 'pause' : action} type="button" aria-label={`${name} ${label}`} title={`${name} ${label}`}
               disabled={!s || !commandAllowed(s, action) || (action !== 'stop' && (!view.connected || !!pending[mode]))}
               onClick={() => { void act(mode, action); }}
-              className={`h-10 rounded-lg border text-xs font-bold disabled:cursor-default disabled:opacity-40 ${action === 'start' ? 'border-primary-border bg-primary text-white' : action === 'stop' ? 'border-danger-border bg-danger text-white' : 'border-warning-border bg-warning text-warning-foreground'}`}>
-              {action === 'start' ? '시작' : action === 'stop' ? '중지' : action === 'resume' ? '재개' : '일시정지'}
-            </button>)}
+              className={`overlay-control overlay-control-${action}`}>
+              {action === 'start' || action === 'resume' ? <Play size={14} /> : action === 'stop' ? <Square size={13} /> : <Pause size={14} />}
+            </button>; })}
+            </div>
           </div>
+          <div className="overlay-session-bottom"><p title={s?.detail}>{s?.detail || '측정을 시작해 주세요'}</p><span aria-label="세션 활성 시간">{overlayTime(s?.seconds ?? 0)}</span></div>
         </section>;
       })}
     </div>
-    <p role="status" title={message} className="overlay-footer h-4 truncate text-xs text-danger">{message || (snapshot?.savingFailed ? '기록 저장 실패 · 돌아가서 저장을 재시도해 주세요.' : '')}</p>
+    <footer className="overlay-footer">
+      <p role="status" title={message || (snapshot?.savingFailed ? '기록 저장 실패 · 돌아가서 저장을 재시도해 주세요.' : '')}>{message || (snapshot?.savingFailed ? '기록 저장 실패 · 돌아가서 재시도해 주세요.' : '')}</p>
+      <button type="button" onClick={() => { void window.motiOverlay?.back(); }} className="overlay-back"><span>돌아가기</span><ArrowUpRight size={15} /></button>
+    </footer>
   </main>;
 }

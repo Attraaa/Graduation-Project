@@ -11,7 +11,7 @@ const AppLayout = () => {
   const pathname = useLocation().pathname;
   const main = useRef<HTMLElement>(null);
   useEffect(() => { main.current?.scrollTo(0, 0); }, [pathname]);
-  const wide = WIDE_PAGES.includes(pathname);
+  const wide = WIDE_PAGES.includes(pathname) || pathname.startsWith('/learn/');
   return (
     <MonitoringProvider><div className="flex h-screen w-screen bg-background">
       <Sidebar />
