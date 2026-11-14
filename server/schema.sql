@@ -10,6 +10,7 @@ DROP TABLE IF EXISTS `Session`;
 DROP TABLE IF EXISTS `user`;
 
 -- 기존 서버 테이블도 초기화 (재생성 위해)
+DROP TABLE IF EXISTS email_verification_codes;
 DROP TABLE IF EXISTS password_reset_codes;
 DROP TABLE IF EXISTS eye_batches;
 DROP TABLE IF EXISTS eye_buckets;
@@ -260,4 +261,13 @@ CREATE TABLE password_reset_codes (
   expires_at DATETIME NOT NULL,
   attempts   INT      NOT NULL DEFAULT 0,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- 18. 이메일 인증 코드 (migrations/005_email_verification_codes.sql과 같은 정의)
+-- 주소당 최근 코드 하나. 가입·이메일 변경에서 맞게 쓰면 지웁니다. 코드는 해시만 저장합니다.
+CREATE TABLE email_verification_codes (
+  email      VARCHAR(255) NOT NULL PRIMARY KEY,
+  code_hash  CHAR(64)     NOT NULL,
+  expires_at DATETIME     NOT NULL,
+  attempts   INT          NOT NULL DEFAULT 0
 );

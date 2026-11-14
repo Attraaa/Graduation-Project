@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { KeyRound } from 'lucide-react';
 import { useDialog } from '../../components/dialog/useDialog';
 import { usePasswordReset, type ResetStep } from '../../hooks/usePasswordReset';
-import { changeEmail, getCurrentUser, readAccountEmail } from '../../utils/authStore';
+import { changeEmail, getCurrentUser, readAccountEmail, requestEmailCode } from '../../utils/authStore';
 import { BUTTON, BUTTON_STRONG, Field, INPUT, Modal, SettingsCard } from './parts';
 
 const RESET_BUTTON: Record<ResetStep, [idle: string, busy: string]> = {
@@ -11,37 +11,70 @@ const RESET_BUTTON: Record<ResetStep, [idle: string, busy: string]> = {
   reset: ['비밀번호 재설정', '바꾸는 중…'],
 };
 
-/** New email plus the current password, because the recovery address can reset the password. */
+/**
+ * New email, a code mailed to it, and the current password, because the recovery address can reset the password.
+ * The code and password fields appear once a code was sent to the address in the email field.
+ */
 function EmailWindow({ current, onClose, onSaved }: {
   current: string | null; onClose: () => void; onSaved: (email: string, message: string) => Promise<void>;
 }) {
   const [email, setEmail] = useState(current ?? '');
+  const [sentTo, setSentTo] = useState('');
+  const [code, setCode] = useState('');
   const [currentPassword, setCurrentPassword] = useState('');
-  const [message, setMessage] = useState('');
-  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState({ text: '', error: false });
+  const [busy, setBusy] = useState<'send' | 'save' | null>(null);
+  const sent = sentTo !== '' && sentTo === email.trim();
 
-  const save = async (event: FormEvent) => {
+  const sendCode = async () => {
+    setBusy('send');
+    const result = await requestEmailCode(email);
+    setBusy(null);
+    setMessage({ text: result.message, error: !result.ok });
+    if (result.ok) {
+      setSentTo(email.trim());
+      setCode('');
+    }
+  };
+
+  const submit = async (event: FormEvent) => {
     event.preventDefault();
-    setBusy(true);
-    const result = await changeEmail(email, currentPassword);
-    setBusy(false);
+    if (!sent) return sendCode();
+    setBusy('save');
+    const result = await changeEmail(email, code, currentPassword);
+    setBusy(null);
     if (result.ok) await onSaved(email.trim().toLowerCase(), result.message);
-    else setMessage(result.message);
+    else setMessage({ text: result.message, error: true });
   };
 
   return (
     <Modal title={current ? '이메일 변경' : '이메일 등록'} onClose={onClose}>
-      <form onSubmit={save} className="space-y-4">
+      <form onSubmit={submit} className="space-y-4">
         <Field label="새 이메일" htmlFor="account-email">
           <input id="account-email" type="email" autoComplete="email" autoFocus required value={email}
-            onChange={event => setEmail(event.target.value)} className={INPUT} />
+            onChange={event => { setEmail(event.target.value); setMessage({ text: '', error: false }); }} className={INPUT} />
         </Field>
-        <Field label="현재 비밀번호" htmlFor="account-current-password">
-          <input id="account-current-password" type="password" autoComplete="current-password" required value={currentPassword}
-            onChange={event => setCurrentPassword(event.target.value)} className={INPUT} />
-        </Field>
-        {message && <p role="status" className="text-sm font-semibold text-danger">{message}</p>}
-        <button type="submit" disabled={busy} className={`${BUTTON_STRONG} w-full`}>{busy ? '저장 중…' : '저장'}</button>
+        {sent && (
+          <>
+            <Field label="인증 코드 6자리" htmlFor="account-email-code">
+              <input id="account-email-code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} autoFocus required value={code}
+                onChange={event => setCode(event.target.value)} className={INPUT} />
+            </Field>
+            <Field label="현재 비밀번호" htmlFor="account-current-password">
+              <input id="account-current-password" type="password" autoComplete="current-password" required value={currentPassword}
+                onChange={event => setCurrentPassword(event.target.value)} className={INPUT} />
+            </Field>
+          </>
+        )}
+        {message.text && <p role="status" className={`text-sm font-semibold ${message.error ? 'text-danger' : 'text-muted'}`}>{message.text}</p>}
+        <button type="submit" disabled={busy !== null} className={`${BUTTON_STRONG} w-full`}>
+          {sent ? (busy === 'save' ? '저장 중…' : '저장') : (busy === 'send' ? '보내는 중…' : '인증 코드 받기')}
+        </button>
+        {sent && (
+          <button type="button" disabled={busy !== null} onClick={() => void sendCode()} className={`${BUTTON} w-full`}>
+            {busy === 'send' ? '보내는 중…' : '인증 코드 다시 받기'}
+          </button>
+        )}
       </form>
     </Modal>
   );
@@ -122,12 +155,12 @@ export default function AccountSecurity() {
   return (
     <SettingsCard title="비밀번호 · 이메일" icon={<KeyRound size={18} />}>
       <div className="space-y-1">
-        <p className="text-xs font-semibold text-muted">이메일 (아이디·비밀번호 찾기용)</p>
+        <p className="text-xs font-semibold text-muted">이메일 (아이디 찾기·비밀번호 재설정용)</p>
         <p className="truncate text-sm font-semibold text-heading">
           {savedEmail ?? (savedEmail === null ? '등록된 이메일 없음' : '불러오는 중…')}
         </p>
       </div>
-      {savedEmail === null && <p className="text-xs font-semibold text-danger">등록된 이메일이 없어요. 등록해야 아이디·비밀번호를 찾을 수 있어요.</p>}
+      {savedEmail === null && <p className="text-xs font-semibold text-danger">등록된 이메일이 없어요. 등록해야 아이디 찾기와 비밀번호 재설정을 할 수 있어요.</p>}
       <p className="text-xs text-muted">비밀번호는 등록된 이메일로 받은 인증 코드를 확인한 뒤 새로 정해요.</p>
       <div className="mt-auto grid grid-cols-2 gap-2">
         <button type="button" onClick={() => setOpen('email')} className={BUTTON}>{savedEmail === null ? '이메일 등록' : '이메일 변경'}</button>

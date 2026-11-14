@@ -8,8 +8,9 @@ import express from 'express';
 import mysql from 'mysql2/promise';
 import type { Pool } from 'mysql2/promise';
 import type { ResultSetHeader, RowDataPacket } from 'mysql2';
-import { comparePassword, hashPassword } from '../src/auth.js';
+import { comparePassword, createAuth, hashPassword } from '../src/auth.js';
 import { handleError } from '../src/http.js';
+import { createAuthRouter } from '../src/routes/auth.js';
 import { createRecoveryRouter } from '../src/routes/recovery.js';
 import type { Mailer, MailMessage } from '../src/services/mail.js';
 
@@ -20,6 +21,7 @@ import type { Mailer, MailMessage } from '../src/services/mail.js';
 const url = process.env.MOTI_TEST_MYSQL_URL;
 const SKIP_MYSQL = url ? false : 'set MOTI_TEST_MYSQL_URL to run against a temporary MySQL database';
 const EXPIRED = { status: 400, message: '인증 코드가 만료되었거나 입력 횟수를 넘었습니다. 인증 코드를 다시 받아 주세요.' };
+const WRONG = { status: 400, message: '인증 코드가 맞지 않습니다.' };
 
 interface Database {
   pool: Pool;
@@ -27,16 +29,21 @@ interface Database {
   passwordHash(userId: number): Promise<string>;
   storedCode(userId: number): Promise<string | null>;
   expire(userId: number): Promise<void>;
+  /** undefined when no account has the username. */
+  userEmail(username: string): Promise<string | null | undefined>;
+  storedEmailCode(address: string): Promise<string | null>;
+  expireEmailCode(address: string): Promise<void>;
 }
 type Open = (t: TestContext) => Promise<Database>;
 
-/** Follows the statements in routes/recovery.ts; any other statement fails the test. */
+/** Follows the statements in routes/recovery.ts and the email-related ones in routes/auth.ts; any other statement fails the test. */
 function memoryDatabase(): Database & { queries: () => number } {
   const users: { id: number; username: string; email: string | null; passwordHash: string }[] = [];
   const codes = new Map<number, { hash: string; expiresAt: number; attempts: number }>();
+  const emailCodes = new Map<string, { hash: string; expiresAt: number; attempts: number }>();
   let queries = 0;
   const changed = (affectedRows: number) => [{ affectedRows }];
-  const query = async (sql: string, [first, second]: unknown[]) => {
+  const query = async (sql: string, [first, second, third, fourth]: unknown[] = []) => {
     queries += 1;
     if (sql.startsWith('SELECT username FROM users WHERE email = ?')) {
       return [users.filter(user => user.email === first).map(({ username }) => ({ username }))];
@@ -74,6 +81,37 @@ function memoryDatabase(): Database & { queries: () => number } {
       if (user) user.passwordHash = first as string;
       return changed(user ? 1 : 0);
     }
+    if (sql.startsWith('DELETE FROM email_verification_codes WHERE expires_at <= NOW()')) {
+      for (const [address, code] of emailCodes) if (code.expiresAt <= Date.now()) emailCodes.delete(address);
+      return changed(0);
+    }
+    if (sql.startsWith('INSERT INTO email_verification_codes')) {
+      emailCodes.set(first as string, { hash: second as string, expiresAt: Date.now() + 600_000, attempts: 0 });
+      return changed(1);
+    }
+    if (sql.startsWith('UPDATE email_verification_codes SET attempts = attempts + 1')) {
+      const code = emailCodes.get(first as string);
+      if (!code || code.attempts >= (second as number) || code.expiresAt <= Date.now()) return changed(0);
+      code.attempts += 1;
+      return changed(1);
+    }
+    if (sql.startsWith('DELETE FROM email_verification_codes WHERE email = ? AND code_hash = ?')) {
+      if (emailCodes.get(first as string)?.hash !== second) return changed(0);
+      emailCodes.delete(first as string);
+      return changed(1);
+    }
+    if (sql.startsWith('INSERT INTO users (username, nickname, email, password_hash)')) {
+      users.push({ id: users.length + 1, username: first as string, email: third as string, passwordHash: fourth as string });
+      return [{ affectedRows: 1, insertId: users.length }];
+    }
+    if (sql.startsWith('SELECT password_hash FROM users WHERE id = ?')) {
+      return [users.filter(({ id }) => id === first).map(({ passwordHash }) => ({ password_hash: passwordHash }))];
+    }
+    if (sql.startsWith('UPDATE users SET email = ? WHERE id = ?')) {
+      const user = users.find(({ id }) => id === second);
+      if (user) user.email = first as string;
+      return changed(user ? 1 : 0);
+    }
     throw new Error(`unexpected query: ${sql}`);
   };
   return {
@@ -86,6 +124,9 @@ function memoryDatabase(): Database & { queries: () => number } {
     passwordHash: async userId => users.find(({ id }) => id === userId)!.passwordHash,
     storedCode: async userId => codes.get(userId)?.hash ?? null,
     expire: async userId => { codes.get(userId)!.expiresAt = 0; },
+    userEmail: async username => users.find(user => user.username === username)?.email,
+    storedEmailCode: async address => emailCodes.get(address)?.hash ?? null,
+    expireEmailCode: async address => { emailCodes.get(address)!.expiresAt = 0; },
   };
 }
 
@@ -98,7 +139,7 @@ async function mysqlDatabase(t: TestContext, schema = readFileSync(new URL('../s
   await admin.query(schema);
   const pool = mysql.createPool({ uri: url, database: name, connectionLimit: 4 });
   t.after(() => pool.end());
-  const one = async (sql: string, userId: number) => (await pool.query<RowDataPacket[]>(sql, [userId]))[0][0];
+  const one = async (sql: string, key: number | string) => (await pool.query<RowDataPacket[]>(sql, [key]))[0][0];
   return {
     pool,
     addUser: async (username, email) => {
@@ -111,6 +152,11 @@ async function mysqlDatabase(t: TestContext, schema = readFileSync(new URL('../s
     passwordHash: async userId => (await one('SELECT password_hash FROM users WHERE id = ?', userId)).password_hash,
     storedCode: async userId => (await one('SELECT code_hash FROM password_reset_codes WHERE user_id = ?', userId))?.code_hash ?? null,
     expire: async userId => { await pool.query('UPDATE password_reset_codes SET expires_at = NOW() - INTERVAL 1 SECOND WHERE user_id = ?', [userId]); },
+    userEmail: async username => (await one('SELECT email FROM users WHERE username = ?', username))?.email,
+    storedEmailCode: async address => (await one('SELECT code_hash FROM email_verification_codes WHERE email = ?', address))?.code_hash ?? null,
+    expireEmailCode: async address => {
+      await pool.query('UPDATE email_verification_codes SET expires_at = NOW() - INTERVAL 1 SECOND WHERE email = ?', [address]);
+    },
   };
 }
 
@@ -121,9 +167,13 @@ function mailbox() {
 }
 const otherCode = (code: string) => code === '000000' ? '000001' : '000000';
 
+const auth = createAuth({ secret: 'test-only-secret-012345678901234567890', expiresIn: 3600 });
+
+/** Serves the recovery routes and the account routes that spend email codes. A userId signs the request in as that user. */
 async function start(t: TestContext, pool: Pool, mailer: Mailer | null) {
   const app = express();
   app.use(express.json());
+  app.use('/api/auth', createAuthRouter(pool, auth));
   app.use('/api/auth', createRecoveryRouter(pool, mailer));
   app.use(handleError);
   const server = app.listen(0, '127.0.0.1');
@@ -133,18 +183,19 @@ async function start(t: TestContext, pool: Pool, mailer: Mailer | null) {
     await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
   });
   const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api/auth`;
-  return async (path: string, body: unknown) => {
-    const response = await fetch(base + path, {
-      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(10000),
-    });
+  return async (path: string, body: unknown, method = 'POST', userId?: number) => {
+    const headers: Record<string, string> = { 'content-type': 'application/json' };
+    if (userId) headers.authorization = `Bearer ${auth.signToken({ userId, username: 'member' })}`;
+    const response = await fetch(base + path, { method, headers, body: JSON.stringify(body), signal: AbortSignal.timeout(10000) });
     return { status: response.status, message: (await response.json() as { message: string }).message };
   };
 }
 
-test('without SMTP settings both mail routes answer 503 before reading the database', async t => {
+test('without SMTP settings the three mail routes answer 503 before reading the database', async t => {
   const db = memoryDatabase();
   const post = await start(t, db.pool, null);
-  for (const [path, body] of [['/find-id', { email: 'a@example.com' }], ['/password-reset', { username: 'a', email: 'a@example.com' }]] as const) {
+  for (const [path, body] of [['/find-id', { email: 'a@example.com' }], ['/password-reset', { username: 'a', email: 'a@example.com' }],
+    ['/email-verification', { email: 'a@example.com' }]] as const) {
     assert.deepEqual(await post(path, body), { status: 503, message: '메일 발송이 아직 설정되지 않았습니다. 관리자에게 문의해 주세요.' });
   }
   assert.equal(db.queries(), 0);
@@ -156,6 +207,7 @@ test('malformed addresses, codes and passwords are rejected before reading the d
   for (const email of ['member', 'a@b', '"a>b"@example.com', 'a;b@example.com', 'a@example.com (comment)']) {
     assert.equal((await post('/find-id', { email })).status, 400, email);
     assert.equal((await post('/password-reset', { username: 'member', email })).status, 400, email);
+    assert.equal((await post('/email-verification', { email })).status, 400, email);
   }
   for (const body of [{ code: '12345', newPassword: 'new-password' }, { code: 'abcdef', newPassword: 'new-password' },
     { code: '1234567', newPassword: 'new-password' }, { code: '123456' }]) {
@@ -189,6 +241,17 @@ test('004 adds the reset-code table to a database at 003 and keeps its users', {
   await assert.rejects(db.storedCode(id), /password_reset_codes/);
   await db.pool.query(readFileSync(new URL('../migrations/004_password_reset_codes.sql', import.meta.url), 'utf8'));
   assert.equal(await db.storedCode(id), null);
+  assert.equal(await comparePassword('old-password', await db.passwordHash(id)), true);
+});
+
+test('005 adds the email-code table to a database at 004 and keeps its users', { skip: SKIP_MYSQL }, async t => {
+  const schema = readFileSync(new URL('../schema.sql', import.meta.url), 'utf8');
+  const db = await mysqlDatabase(t, schema.split('-- 18.')[0]);
+  const id = await db.addUser('member', 'member@example.com');
+  await assert.rejects(db.storedEmailCode('member@example.com'), /email_verification_codes/);
+  await db.pool.query(readFileSync(new URL('../migrations/005_email_verification_codes.sql', import.meta.url), 'utf8'));
+  assert.equal(await db.storedEmailCode('member@example.com'), null);
+  assert.equal(await db.userEmail('member'), 'member@example.com');
   assert.equal(await comparePassword('old-password', await db.passwordHash(id)), true);
 });
 
@@ -291,5 +354,70 @@ for (const [label, open, skip] of backends) {
     assert.deepEqual(await post('/password-reset/confirm', { username: 'late', code: lateCode, newPassword: 'new-password' }), EXPIRED);
     assert.deepEqual(await post('/password-reset/confirm', { username: 'nobody', code: lateCode, newPassword: 'new-password' }), EXPIRED);
     for (const id of [guessed, late]) assert.equal(await comparePassword('old-password', await db.passwordHash(id)), true);
+  });
+
+  test(`${label}: registering needs a code mailed to the address, and the code works once`, { skip }, async t => {
+    const db = await open(t);
+    await db.addUser('taken', null);
+    const mail = mailbox();
+    const post = await start(t, db.pool, mail.mailer);
+    const member = { username: 'member', nickname: '회원', password: 'secret1', email: ' Member@Example.com ' };
+    assert.deepEqual(await post('/register', { ...member, code: '123456' }), EXPIRED);
+    assert.deepEqual(await post('/email-verification', { email: ' MEMBER@example.com ' }),
+      { status: 200, message: '인증 코드를 메일로 보냈습니다. 10분 안에 입력해 주세요.' });
+    assert.equal(mail.sent.length, 1);
+    assert.equal(mail.sent[0].to, 'member@example.com');
+    assert.equal(mail.sent[0].subject, '[Moti] 이메일 인증 코드');
+    assert.match(await db.storedEmailCode('member@example.com') ?? '', /^[0-9a-f]{64}$/);
+    assert.equal((await post('/email-verification', { email: 'member@example.com' })).status, 429);
+    assert.equal(mail.sent.length, 1);
+    const code = mail.code();
+    assert.deepEqual(await post('/register', { ...member, code: otherCode(code) }), WRONG);
+    assert.deepEqual(await post('/register', { ...member, email: 'other@example.com', code }), EXPIRED);
+    // A taken ID is refused before the code is spent.
+    assert.equal((await post('/register', { ...member, username: 'taken', code })).status, 409);
+    assert.equal(await db.userEmail('member'), undefined);
+    assert.equal((await post('/register', { ...member, code })).status, 201);
+    assert.equal(await db.userEmail('member'), 'member@example.com');
+    assert.equal(await db.storedEmailCode('member@example.com'), null);
+    assert.deepEqual(await post('/register', { ...member, username: 'second', code }), EXPIRED);
+    assert.equal(await db.userEmail('second'), undefined);
+  });
+
+  test(`${label}: changing the email needs the current password and a code mailed to the new address`, { skip }, async t => {
+    const db = await open(t);
+    const id = await db.addUser('member', 'old@example.com');
+    const mail = mailbox();
+    const request = await start(t, db.pool, mail.mailer);
+    const change = (body: Record<string, string>) => request('/me/email', body, 'PUT', id);
+    await request('/email-verification', { email: 'new@example.com' });
+    const code = mail.code();
+    assert.deepEqual(await change({ email: 'new@example.com', code, currentPassword: 'wrong-password' }),
+      { status: 400, message: '현재 비밀번호를 확인해 주세요.' });
+    assert.deepEqual(await change({ email: 'new@example.com', code: otherCode(code), currentPassword: 'old-password' }), WRONG);
+    assert.equal(await db.userEmail('member'), 'old@example.com');
+    assert.deepEqual(await change({ email: ' New@Example.com ', code, currentPassword: 'old-password' }),
+      { status: 200, message: '이메일이 변경되었습니다.' });
+    assert.equal(await db.userEmail('member'), 'new@example.com');
+    assert.deepEqual(await change({ email: 'new@example.com', code, currentPassword: 'old-password' }), EXPIRED);
+  });
+
+  test(`${label}: five wrong email codes or an expired one need a new code, and expired codes are cleared`, { skip }, async t => {
+    const db = await open(t);
+    const mail = mailbox();
+    const post = await start(t, db.pool, mail.mailer);
+    const member = { username: 'member', nickname: '회원', password: 'secret1', email: 'guessed@example.com' };
+    await post('/email-verification', { email: 'guessed@example.com' });
+    const code = mail.code();
+    for (let attempt = 0; attempt < 5; attempt += 1) assert.deepEqual(await post('/register', { ...member, code: otherCode(code) }), WRONG);
+    assert.deepEqual(await post('/register', { ...member, code }), EXPIRED);
+    await post('/email-verification', { email: 'late@example.com' });
+    const late = mail.code();
+    await db.expireEmailCode('late@example.com');
+    assert.deepEqual(await post('/register', { ...member, email: 'late@example.com', code: late }), EXPIRED);
+    assert.equal(await db.userEmail('member'), undefined);
+    await post('/email-verification', { email: 'next@example.com' });
+    assert.equal(await db.storedEmailCode('late@example.com'), null);
+    assert.notEqual(await db.storedEmailCode('next@example.com'), null);
   });
 }

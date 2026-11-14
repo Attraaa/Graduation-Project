@@ -2,7 +2,8 @@ import { Router } from 'express';
 import type { Pool } from 'mysql2/promise';
 import { hashPassword, comparePassword, type Auth } from '../auth.js';
 import { asyncHandler, HttpError } from '../http.js';
-import { bodyObject, text, password, email, settingsObject } from '../validation.js';
+import { bodyObject, text, password, email, settingsObject, sixDigitCode } from '../validation.js';
+import { spendEmailCode } from './recovery.js';
 import type { RowDataPacket, ResultSetHeader } from 'mysql2';
 
 interface UserRow extends RowDataPacket {
@@ -37,10 +38,12 @@ export function createAuthRouter(pool: Pool, auth: Auth) {
     const username = text(input.username, '아이디', 50);
     const nickname = text(input.nickname, '닉네임', 100);
     const plain = password(input.password);
-    // Required: finding an ID or resetting a password sends mail to this address.
+    // Required: finding an ID or resetting a password sends mail to this address, so it needs the code mailed to it.
     const address = email(input.email);
+    const code = sixDigitCode(input.code);
     const [rows] = await pool.query<UserRow[]>('SELECT id FROM users WHERE username = ?', [username]);
     if (rows.length > 0) throw new HttpError(409, '이미 사용 중인 아이디입니다.');
+    await spendEmailCode(pool, address, code);
     const hash = await hashPassword(plain);
     try {
       await pool.query<ResultSetHeader>(
@@ -108,11 +111,13 @@ export function createAuthRouter(pool: Pool, auth: Auth) {
     res.json({ message: '비밀번호가 변경되었습니다.' });
   }));
 
-  // The recovery address can reset the password, so changing it needs the current password too.
+  // The recovery address can reset the password, so changing it needs the current password and the code mailed to the new address.
   router.put('/me/email', auth.requireAuth, asyncHandler(async (req, res) => {
     const input = bodyObject(req.body);
     const address = email(input.email);
+    const code = sixDigitCode(input.code);
     await checkCurrentPassword(req.user!.userId, input.currentPassword);
+    await spendEmailCode(pool, address, code);
     await pool.query('UPDATE users SET email = ? WHERE id = ?', [address, req.user!.userId]);
     res.json({ message: '이메일이 변경되었습니다.' });
   }));
