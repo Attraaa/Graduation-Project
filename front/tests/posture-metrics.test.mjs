@@ -7,7 +7,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { createMonitorSnapshot } from '../src/features/posture/monitorTypes.ts';
 import { emptyEyeSnapshot } from '../src/features/eye/measurement.ts';
 
-const bundle = await build({ entryPoints: ['src/features/posture/PostureMetrics.tsx'], bundle: true, write: false,
+const bundle = await build({ stdin: { contents: "export { default } from './src/features/posture/PostureMetrics.tsx'; export { default as MonitoringNotice } from './src/features/session/MonitoringNotice.tsx'; export { MonitoringContext } from './src/features/session/monitoringContext.ts';", resolveDir: process.cwd() }, bundle: true, write: false,
   platform: 'node', format: 'cjs', jsx: 'automatic', external: ['react', 'react-dom'] });
 const compiled = { exports: {} };
 new Function('module', 'exports', 'require', bundle.outputFiles[0].text)(compiled, compiled.exports, createRequire(import.meta.url));
@@ -30,13 +30,17 @@ test('compact upper metrics distinguish measured zero from missing values and re
 test('unavailable samples have no invented score or blink rate', () => {
   const html = render(createMonitorSnapshot(), emptyEyeSnapshot());
   assert.equal((html.match(/>—</g) ?? []).length, 3);
-  assert.equal((html.match(/세션 평균 —/g) ?? []).length, 3);
+  assert.equal((html.replace(/<[^>]+>/g, '').match(/세션 평균 —/g) ?? []).length, 3);
   assert.doesNotMatch(html, /NaN|Infinity/);
 });
-test('compact metrics keep a visible movement/recovery protection state', () => {
+test('movement/recovery protection stays visible in the reserved notice above the metrics', () => {
   const snapshot = createMonitorSnapshot();
   snapshot.neck = { ...snapshot.neck, currentScore: 82, protection: 'moving' };
   snapshot.shoulder = { ...snapshot.shoulder, currentScore: 61, protection: 'recovering' };
-  const html = render(snapshot, emptyEyeSnapshot());
+  snapshot.phase = 'observing';
+  const notice = renderToStaticMarkup(createElement(compiled.exports.MonitoringContext.Provider, { value: {
+    upper: { controls: { isRunning: true, isPaused: false }, snapshot, eye: { phase: 'observing', measurement: emptyEyeSnapshot() } }, keyboard: {},
+  } }, createElement(compiled.exports.MonitoringNotice, { modeId: 'upper_body' })));
+  const html = render(snapshot, emptyEyeSnapshot()) + notice;
   for (const text of ['82점', '61점', '움직임 감지', '기준 자세 복귀 확인']) assert.ok(html.replace(/<[^>]+>/g, '').includes(text));
 });

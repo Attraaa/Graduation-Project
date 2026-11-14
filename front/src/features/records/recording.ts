@@ -11,7 +11,7 @@ export interface CaptureSink { sample(at: number, evaluation: CaptureEvaluation)
 type Active = { collector: CaptureRecorder; generation: Promise<number>; saving: Promise<void> | null; timer: ReturnType<typeof setInterval>; stopped: boolean; error: string | null };
 const active = new Set<Active>();
 const listeners = new Set<() => void>();
-interface RecorderParticipant { retry(): Promise<void>; finish(): void; discard(owner: string): void; error(): string | null }
+interface RecorderParticipant { retry(): Promise<void>; finish(): void; discard(owner: string): void; error(): string | null; failedForOwner?(owner: string): boolean }
 const participants = new Set<RecorderParticipant>();
 export function registerRecorder(participant: RecorderParticipant) { participants.add(participant); return () => { participants.delete(participant); }; }
 let message = '측정한 기록은 서버에 저장됩니다.';
@@ -25,6 +25,12 @@ const announce = (next: string) => {
 export const announceRecording = announce;
 export const subscribeRecording = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; };
 export const recordingMessage = () => message;
+/** Notification summaries must never reuse another account's pending save failure. */
+export const recordingFailedForCurrentOwner = () => {
+  const owner = getCurrentUser()?.id;
+  return !!owner && ([...active].some(entry => entry.collector.record.owner === owner && !!entry.error)
+    || [...participants].some(item => item.failedForOwner?.(owner)));
+};
 
 async function save(entry: Active) {
   if (entry.saving) return entry.saving;

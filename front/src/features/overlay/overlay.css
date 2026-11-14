@@ -1,0 +1,12 @@
+html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+.overlay-panel { box-sizing: border-box; display: flex; height: 100%; flex-direction: column; gap: 8px; padding: 10px; border: 1px solid var(--color-border); border-radius: 12px; }
+.overlay-drag { -webkit-app-region: drag; flex-shrink: 0; }
+.overlay-no-drag, button { -webkit-app-region: no-drag; }
+.overlay-sections { display: flex; flex-direction: column; gap: 8px; flex-shrink: 0; }
+.overlay-session { padding: 8px 12px; }
+.overlay-footer { flex-shrink: 0; }
+@media (max-height: 319px) {
+  .overlay-panel { gap: 4px; padding: 8px; }
+  .overlay-sections { gap: 4px; }
+  .overlay-session { padding-top: 4px; padding-bottom: 4px; }
+}

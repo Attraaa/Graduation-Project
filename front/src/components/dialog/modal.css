@@ -1,0 +1,12 @@
+.app-modal {
+  width: calc(100% - 40px);
+  max-width: 384px;
+  max-height: calc(100dvh - 40px);
+  margin: auto;
+  overflow-y: auto;
+}
+
+.app-modal::backdrop {
+  background: rgb(17 24 39 / 35%);
+  backdrop-filter: blur(4px);
+}

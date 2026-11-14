@@ -4,10 +4,12 @@ import Button from '../components/Button';
 import { UserPlus } from 'lucide-react';
 import { isDuplicateId, registerUser } from '../utils/authStore';
 import { useDialog } from '../components/dialog/useDialog';
+import { useSubmission } from '../hooks/useSubmission';
 
 const Register = () => {
   const navigate = useNavigate();
   const { notify } = useDialog();
+  const { busy, run } = useSubmission();
   const [formData, setFormData] = useState({
     nickname: '',
     userId: '',
@@ -35,24 +37,25 @@ const Register = () => {
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.nickname.trim() || !formData.userId.trim() || !formData.email.trim() || !formData.password || !formData.confirmPassword) {
-      void notify({ title: '입력 확인', message: '닉네임, 아이디, 이메일, 비밀번호, 비밀번호 확인을 모두 입력해 주세요.', tone: 'warning' });
-      return;
-    }
-    if(formData.password !== formData.confirmPassword) {
-      void notify({ title: '비밀번호 확인', message: '비밀번호가 일치하지 않습니다.', tone: 'warning' });
-      return;
-    }
-    const result = await registerUser({
-      username: formData.userId.trim(),
-      nickname: formData.nickname.trim(),
-      email: formData.email.trim(),
-      password: formData.password,
+    await run(async signal => {
+      if (!formData.nickname.trim() || !formData.userId.trim() || !formData.email.trim() || !formData.password || !formData.confirmPassword) {
+        await notify({ title: '입력 확인', message: '닉네임, 아이디, 이메일, 비밀번호, 비밀번호 확인을 모두 입력해 주세요.', tone: 'warning' });
+        return;
+      }
+      if(formData.password !== formData.confirmPassword) {
+        await notify({ title: '비밀번호 확인', message: '비밀번호가 일치하지 않습니다.', tone: 'warning' });
+        return;
+      }
+      const result = await registerUser({
+        username: formData.userId.trim(),
+        nickname: formData.nickname.trim(),
+        email: formData.email.trim(),
+        password: formData.password,
+      }, signal);
+      if (signal.aborted) return;
+      await notify({ title: result.ok ? '가입 완료' : '가입 실패', message: result.message, tone: result.ok ? 'success' : 'warning' });
+      if (result.ok && !signal.aborted) navigate('/login');
     });
-    await notify({ title: result.ok ? '가입 완료' : '가입 실패', message: result.message, tone: result.ok ? 'success' : 'warning' });
-    if (result.ok) {
-      navigate('/login');
-    }
   };
 
   return (
@@ -127,7 +130,7 @@ const Register = () => {
           />
 
           <div className="space-y-3 pt-6">
-            <Button type="submit" variant="secondary" fullWidth>
+            <Button type="submit" variant="secondary" fullWidth disabled={busy}>
               가입하기
             </Button>
             

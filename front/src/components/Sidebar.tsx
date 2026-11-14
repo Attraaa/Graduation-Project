@@ -5,6 +5,7 @@ import { Home, BarChart2, Settings, LogOut, CalendarDays, Sparkles } from 'lucid
 import { useMonitoring } from '../features/session/monitoringContext';
 import { logoutAfterSaving } from '../utils/authStore';
 import { useDialog } from './dialog/useDialog';
+import OverlayButton from '../features/overlay/OverlayButton';
 
 const Sidebar = () => {
   const location = useLocation();
@@ -77,6 +78,7 @@ const Sidebar = () => {
 
       {/* User Area */}
       <div className="mt-auto hidden w-full md:block">
+        <OverlayButton />
         <Link
           to="/login"
           onClick={handleLogout}

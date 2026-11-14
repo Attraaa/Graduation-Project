@@ -12,7 +12,7 @@ const bundle = await build({ stdin: { contents: [
   "export { default as Register } from './src/pages/Register.tsx';",
   "export { DialogProvider } from './src/components/AppDialog.tsx';",
   "export { MemoryRouter } from 'react-router-dom';",
-  "export { findId, requestPasswordReset, verifyResetCode, resetPassword, changeEmail, readAccountEmail } from './src/utils/authStore.ts';",
+  "export { findId, requestPasswordReset, verifyResetCode, resetPassword, changeEmail, readAccountEmail, loginUser, updateCurrentUser } from './src/utils/authStore.ts';",
 ].join('\n'), resolveDir: process.cwd() },
   bundle: true, write: false, logLevel: 'error', platform: 'node', format: 'cjs', jsx: 'automatic', external: ['react', 'react-dom'] });
 const compiled = { exports: {} };
@@ -95,4 +95,31 @@ test('the registered email comes from the account and an empty one means none', 
   storage({ 'moti.session': SESSION });
   server(t, 200, { id: 7, username: 'member', nickname: '회원', email: null });
   assert.equal(await app.readAccountEmail(), null);
+});
+
+test('an abandoned login response cannot write a session even if fetch returns after cancellation', async t => {
+  const stored = storage();
+  const controller = new AbortController();
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => {
+    controller.abort();
+    return new Response(JSON.stringify({ token: 'late', user: { id: 7, username: 'member', nickname: '늦은 응답' } }));
+  };
+  t.after(() => { globalThis.fetch = originalFetch; });
+  assert.equal((await app.loginUser('member', 'password', controller.signal)).ok, false);
+  assert.equal(stored.getItem('moti.session'), null);
+});
+
+test('an abandoned nickname response cannot resurrect a logged-out session', async t => {
+  const stored = storage({ 'moti.session': SESSION });
+  const controller = new AbortController();
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => {
+    stored.removeItem('moti.session');
+    controller.abort();
+    return new Response(JSON.stringify({ message: '변경 완료' }));
+  };
+  t.after(() => { globalThis.fetch = originalFetch; });
+  assert.equal((await app.updateCurrentUser('늦은 응답', controller.signal)).ok, false);
+  assert.equal(stored.getItem('moti.session'), null);
 });

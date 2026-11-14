@@ -7,6 +7,7 @@ import { unframePoint } from './framing';
 import CameraSettingsPanel from './CameraSettingsPanel';
 import './cameraSettings.css';
 import { useCameraWindow } from './useCameraWindow';
+import { scheduleAnalysisFrame } from '../session/analysisFrame';
 
 export default function CameraProvider({ modeId, deviceId, cameraLabel, children, paused = false, onOpen }: {
   modeId: string; deviceId: string; cameraLabel: string; children: ReactNode;
@@ -19,7 +20,7 @@ export default function CameraProvider({ modeId, deviceId, cameraLabel, children
   const { portal, open: openWindow, error: windowError } = useCameraWindow();
   const runtime = useRef<CameraRuntime>({ profile, canvas: null, overlay: null, track: null, video: null, stream: null, paused, deviceId, editing: false, generation: 0, frameAt: null, videoTime: -1, metrics: null, invalidate: null });
   useEffect(() => { runtime.current.paused = paused; }, [paused]);
-  const animation = useRef(0);
+  const animation = useRef<(() => void) | null>(null);
   const removeEnded = useRef<() => void>(() => {});
   const pendingChanges = useRef<Partial<CameraProfile>>({});
   useEffect(() => {
@@ -54,7 +55,7 @@ export default function CameraProvider({ modeId, deviceId, cameraLabel, children
   const reportMetrics = useCallback((metrics: CameraRuntime['metrics']) => { runtime.current.metrics = metrics; }, []);
   const setInvalidator = useCallback((callback: (() => void) | null) => { runtime.current.invalidate = callback; }, []);
   const detach = useCallback(() => {
-    cancelAnimationFrame(animation.current);
+    animation.current?.();
     removeEnded.current(); removeEnded.current = () => {};
     const state = runtime.current;
     state.generation++;
@@ -91,9 +92,9 @@ export default function CameraProvider({ modeId, deviceId, cameraLabel, children
         if (video.currentTime !== state.videoTime) { state.videoTime = video.currentTime; state.frameAt = performance.now(); }
         drawKeyboardFrame(canvas, video, state.profile);
       }
-      animation.current = requestAnimationFrame(draw);
+      animation.current = scheduleAnalysisFrame(draw);
     };
-    cancelAnimationFrame(animation.current); draw(); setConnected(true);
+    animation.current?.(); draw(); setConnected(true);
   }, [deviceId, modeId, detach]);
   // Camera capabilities are consulted only on the stream owned by a started session.
   useEffect(() => {
@@ -118,7 +119,7 @@ export default function CameraProvider({ modeId, deviceId, cameraLabel, children
     const ratio = canvas?.width && canvas.height ? canvas.width / canvas.height : 16 / 9;
     if (onOpen) onOpen(modeId, ratio); else openWindow(ratio);
   }, [onOpen, modeId, openWindow]);
-  useEffect(() => () => cancelAnimationFrame(animation.current), []);
+  useEffect(() => () => animation.current?.(), []);
   const value = { modeId, cameraLabel: activeLabel, profile, connected, runtime, update, setGrid, setEditing, reportMetrics, setInvalidator, connect, detach, open, exposureError: exposureError ?? windowError };
   return <CameraContext.Provider value={value}>{children}{portal && createPortal(<CameraSettingsPanel />, portal)}</CameraContext.Provider>;
 }

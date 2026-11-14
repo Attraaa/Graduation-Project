@@ -43,6 +43,7 @@ registerRecorder({
     clearInterval(entry.timer); entry.collector.finish(performance.now()); active.delete(entry);
   } },
   error: () => [...active].find(entry => entry.error)?.error ?? null,
+  failedForOwner: owner => [...active].some(entry => entry.collector.record.owner === owner && !!entry.error),
 });
 export interface EyeSink { sample(at: number, value: EyeSample): void; rest(completed: number): void; finish(): void }
 export function beginEyeRecording(sensitivity: EyeSensitivity = 'normal'): EyeSink {

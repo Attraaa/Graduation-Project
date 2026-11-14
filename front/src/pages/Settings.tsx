@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 import { Activity, Bell, Check, Database, Eye, Palette, Trash2, User } from 'lucide-react';
 import { clearStatistics, getCurrentUser, updateCurrentUser } from '../utils/authStore';
 import { useDialog } from '../components/dialog/useDialog';
@@ -8,6 +8,9 @@ import AccountSecurity from '../features/settings/AccountSecurity';
 import { POSTURE_SENSITIVITY } from '../features/posture/evaluation';
 import { BUTTON, BUTTON_DANGER, Field, INPUT, Segmented, SettingsCard, Slider, Switch } from '../features/settings/parts';
 import { readEyeSensitivity, readPostureSensitivity, writeEyeSensitivity, writePostureSensitivity } from '../features/settings/preferences';
+import { NOTIFICATION_SETTING_KEYS, NOTIFICATION_SETTINGS_CHANGED, readNotificationPreferences } from '../features/notifications/preferences';
+import { useSubmission } from '../hooks/useSubmission';
+import { notificationDeliveryMessage, reportNotificationDelivery, subscribeNotificationDelivery } from '../features/notifications/delivery';
 
 type Theme = 'light' | 'dark';
 // Each tile always shows its own theme, so it carries that theme's colors instead of the current tokens.
@@ -15,12 +18,15 @@ const THEMES: Record<Theme, { name: string; page: string; card: string; line: st
   light: { name: '라이트', page: '#f3f5f8', card: '#ffffff', line: '#e3e7ee', ink: '#1d2433' },
   dark: { name: '다크', page: '#0f1218', card: '#171b23', line: '#252b36', ink: '#e6e9ef' },
 };
-const FREQUENCIES = [{ id: '0', name: '즉시' }, { id: '5', name: '5분' }, { id: '10', name: '10분' }, { id: '30', name: '30분' }];
-const STRENGTHS = [{ id: 'soft', name: '약함' }, { id: 'normal', name: '보통' }, { id: 'strong', name: '강함' }];
+const FREQUENCIES = [{ id: '0', name: '발생 시' }, { id: '5', name: '5분' }, { id: '10', name: '10분' }, { id: '30', name: '30분' }];
+const SOUNDS = [{ id: 'soft', name: '끄기' }, { id: 'normal', name: '켜기' }];
 const EYE_SENSITIVITIES: { id: EyeSensitivity; name: string }[] = [{ id: 'low', name: '낮음' }, { id: 'normal', name: '보통' }, { id: 'high', name: '높음' }];
 const NEXT_SESSION = '다음 측정부터 적용돼요. 통계는 같은 민감도로 잰 기록끼리만 묶여요.';
 const MODE_DOTS = ['bg-mode-upper', 'bg-mode-keyboard'];
-const keep = (key: string, value: string) => localStorage.setItem(`postureAI.${key}`, value);
+const keep = (key: string, value: string) => {
+  localStorage.setItem(`postureAI.${key}`, value);
+  if (NOTIFICATION_SETTING_KEYS.includes(key)) window.dispatchEvent(new Event(NOTIFICATION_SETTINGS_CHANGED));
+};
 
 /** A small picture of the dashboard in one theme; the whole tile is the button. */
 function ThemeTile({ theme, selected, onSelect }: { theme: Theme; selected: boolean; onSelect: (theme: Theme) => void }) {
@@ -64,15 +70,19 @@ function ThemeTile({ theme, selected, onSelect }: { theme: Theme; selected: bool
 
 const Settings = () => {
   const { notify, confirm } = useDialog();
+  const { busy: savingAccount, run: saveAccount } = useSubmission();
   const [clearing, setClearing] = useState(false);
   const currentUser = getCurrentUser();
-  const [notificationsEnabled, setNotificationsEnabled] = useState(localStorage.getItem('postureAI.notifications') !== 'off');
+  const [notificationsEnabled, setNotificationsEnabled] = useState(() => readNotificationPreferences().enabled);
+  const [testingNotification, setTestingNotification] = useState(false);
+  const [notificationStatus, setNotificationStatus] = useState('');
+  const deliveryStatus = useSyncExternalStore(subscribeNotificationDelivery, notificationDeliveryMessage, notificationDeliveryMessage);
   const [darkMode, setDarkMode] = useState(localStorage.getItem('postureAI.theme') === 'dark');
   const [nickname, setNickname] = useState(currentUser?.nickname ?? '');
   const [savedNickname, setSavedNickname] = useState(nickname);
-  const [alertFrequency, setAlertFrequency] = useState(localStorage.getItem('postureAI.alertFrequency') ?? '10');
-  const [alertStrength, setAlertStrength] = useState(localStorage.getItem('postureAI.alertStrength') ?? 'normal');
-  const [scoreThreshold, setScoreThreshold] = useState(Number(localStorage.getItem('postureAI.scoreThreshold') ?? 70));
+  const [alertFrequency, setAlertFrequency] = useState(() => String(readNotificationPreferences().intervalMinutes));
+  const [alertStrength, setAlertStrength] = useState(() => readNotificationPreferences().silent ? 'soft' : 'normal');
+  const [scoreThreshold, setScoreThreshold] = useState(() => readNotificationPreferences().scoreThreshold);
   const [postureSensitivity, setPostureSensitivity] = useState(() => readPostureSensitivity());
   const [eyeSensitivity, setEyeSensitivity] = useState(() => readEyeSensitivity());
 
@@ -82,10 +92,25 @@ const Settings = () => {
     document.documentElement.classList.toggle('dark-theme', theme === 'dark');
   };
 
+  const handleNotificationTest = async () => {
+    if (!window.motiNotifications || testingNotification) return;
+    setTestingNotification(true);
+    setNotificationStatus('');
+    try {
+      const result = await window.motiNotifications.show({ kind: 'test', silent: readNotificationPreferences().silent });
+      reportNotificationDelivery(result.ok);
+      setNotificationStatus(result.ok ? 'Windows에 알림을 보냈어요. 배너가 안 보이면 Windows 알림 설정·방해 금지를 확인해 주세요.' : result.message);
+    } catch { setNotificationStatus('알림 요청에 실패했어요. 앱을 다시 실행한 뒤 시도해 주세요.'); }
+    finally { setTestingNotification(false); }
+  };
+
   const handleAccountSave = async () => {
-    const result = await updateCurrentUser(nickname);
-    if (result.ok) setSavedNickname(nickname.trim());
-    await notify({ title: result.ok ? '변경 완료' : '변경 실패', message: result.message, tone: result.ok ? 'success' : 'warning' });
+    await saveAccount(async signal => {
+      const result = await updateCurrentUser(nickname, signal);
+      if (signal.aborted) return;
+      if (result.ok) setSavedNickname(nickname.trim());
+      await notify({ title: result.ok ? '변경 완료' : '변경 실패', message: result.message, tone: result.ok ? 'success' : 'warning' });
+    });
   };
 
   const handleClearStatistics = async () => {
@@ -128,7 +153,7 @@ const Settings = () => {
           <Field label="닉네임" htmlFor="settings-nickname">
             <input id="settings-nickname" type="text" value={nickname} onChange={event => setNickname(event.target.value)} className={INPUT} />
           </Field>
-          <button type="button" onClick={handleAccountSave} className={`${BUTTON} mt-auto w-full`}>닉네임 변경</button>
+          <button type="button" disabled={savingAccount} onClick={handleAccountSave} className={`${BUTTON} mt-auto w-full`}>닉네임 변경</button>
         </SettingsCard>
 
         <AccountSecurity />
@@ -142,18 +167,22 @@ const Settings = () => {
 
         <SettingsCard title="알림" icon={<Bell size={18} />} iconClass="bg-mode-shoulder-soft text-mode-shoulder">
           <div className="flex items-center justify-between gap-3">
-            <p className="text-sm font-semibold text-heading">자세 경고 알림 (시스템 트레이)</p>
-            <Switch label="자세 경고 알림 (시스템 트레이)" checked={notificationsEnabled}
+            <p className="text-sm font-semibold text-heading">Windows 알림</p>
+            <Switch label="Windows 알림" checked={notificationsEnabled}
               onChange={on => { setNotificationsEnabled(on); keep('notifications', on ? 'on' : 'off'); }} />
           </div>
-          <Field label="알림 빈도">
-            <Segmented label="알림 빈도" options={FREQUENCIES} value={alertFrequency}
+          <Field label="반복 알림 간격">
+            <Segmented label="반복 알림 간격" options={FREQUENCIES} value={alertFrequency}
               onChange={value => { setAlertFrequency(value); keep('alertFrequency', value); }} />
           </Field>
-          <Field label="알림 세기">
-            <Segmented label="알림 세기" options={STRENGTHS} value={alertStrength}
+          <Field label="알림 소리">
+            <Segmented label="알림 소리" options={SOUNDS} value={alertStrength}
               onChange={value => { setAlertStrength(value); keep('alertStrength', value); }} />
           </Field>
+          <p className="text-xs text-muted">다른 앱을 사용하거나 오버레이 모드일 때 자세·키보드·깜빡임과 측정·저장 문제를 알려요. 목·어깨 저점수는 유효 관찰 3초, 키보드는 최근 20회 유효 판정 평균 70점 이하, 깜빡임은 보정 후 눈을 뜬 채 유효 관찰 15초 동안 깜빡이지 않으면 알려요. 반복 간격은 세 경고에 각각 적용돼요. 알림 테스트는 직접 요청한 수동 예외예요.</p>
+          <button type="button" disabled={!window.motiNotifications || !notificationsEnabled || testingNotification}
+            onClick={handleNotificationTest} className={`${BUTTON} w-full`}>{testingNotification ? '알림 보내는 중…' : '알림 테스트'}</button>
+          <p role="status" className="text-xs text-muted">{!window.motiNotifications ? 'Windows 데스크톱 앱에서 사용할 수 있어요.' : deliveryStatus || notificationStatus}</p>
         </SettingsCard>
 
         <SettingsCard title="상체 · 자세 기준" icon={<Activity size={18} />} iconClass="bg-mode-upper-soft text-mode-upper">

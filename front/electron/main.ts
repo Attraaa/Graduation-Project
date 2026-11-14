@@ -1,7 +1,7 @@
-import { app, BrowserWindow, ipcMain, dialog, powerMonitor } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, powerMonitor, Notification, shell, screen } from 'electron'
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
-import { existsSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import net from 'node:net'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -9,6 +9,8 @@ import { trustedRecordUrl } from './recordHandlers'
 import { readKeyboardSettings, chooseKeyboardApp, updateKeyboardSettings } from './keyboardSettings'
 import { cameraSettingsUrl, canOpenCameraSettings } from './cameraWindow'
 import { windowAppearance } from './windowAppearance'
+import { registerNotificationHandlers } from './notificationHandlers'
+import { OverlayWindow } from './overlayWindow'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -27,6 +29,8 @@ const publicDirectory = app.isPackaged ? distDirectory : path.join(__dirname, '.
 process.env.VITE_PUBLIC = publicDirectory
 
 app.setName('Moti')
+const notificationAppId = app.isPackaged ? 'com.graduation.moti' : 'com.graduation.moti.development'
+if (process.platform === 'win32') app.setAppUserModelId(notificationAppId)
 const ownsInstance = app.requestSingleInstanceLock()
 if (!ownsInstance) app.quit()
 
@@ -37,6 +41,17 @@ const recordsPageUrl = process.env.VITE_DEV_SERVER_URL || pathToFileURL(path.joi
 let win: BrowserWindow | null
 let cameraWindow: BrowserWindow | null = null
 let windowTheme: 'light' | 'dark' = 'light'
+let overlay: OverlayWindow | null = null
+let notificationsEnabled = false
+const inactivePowerStates = new Set<string>()
+let nativeDialogs = 0
+const presentation = () => ({ overlay: overlay?.isActive() ?? false, automaticAllowed: notificationsEnabled && inactivePowerStates.size === 0 && ((overlay?.isActive() ?? false)
+  || (nativeDialogs === 0 && ![win, cameraWindow].some(w => w && !w.isDestroyed() && w.isFocused()))) })
+const presentationChanged = () => {
+  const state = presentation()
+  if (!state.automaticAllowed) clearNotifications.automatic()
+  if (win && !win.isDestroyed()) win.webContents.send('notifications:presentation', state)
+}
 let keyboardProcess: ChildProcessWithoutNullStreams | null = null
 let keyboardService: { origin: string; token: string } | null = null
 let keyboardStarting: Promise<{ origin: string; token: string }> | null = null
@@ -46,9 +61,12 @@ const completeClose = async (saved: boolean) => {
   if (!win || !closingTimer) return
   clearTimeout(closingTimer); closingTimer = undefined
   if (!saved) {
-    const result = await dialog.showMessageBox(win, { type: 'warning', title: '기록 저장 확인',
+    nativeDialogs++; presentationChanged()
+    let result: Electron.MessageBoxReturnValue
+    try { result = await dialog.showMessageBox(win, { type: 'warning', title: '기록 저장 확인',
       message: '일부 기록을 저장하지 못했습니다. 돌아가서 저장을 재시도할 수 있습니다.',
-      buttons: ['돌아가기', '미저장 기록을 버리고 닫기'], defaultId: 0, cancelId: 0 })
+      buttons: ['돌아가기', '미저장 기록을 버리고 닫기'], defaultId: 0, cancelId: 0 }) }
+    finally { nativeDialogs--; presentationChanged() }
     if (result.response !== 1) return
   }
   allowClose = true; win.close()
@@ -167,6 +185,26 @@ const trustedAppWindow = (event: Electron.IpcMainInvokeEvent) => {
   if (!win || event.sender !== win.webContents || event.senderFrame !== win.webContents.mainFrame
     || !trustedRecordUrl(event.senderFrame.url, recordsPageUrl)) throw new Error('허용되지 않은 앱 요청입니다.')
 }
+const clearNotifications = registerNotificationHandlers(ipcMain, {
+  trusted: trustedAppWindow,
+  supported: () => process.platform === 'win32' && Notification.isSupported(),
+  create: options => new Notification({ ...options, icon: path.join(publicDirectory, 'icon.png') }),
+  allowed: () => presentation().automaticAllowed,
+  focus: target => {
+    overlay?.back()
+    if (win && !win.isDestroyed()) { if (win.isMinimized()) win.restore(); win.show(); win.focus(); if (target) win.webContents.send('desktop:navigate', target) }
+  },
+})
+ipcMain.handle('notifications:presentation', event => { trustedAppWindow(event); return presentation() })
+ipcMain.handle('notifications:configure', (event, enabled: unknown) => {
+  trustedAppWindow(event)
+  if (typeof enabled !== 'boolean') throw Error('잘못된 알림 설정입니다.')
+  notificationsEnabled = enabled; presentationChanged()
+})
+let focusTimer: ReturnType<typeof setTimeout> | undefined
+const refreshFocus = () => { clearTimeout(focusTimer); focusTimer = setTimeout(presentationChanged, 0) }
+app.on('browser-window-focus', refreshFocus)
+app.on('browser-window-blur', refreshFocus)
 ipcMain.handle('keyboard-service:start', async (event, external: unknown = false) => {
   trustedAppWindow(event)
   if (typeof external !== 'boolean') throw new Error('잘못된 관찰 설정입니다.')
@@ -174,7 +212,10 @@ ipcMain.handle('keyboard-service:start', async (event, external: unknown = false
 })
 ipcMain.handle('keyboard-service:stop', event => { trustedAppWindow(event); stopKeyboardService() })
 ipcMain.handle('keyboard-settings:read', event => { trustedAppWindow(event); return readKeyboardSettings() })
-ipcMain.handle('keyboard-settings:choose', event => { trustedAppWindow(event); return chooseKeyboardApp(win!) })
+ipcMain.handle('keyboard-settings:choose', async event => {
+  trustedAppWindow(event); nativeDialogs++; presentationChanged()
+  try { return await chooseKeyboardApp(win!) } finally { nativeDialogs--; presentationChanged() }
+})
 ipcMain.handle('keyboard-settings:update', (event, input: unknown) => { trustedAppWindow(event); return updateKeyboardSettings(input) })
 ipcMain.handle('window:set-theme', (event, theme: unknown) => {
   trustedAppWindow(event)
@@ -220,8 +261,16 @@ function createWindow() {
     child.on('closed', () => { if (cameraWindow === child) cameraWindow = null })
   })
   win.on('closed', () => { cameraWindow?.destroy(); cameraWindow = null })
+  win.on('closed', () => overlay?.shutdown())
+  win.on('restore', () => { if (overlay?.isActive()) overlay.back() })
+  win.webContents.on('did-start-navigation', details => {
+    // Hash-router navigation keeps the measurement owner and its Python service alive.
+    if (details.isMainFrame && !details.isSameDocument) { overlay?.invalidate(); stopKeyboardService(); clearNotifications() }
+  })
+  win.webContents.on('render-process-gone', () => { overlay?.invalidate(); stopKeyboardService(); clearNotifications() })
   win.on('close', event => {
     if (allowClose) return
+    overlay?.back()
     event.preventDefault()
     if (!closingTimer) {
       closingTimer = setTimeout(() => { void completeClose(false) }, 5000)
@@ -265,10 +314,34 @@ app.on('activate', () => {
 })
 
 if (ownsInstance) app.whenReady().then(() => {
+  const positionPath = path.join(app.getPath('userData'), 'overlay-window.json')
+  overlay = new OverlayWindow(ipcMain, {
+    owner: () => win, trustedOwner: trustedAppWindow, create: options => new BrowserWindow(options), screen,
+    url: new URL('overlay.html', recordsPageUrl).href, preload: path.join(__dirname, 'preload.cjs'),
+    beforeOpen: () => { cameraWindow?.close() }, changed: presentationChanged,
+    readPosition: () => { try { const value = JSON.parse(readFileSync(positionPath, 'utf8')); return ['x', 'y', 'width', 'height'].every(k => Number.isFinite(value[k])) ? value : null } catch { return null } },
+    writePosition: bounds => { try { writeFileSync(positionPath, JSON.stringify(bounds)) } catch { /* The return action remains available on read-only profiles. */ } },
+  })
+  // NSIS registers the installed app. Register the development executable separately
+  // so Windows can identify its native notifications without an installed release.
+  if (process.platform === 'win32' && !app.isPackaged) {
+    try {
+      const programs = path.join(app.getPath('appData'), 'Microsoft', 'Windows', 'Start Menu', 'Programs')
+      mkdirSync(programs, { recursive: true })
+      if (!shell.writeShortcutLink(path.join(programs, 'Moti (개발).lnk'), {
+        target: process.execPath, args: `"${app.getAppPath()}"`, cwd: app.getAppPath(),
+        appUserModelId: notificationAppId, icon: path.join(publicDirectory, 'icon.ico'), iconIndex: 0,
+      })) console.warn('개발용 Windows 알림 바로가기를 등록하지 못했습니다.')
+    } catch (error) { console.warn('개발용 Windows 알림 등록 실패', error) }
+  }
   createWindow()
-  const halt = () => { cameraWindow?.close(); stopKeyboardService(); win?.webContents.send('keyboard-service:halt') }
-  powerMonitor.on('suspend', halt)
-  powerMonitor.on('lock-screen', halt)
+  const halt = (state: string) => { inactivePowerStates.add(state); clearNotifications(); cameraWindow?.close(); stopKeyboardService(); win?.webContents.send('keyboard-service:halt'); presentationChanged() }
+  const resume = (state: string) => { inactivePowerStates.delete(state); presentationChanged() }
+  powerMonitor.on('suspend', () => halt('suspend'))
+  powerMonitor.on('lock-screen', () => halt('lock'))
+  powerMonitor.on('resume', () => resume('suspend'))
+  powerMonitor.on('unlock-screen', () => resume('lock'))
 })
-app.on('second-instance', () => { win?.restore(); win?.focus() })
+app.on('second-instance', () => { overlay?.back(); win?.restore(); win?.focus() })
 app.on('before-quit', stopKeyboardService)
+app.on('before-quit', () => { overlay?.shutdown(); clearNotifications() })

@@ -6,16 +6,16 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 // One bundle so the page and the dialog provider share a context.
-const bundle = await build({ stdin: { contents: "export { default as Settings } from './src/pages/Settings.tsx'; export { DialogProvider } from './src/components/AppDialog.tsx'; export * from './src/features/settings/parts.tsx';", resolveDir: process.cwd() },
+const bundle = await build({ stdin: { contents: "export { default as Settings } from './src/pages/Settings.tsx'; export { DialogProvider } from './src/components/AppDialog.tsx'; export * from './src/features/settings/parts.tsx'; export { MemoryRouter } from 'react-router-dom';", resolveDir: process.cwd() },
   bundle: true, write: false, logLevel: 'error', platform: 'node', format: 'cjs', jsx: 'automatic', external: ['react', 'react-dom'] });
 const compiled = { exports: {} };
 new Function('module', 'exports', 'require', bundle.outputFiles[0].text)(compiled, compiled.exports, createRequire(import.meta.url));
-const { Settings, DialogProvider, Modal, Segmented, Switch } = compiled.exports;
+const { Settings, DialogProvider, Modal, Segmented, Switch, MemoryRouter } = compiled.exports;
 const html = (component, props) => renderToStaticMarkup(createElement(component, props));
 const page = stored => {
   globalThis.window = {};
   globalThis.localStorage = { getItem: key => stored[key] ?? null, setItem() {} };
-  return renderToStaticMarkup(createElement(DialogProvider, null, createElement(Settings)));
+  return renderToStaticMarkup(createElement(MemoryRouter, null, createElement(DialogProvider, null, createElement(Settings))));
 };
 
 test('segmented control names its group and marks only the chosen option', () => {
@@ -29,7 +29,7 @@ test('a settings window is a named modal dialog with a close button', () => {
   const out = html(Modal, { title: '이메일 변경', onClose() {}, children: '내용' });
   assert.match(out, /role="dialog" aria-modal="true" aria-label="이메일 변경"/);
   assert.match(out, /<h2[^>]*>이메일 변경<\/h2><button type="button" aria-label="닫기"/);
-  assert.match(out, />내용<\/section>/);
+  assert.match(out, />내용<\/dialog>/);
 });
 
 test('switch exposes its name and state', () => {
@@ -52,7 +52,9 @@ test('settings page shows the eight cards with defaults when nothing is stored',
   assert.match(out, /aria-pressed="false" aria-label="다크 테마"/);
   assert.match(out, /role="switch" aria-checked="true"/);
   assert.match(out, /aria-pressed="true"[^>]*>10분</);
-  assert.match(out, /aria-label="알림 세기"[^]*?aria-pressed="true"[^>]*>보통</);
+  assert.match(out, /aria-label="알림 소리"[^]*?aria-pressed="true"[^>]*>켜기</);
+  assert.match(out, /<button[^>]*disabled=""[^>]*>알림 테스트<\/button>/);
+  assert.match(out, /Windows 데스크톱 앱에서 사용할 수 있어요/);
   assert.match(out, /id="settings-posture-sensitivity" type="range" min="10" max="100" step="10"[^>]*value="50"/);
   assert.match(out, />50%</);
   assert.match(out, /aria-label="깜빡임 민감도"[^]*?aria-pressed="true"[^>]*>보통</);
@@ -75,7 +77,7 @@ test('settings page reflects the stored account, theme, alert and sensitivity va
   assert.match(out, /aria-pressed="true" aria-label="다크 테마"/);
   assert.match(out, /role="switch" aria-checked="false"/);
   assert.match(out, /aria-pressed="true"[^>]*>30분</);
-  assert.match(out, /aria-pressed="true"[^>]*>강함</);
+  assert.match(out, /aria-label="알림 소리"[^]*?aria-pressed="true"[^>]*>켜기</);
   assert.match(out, />85점 이하</);
   assert.match(out, />80%</);
   assert.match(out, /aria-label="깜빡임 민감도"[^]*?aria-pressed="true"[^>]*>높음</);

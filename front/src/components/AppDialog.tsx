@@ -1,10 +1,14 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { AlertTriangle, CheckCircle2, HelpCircle, Info, X } from 'lucide-react';
 import Button from './Button';
 import { DialogContext } from './dialog/dialogContext';
 import type { DialogContextValue, DialogOptions, DialogTone } from './dialog/dialogContext';
+import ModalFrame from './dialog/ModalFrame';
 
 type DialogState = DialogOptions & {
+  id: number;
+  scope: symbol;
   mode: 'alert' | 'confirm';
   resolve: (value: boolean) => void;
 };
@@ -42,21 +46,43 @@ const normalizeOptions = (options: string | DialogOptions): DialogOptions => {
 };
 
 export const DialogProvider = ({ children }: { children: React.ReactNode }) => {
-  const [dialog, setDialog] = useState<DialogState | null>(null);
+  const [storedDialog, setDialog] = useState<DialogState | null>(null);
+  const queue = useRef<DialogState[]>([]);
+  const nextId = useRef(0);
+  const { key: routeKey, pathname, search, hash } = useLocation();
+  const scope = useMemo(() => Symbol(`${routeKey}:${pathname}${search}${hash}`), [routeKey, pathname, search, hash]);
+  const dialog = storedDialog?.scope === scope ? storedDialog : null;
+  const activeScope = useRef<symbol | null>(scope);
+  const titleId = useId(), messageId = useId();
+
+  useLayoutEffect(() => {
+    const pending = queue.current;
+    activeScope.current = scope;
+    return () => {
+      activeScope.current = null;
+      pending.splice(0).forEach(item => item.resolve(false));
+    };
+  }, [scope]);
 
   const openDialog = useCallback((mode: DialogState['mode'], options: string | DialogOptions) => {
+    // A response from an abandoned screen must not open a popup on the next one.
+    if (activeScope.current !== scope) return Promise.resolve(false);
     const normalized = normalizeOptions(options);
     return new Promise<boolean>((resolve) => {
-      setDialog({
+      const item: DialogState = {
         mode,
         tone: mode === 'confirm' ? 'warning' : 'info',
         confirmLabel: mode === 'confirm' ? '확인' : '좋아요',
         cancelLabel: '취소',
         ...normalized,
+        id: ++nextId.current,
+        scope,
         resolve,
-      });
+      };
+      queue.current.push(item);
+      if (queue.current.length === 1) setDialog(item);
     });
-  }, []);
+  }, [scope]);
 
   const value = useMemo<DialogContextValue>(() => ({
     notify: async (options) => {
@@ -66,8 +92,10 @@ export const DialogProvider = ({ children }: { children: React.ReactNode }) => {
   }), [openDialog]);
 
   const closeDialog = (result: boolean) => {
-    dialog?.resolve(result);
-    setDialog(null);
+    if (queue.current[0]?.id !== dialog?.id) return;
+    const current = queue.current.shift();
+    setDialog(queue.current[0] ?? null);
+    current?.resolve(result);
   };
 
   const tone = dialog?.tone ?? 'info';
@@ -78,8 +106,7 @@ export const DialogProvider = ({ children }: { children: React.ReactNode }) => {
     <DialogContext.Provider value={value}>
       {children}
       {dialog && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-gray-900/35 px-5 backdrop-blur-sm">
-          <div className="w-full max-w-sm rounded-3xl border-2 border-border bg-surface p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+        <ModalFrame key={dialog.id} role="alertdialog" aria-labelledby={titleId} aria-describedby={messageId} onDismiss={() => closeDialog(false)}>
             <div className="mb-5 flex items-start justify-between gap-4">
               <div className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border-2 ${style.badge}`}>
                 {dialog.mode === 'confirm' && tone === 'warning' ? <HelpCircle size={26} /> : style.icon}
@@ -94,21 +121,20 @@ export const DialogProvider = ({ children }: { children: React.ReactNode }) => {
               </button>
             </div>
 
-            <h2 className="mb-2 text-xl font-black text-heading">{title}</h2>
-            <p className="whitespace-pre-line text-sm font-bold leading-6 text-muted">{dialog.message}</p>
+            <h2 id={titleId} className="mb-2 text-xl font-black text-heading">{title}</h2>
+            <p id={messageId} className="whitespace-pre-line text-sm font-bold leading-6 text-muted">{dialog.message}</p>
 
             <div className={`mt-6 grid gap-3 ${dialog.mode === 'confirm' ? 'grid-cols-2' : 'grid-cols-1'}`}>
               {dialog.mode === 'confirm' && (
-                <Button type="button" variant="outline" onClick={() => closeDialog(false)}>
+                <Button type="button" data-modal-autofocus variant="outline" onClick={() => closeDialog(false)}>
                   {dialog.cancelLabel}
                 </Button>
               )}
-              <Button type="button" variant={style.button} onClick={() => closeDialog(true)}>
+              <Button type="button" data-modal-autofocus={dialog.mode === 'alert' || undefined} variant={style.button} onClick={() => closeDialog(true)}>
                 {dialog.confirmLabel}
               </Button>
             </div>
-          </div>
-        </div>
+        </ModalFrame>
       )}
     </DialogContext.Provider>
   );

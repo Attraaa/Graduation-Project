@@ -7,6 +7,7 @@ import electron from 'vite-plugin-electron'
 export default defineConfig(({ mode }) => ({
   base: './',
   cacheDir: './.vite-cache-screenshots',
+  build: { rollupOptions: { input: { index: 'index.html', overlay: 'overlay.html' } } },
   plugins: [
     tailwindcss(),
     react(),

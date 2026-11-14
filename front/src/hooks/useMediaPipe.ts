@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Pose, Results } from '@mediapipe/pose';
 import { initializeMediaPipe } from '../features/session/mediaPipeInitialization.ts';
+import { scheduleAnalysisFrame } from '../features/session/analysisFrame.ts';
 
 export type PoseResultsCallback = (results: Results, capturedAtMs: number) => void;
 type PoseConstructor = typeof Pose;
@@ -34,7 +35,7 @@ async function loadPoseConstructor(): Promise<PoseConstructor> {
 interface PoseRun {
   pose: Pose;
   pending: Promise<void> | null;
-  frameRequest: number | null;
+  frameRequest: (() => void) | null;
   processing: boolean;
   lastVideoTime: number;
   capturedAtMs: number;
@@ -55,7 +56,7 @@ export function createMediaPipeController(
     active = null;
     run.processing = false;
     run.removeAbortListener();
-    if (run.frameRequest !== null) cancelAnimationFrame(run.frameRequest);
+    run.frameRequest?.();
     // WASM must not be closed while initialize/send still owns its buffers.
     const pending = run.pending ?? Promise.resolve();
     poseCleanup = Promise.all([poseCleanup, pending.catch(() => undefined)])
@@ -136,7 +137,7 @@ export function createMediaPipeController(
           run.pending = null;
         }
       }
-      if (active === run && run.processing) run.frameRequest = requestAnimationFrame(() => void processFrame());
+      if (active === run && run.processing) run.frameRequest = scheduleAnalysisFrame(() => void processFrame());
     };
     void processFrame();
   };

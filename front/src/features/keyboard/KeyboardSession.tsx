@@ -4,6 +4,7 @@ import SessionFrame from '../session/SessionFrame';
 import SessionActions from '../session/SessionActions';
 import SessionStatus from '../session/SessionStatus';
 import MonitoringPreview from '../session/MonitoringPreview';
+import MonitoringNotice from '../session/MonitoringNotice';
 import LiveScoreChart from '../session/LiveScoreChart';
 import { useMonitoring } from '../session/monitoringContext';
 import { keyboardSummary } from '../../../../database/keyboard';
@@ -17,11 +18,11 @@ export default function KeyboardSession() {
   const totals = keyboardSummary(snapshot.counts);
   return <SessionFrame modeId="keyboard" camera={keyboard.camera}
     subtitle="손가락 사용과 입력별 판정을 확인하세요."
-    actions={<>{controls.isRunning && <button type="button" disabled={controls.isPaused} onClick={keyboard.remap} className="flex min-h-10 items-center gap-2 rounded-xl border border-border bg-surface px-3 py-2 text-sm font-bold text-heading disabled:opacity-50"><RotateCcw size={16} />위치 다시 잡기</button>}<SessionActions modeId="keyboard" /></>}>
+    actions={<><button type="button" disabled={!controls.isRunning || controls.isPaused} onClick={keyboard.remap} className="flex min-h-10 items-center gap-2 rounded-xl border border-border bg-surface px-3 py-2 text-sm font-bold text-heading disabled:opacity-50"><RotateCcw size={16} />위치 다시 잡기</button><SessionActions modeId="keyboard" className="w-full sm:w-80" /></>}>
     <section className="space-y-4 rounded-2xl border border-border bg-surface p-4">
       <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="font-bold text-heading">키보드 카메라</h2><SessionStatus modeId="keyboard" /></div>
       <div className="mx-auto w-full max-w-2xl"><MonitoringPreview modeId="keyboard" /></div>
-      {controls.isRunning && !controls.isPaused && snapshot.message && snapshot.phase !== 'ready' && <p role={snapshot.phase === 'error' ? 'alert' : 'status'} className={`text-sm ${snapshot.phase === 'error' ? 'text-danger' : 'text-muted'}`}>{snapshot.message}</p>}
+      <MonitoringNotice modeId="keyboard" />
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Metric compact label="현재 점수" value={scoreText(controls.isRunning ? livePressScore(snapshot.latest) : null)} detail={`세션 평균 ${scoreText(totals.score)}`} />
         <Metric compact label="판정 가능 비율" value={percentText(totals.coverage)} detail={`보류 ${totals.unknown}회`} />

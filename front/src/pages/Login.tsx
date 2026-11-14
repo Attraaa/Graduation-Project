@@ -1,28 +1,31 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import Button from '../components/Button';
 import { loginUser } from '../utils/authStore';
 import motiIconUrl from '../assets/moti-icon.svg';
 import { useDialog } from '../components/dialog/useDialog';
+import { useSubmission } from '../hooks/useSubmission';
 
 const Login = () => {
   const navigate = useNavigate();
   const { notify } = useDialog();
   const [userId, setUserId] = useState('');
   const [password, setPassword] = useState('');
-  const [submitting, setSubmitting] = useState(false);
+  const { busy: submitting, run } = useSubmission();
+  const passwordInput = useRef<HTMLInputElement>(null);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (submitting) return;
-    setSubmitting(true);
-    const result = await loginUser(userId, password);
-    setSubmitting(false);
-    if (!result.ok) {
-      void notify({ title: '로그인 실패', message: result.message, tone: 'warning' });
-      return;
-    }
-    navigate('/dashboard');
+    await run(async signal => {
+      const result = await loginUser(userId, password, signal);
+      if (signal.aborted) return;
+      if (!result.ok) {
+        await notify({ title: '로그인 실패', message: result.message, tone: 'warning' });
+        if (!signal.aborted) passwordInput.current?.focus();
+        return;
+      }
+      navigate('/dashboard');
+    });
   };
 
   return (
@@ -50,6 +53,7 @@ const Login = () => {
             />
             <input
               type="password"
+              ref={passwordInput}
               placeholder="비밀번호"
               className="w-full rounded-2xl border-2 border-gray-200 bg-gray-50 px-4 py-4 font-bold text-gray-700 outline-none transition focus:border-[#1cb0f6] focus:bg-white"
               value={password}

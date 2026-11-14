@@ -49,6 +49,7 @@
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
       "license": "privacy-agreement.txt",
       "installerIcon": "public/icon.ico",
       "uninstallerIcon": "public/icon.ico"

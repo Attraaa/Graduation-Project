@@ -10,6 +10,8 @@
 **/.venv/
 **/__pycache__/
 *.py[cod]
+output
+tmp
 
 # One-off local helper scripts for report/screenshot generation
 /scripts/capture-moti-screenshots.mjs

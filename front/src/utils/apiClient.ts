@@ -2,6 +2,8 @@
  * Moti API server client. The base URL is fixed at build time by VITE_MOTI_API_URL
  * (front/.env, overridable in front/.env.local). The login token is kept in localStorage.
  */
+import { systemIssue } from '../features/notifications/issues';
+
 const API_URL = String(import.meta.env?.VITE_MOTI_API_URL ?? '').replace(/\/+$/, '');
 const SESSION_KEY = 'moti.session';
 
@@ -17,7 +19,7 @@ export function readSession(): Session | null {
 export const writeSession = (session: Session) => localStorage.setItem(SESSION_KEY, JSON.stringify(session));
 export const clearSession = () => localStorage.removeItem(SESSION_KEY);
 
-export async function apiRequest<T>(path: string, options: { method?: string; body?: unknown; timeoutMs?: number } = {}): Promise<T> {
+export async function apiRequest<T>(path: string, options: { method?: string; body?: unknown; timeoutMs?: number; signal?: AbortSignal } = {}): Promise<T> {
   const token = readSession()?.token;
   let response: Response;
   try {
@@ -28,19 +30,22 @@ export async function apiRequest<T>(path: string, options: { method?: string; bo
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
       body: options.body === undefined ? undefined : JSON.stringify(options.body),
-      signal: AbortSignal.timeout(options.timeoutMs ?? 15_000),
+      signal: AbortSignal.any([AbortSignal.timeout(options.timeoutMs ?? 15_000), ...(options.signal ? [options.signal] : [])]),
     });
   } catch {
     throw new Error('서버에 연결할 수 없습니다. 네트워크 상태를 확인해 주세요.');
   }
+  options.signal?.throwIfAborted();
   if (response.status === 401 && token) {
     // An expired or revoked token cannot recover by retrying; return to the login screen.
     clearSession();
+    systemIssue('auth', 'expired', 'auth');
     if (typeof window !== 'undefined' && window.location) window.location.hash = '#/login';
     throw new Error('로그인이 만료되었습니다. 다시 로그인해 주세요.');
   }
   if (response.status === 204) return undefined as T;
   const data = await response.json().catch(() => null) as { message?: unknown } | null;
+  options.signal?.throwIfAborted();
   if (!response.ok) throw new Error(typeof data?.message === 'string' ? data.message : `서버 요청에 실패했습니다. (${response.status})`);
   return data as T;
 }

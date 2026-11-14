@@ -8,6 +8,8 @@ export function useSessionControls(modeId?: string) {
   const [deviceId, selectDevice] = useState(() => modeId ? localStorage.getItem(`moti.camera-device.${modeId}`) ?? '' : '');
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [run, setRun] = useState(0);
+  const [failed, setFailed] = useState(false);
+  const current = useRef({ running: false, paused: false, run: 0 });
   const clock = useRef(createSessionClock());
   const setDeviceId = useCallback((id: string) => {
     selectDevice(id);
@@ -33,6 +35,9 @@ export function useSessionControls(modeId?: string) {
   }, [isRunning, isPaused, run]);
 
   const start = useCallback(() => {
+    if (current.current.running) return;
+    current.current = { running: true, paused: false, run: current.current.run + 1 };
+    setFailed(false);
     clock.current.start();
     setElapsedSeconds(0);
     setRun(value => value + 1);
@@ -40,13 +45,23 @@ export function useSessionControls(modeId?: string) {
     setIsPaused(false);
   }, []);
   const stop = useCallback(() => {
+    current.current.running = false;
+    current.current.paused = false;
     clock.current.pause();
     setElapsedSeconds(clock.current.seconds());
     setIsRunning(false);
     setIsPaused(false);
   }, []);
-  const pause = useCallback(() => { clock.current.pause(); setElapsedSeconds(clock.current.seconds()); setIsPaused(true); }, []);
-  const resume = useCallback(() => { clock.current.resume(); setIsPaused(false); }, []);
+  const pause = useCallback(() => {
+    if (!current.current.running || current.current.paused) return;
+    current.current.paused = true; clock.current.pause(); setElapsedSeconds(clock.current.seconds()); setIsPaused(true);
+  }, []);
+  const resume = useCallback(() => {
+    if (!current.current.running || !current.current.paused) return;
+    current.current.paused = false; clock.current.resume(); setIsPaused(false);
+  }, []);
+  const fail = useCallback(() => { if (current.current.running) { stop(); setFailed(true); } }, [stop]);
+  const getState = useCallback(() => ({ ...current.current }), []);
 
-  return { isRunning, isPaused, elapsedSeconds, run, deviceId, devices, setDeviceId, start, stop, pause, resume };
+  return { isRunning, isPaused, elapsedSeconds, run, failed, deviceId, devices, setDeviceId, start, stop, pause, resume, fail, getState };
 }

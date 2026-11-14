@@ -13,6 +13,8 @@ import LearningSession from './pages/LearningSession';
 import LearningHistory from './pages/LearningHistory';
 import { DialogProvider } from './components/AppDialog';
 import WindowTitleBar from './components/layout/WindowTitleBar';
+import './components/dialog/modal.css';
+import SystemNotifications from './features/notifications/SystemNotifications';
 
 function App() {
   useEffect(() => {
@@ -31,8 +33,9 @@ function App() {
   return (
     <div className={window.motiWindow ? 'desktop-window' : undefined}>
       <WindowTitleBar />
-      <DialogProvider>
-        <HashRouter>
+      <HashRouter>
+        <DialogProvider>
+          <SystemNotifications />
           <Routes>
             <Route path="/" element={<Navigate to="/login" replace />} />
             <Route path="/login" element={<Login />} />
@@ -48,8 +51,8 @@ function App() {
               <Route path="/settings" element={<Settings />} />
             </Route>
           </Routes>
-        </HashRouter>
-      </DialogProvider>
+        </DialogProvider>
+      </HashRouter>
     </div>
   );
 }

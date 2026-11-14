@@ -8,6 +8,7 @@ import { createEyeRunner } from './runner';
 import { eyeCameraChanged, eyeStreamIssue } from './streamStatus';
 import type { EyeCameraSignature } from './streamStatus';
 import { initializeMediaPipe } from '../session/mediaPipeInitialization';
+import { scheduleAnalysisFrame } from '../session/analysisFrame';
 import { useCameraSettings } from '../camera/context';
 import { imageSignature } from '../camera/profile';
 import type { EyeSensitivity } from './eyePolicy';
@@ -51,7 +52,7 @@ export default function EyeMonitor({ active, deviceId, reference, eyeReference, 
     if (!active) return;
     const engine = measurement.current;
     let cancelled = false;
-    let frameId = 0;
+    let cancelFrame = () => {};
     let lastFrameAt: number | null = null;
     let readyAt: number | null = null;
     let activeDeviceId = '';
@@ -67,7 +68,7 @@ export default function EyeMonitor({ active, deviceId, reference, eyeReference, 
     invalidate('얼굴 모델을 불러오고 있습니다. 처음에는 잠시 걸릴 수 있습니다.', 'loading');
     const fail = (error: unknown) => {
       cancelled = true;
-      cancelAnimationFrame(frameId);
+      cancelFrame();
       invalidate(error instanceof Error ? error.message : String(error), 'error');
     };
     const runner = createEyeRunner<FaceLandmarker>({
@@ -129,10 +130,10 @@ export default function EyeMonitor({ active, deviceId, reference, eyeReference, 
                 lastPublished = now;
               }
             }
-            frameId = requestAnimationFrame(process);
+            cancelFrame = scheduleAnalysisFrame(process);
           } catch (error) { runner.stop(); fail(error); }
         };
-        frameId = requestAnimationFrame(process);
+        cancelFrame = scheduleAnalysisFrame(process);
       },
       error: fail,
     });
@@ -149,7 +150,7 @@ export default function EyeMonitor({ active, deviceId, reference, eyeReference, 
       cancelled = true;
       window.clearInterval(watchdog);
       document.removeEventListener('visibilitychange', onVisibility);
-      cancelAnimationFrame(frameId);
+      cancelFrame();
       removeTrackListener();
       engine.sample(performance.now(), null);
       runner.stop();

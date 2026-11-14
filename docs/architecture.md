@@ -39,8 +39,10 @@ Electron 개발 앱의 키보드 모드는 로컬 Python 프로세스를 자동 
 | `scripts/moti.ps1` | 앱/API/Python 실행과 검사 명령 묶음 |
 | `scripts/package-windows.ps1` | 새 임시 폴더에서 로컬 Electron 배포본으로 설치 파일 생성 후 `front/release/`에 완성 파일만 복사. 빌드 단계·완료 경로 표시 |
 | `scripts/package-keyboard.ps1`, `keyboard-detect/packaging/` | Windows x64 Python 분석기·모델·네이티브 라이브러리 묶음 생성. 실행 검사를 통과한 전체 폴더를 Electron `extraResources`의 `keyboard/`에 동봉 |
-| `front/electron/main.ts` | 창·스플래시, Python 키보드 프로세스, 신뢰 창 IPC·종료 전 기록 flush 요청 |
+| `front/electron/main.ts` | 준비된 주 창 표시, Python 키보드 프로세스, 신뢰 창 IPC·종료 전 기록 flush 요청 |
 | `front/electron/preload.ts` | 키보드 시작·중지, motiRecords 종료 flush 및 주 창 전용 테마 IPC 경계 |
+| `front/electron/overlayWindow.ts`, `front/overlay.html`, `front/src/features/overlay/` | 독립 작은 창·준비 확인·위치 보정·복귀, 검증된 요약/명령 계약. 측정은 기존 본창 Provider가 계속 소유하며 작은 창은 별도 메모리 partition에서 제한된 API만 사용 |
+| `front/electron/notificationHandlers.ts`, `front/src/features/notifications/` | main의 포커스/오버레이/잠금 검사, 고정 문구 Windows 알림, 자세 확인·키보드 최근 20회 평균·기존 깜빡임 15초 신호와 전달 ACK, 운영 오류별 사건 큐. 키보드 입력은 이벤트마다 처리하고 경고별 반복 제한을 독립 관리. 점수·기록 정책과 분리 |
 | `front/vite.config.ts` | UI와 Electron 빌드, CommonJS preload 출력, 브라우저 검증 모드 |
 | `front/src/App.tsx` | 라우트 정의와 네이티브 제목 표시줄 테마 동기화. 인증 보호 라우트는 아직 없음 |
 | `front/src/components/layout/WindowTitleBar.tsx`, `front/electron/windowAppearance.ts` | 테마 제목 표시줄과 Windows 기본 창 버튼 overlay. 브라우저에는 자체 표시줄을 추가하지 않음 |
@@ -48,10 +50,11 @@ Electron 개발 앱의 키보드 모드는 로컬 Python 프로세스를 자동 
 | `front/src/styles/tokens.css` | 공통 색상, 의미별 CSS 변수, 다크 테마, 대시보드 모드 색(`mode-*`)·`track`·`nav-active` |
 | `front/src/components/Button.tsx`, `Sidebar.tsx`, `ModeSelector.tsx` | 공유 UI. 새 화면은 공통 토큰/컴포넌트부터 사용. `ModeSelector`는 2026-10-06 대시보드 개편 뒤 쓰지 않지만 되돌리기용으로 남김 |
 | `front/src/pages/Dashboard.tsx`, `front/src/features/dashboard/` | 데이터 위젯 대시보드. `summary.ts`는 기존 기록 API 응답에서 모드별 최신 정책 묶음만으로 카드·7일 그래프·타임라인·이탈 시간대를 계산하는 순수 함수, `useDashboardData.ts`가 네 출처를 불러옴. [설계](superpowers/specs/2026-10-06-dashboard-redesign-design.md). 통계·학습이력도 `summary.ts`(날짜 helper·정책 묶음·날짜별 값·기록 줄), `format.ts`, `DayDetail`, `ScoreRing`, `SourceState`를 가져다 씀 |
-| `front/src/components/AppDialog.tsx` | 대화상자 Provider와 표시 |
+| `front/src/components/AppDialog.tsx`, `components/dialog/ModalFrame.tsx` | 라우터 내부의 대화상자 FIFO 큐와 네이티브 모달 표시. 화면 이동/Provider 해제 때 대기 요청을 취소하고 이전 화면의 늦은 호출을 무시 |
 | `front/src/components/dialog/dialogContext.ts`, `useDialog.ts` | 대화상자 타입/상태 계약과 호출 훅 |
 | `front/src/pages/LearningSession.tsx`, `features/session/MonitoringProvider.tsx` | 상체 / 키보드 상세 화면 선택. 런타임은 AppLayout에 유지해 홈 시작·화면 이동·독립 일시정지·다른 카메라 동시 실행을 연결. 안구 링크는 상체로 연결. [흐름](monitoring.md) |
 | `front/src/features/session/` | 두 모드의 지속 런타임·시작/일시정지/재개/중지·활성 시간·캔버스 복사 미리보기·실시간 그래프·공통 상세 틀. 장치 선택은 카메라 설정 창에 저장 |
+| `front/src/features/session/analysisFrame.ts` | 네이티브 앱의 카메라 변환·자세/안구 분석 예약. Windows 최소화에서 RAF가 느려져도 취소 가능한 30ms 타이머로 새 영상만 처리하며, 브라우저는 기존 RAF 사용. 캡처 시각·중복 프레임·단일 추론·자원 해제 계약 유지 |
 | `front/src/features/camera/`, `front/electron/cameraWindow.ts` | 모드·실제 카메라별 구도 자동 저장, 확대·이동까지 공통 변환 영상으로 분석, 동일 스트림의 별도 설정 창, 수동 키보드 외곽/방향 UI. [계약](camera-settings.md) |
 | `front/src/features/posture/PostureSession.tsx` | 목·어깨 점수/평균과 깜빡임 빈도/평균을 짧은 카드로 표시. 기준 재수집·상태·목/어깨 그래프 |
 | `front/src/features/posture/PostureMetrics.tsx` | 목·어깨 현재/세션 평균과 깜빡임 빈도/평균을 짧은 카드로 표시. 점수 산식·임계값을 소유하지 않음 |
@@ -71,7 +74,7 @@ Electron 개발 앱의 키보드 모드는 로컬 Python 프로세스를 자동 
 | `front/src/features/records/` | 저장 배치/실패 재시도·HTTP 기록 API·조회 상태·목/어깨 표시 어댑터. 측정의 마지막 배치가 저장되면 `refresh.ts`가 신호를 보내고 `useRecordQuery`가 열린 화면(홈·통계·학습이력)을 이전 값을 유지한 채 다시 불러옴. AI/의학 예시는 별도 컴포넌트 |
 | `front/src/pages/Statistics.tsx`, `front/src/features/statistics/` | 통계(7/30일, 직전 같은 길이 기간 비교, 상체·키보드·안구 탭). `period.ts`가 세 출처 응답으로 기간 값을 계산하는 순수 함수, `useStatisticsData.ts`가 불러옴. 키보드 탭은 `features/keyboard/KeyboardStatistics.tsx`(계산은 키보드 담당). [설계](superpowers/specs/2026-10-06-stats-history-redesign-design.md) |
 | `front/src/pages/LearningHistory.tsx`, `front/src/features/history/` | 학습이력(주간·월간 달력, 시작일별 기록 줄, 오른쪽 상세, 기록 없는 날). `calendar.ts`가 달력·기록 줄·앞뒤 기록을 계산하고 `currentPolicies.ts`가 "이전 기준"을 판단. 세 모드의 세션 상세를 여기서 봄(키보드는 `KeyboardRecordDetail`) |
-| `front/src/pages/Settings.tsx`, `front/src/features/settings/` | 설정. 대시보드와 같은 카드 격자(계정, 비밀번호·이메일, 화면 테마, 알림, 상체·안구·키보드 모드 카드, 데이터 관리). `parts.tsx`가 카드·입력 캡션·구분 버튼·스위치·슬라이더·입력 창(`Modal`)을 제공함. `AccountSecurity.tsx`는 등록 이메일을 보여 주고, 이메일 변경(현재 비밀번호)과 비밀번호 재설정(등록 이메일의 코드 확인 → 새 비밀번호)을 창으로 엶. 재설정 단계는 `hooks/usePasswordReset.ts`를 로그인 화면의 비밀번호 찾기와 함께 씀. `features/keyboard/KeyboardSettings.tsx`는 기존 UI와 관찰 동작을 유지하며 격자 배치만 맞춤. `preferences.ts`가 모드별 민감도(상체 자세 무너짐 10–100%, 안구 깜빡임 낮음/보통/높음)를 이 기기에 저장하고, `MonitoringProvider`가 상체 실행을 시작할 때 읽어 그 실행의 습관·깜빡임 정책에 고정. 테마·알림도 바꾸는 즉시 저장하며, 알림 값과 경고 점수 기준은 측정에는 쓰이지 않음 |
+| `front/src/pages/Settings.tsx`, `front/src/features/settings/` | 설정. 대시보드와 같은 카드 격자(계정, 비밀번호·이메일, 화면 테마, 알림, 상체·안구·키보드 모드 카드, 데이터 관리). `parts.tsx`가 카드·입력 캡션·구분 버튼·스위치·슬라이더·입력 창(`Modal`)을 제공함. `AccountSecurity.tsx`는 등록 이메일을 보여 주고, 이메일 변경(현재 비밀번호)과 비밀번호 재설정(등록 이메일의 코드 확인 → 새 비밀번호)을 창으로 엶. 재설정 단계는 `hooks/usePasswordReset.ts`를 로그인 화면의 비밀번호 찾기와 함께 씀. `features/keyboard/KeyboardSettings.tsx`는 기존 UI와 관찰 동작을 유지하며 격자 배치만 맞춤. `preferences.ts`가 모드별 민감도(상체 자세 무너짐 10–100%, 안구 깜빡임 낮음/보통/높음)를 이 기기에 저장하고, `MonitoringProvider`가 상체 실행을 시작할 때 읽어 그 실행의 습관·깜빡임 정책에 고정. 테마·알림도 바꾸는 즉시 저장. 알림 켜기·반복 간격·소리는 `features/notifications/`에서 자세·키보드·깜빡임 경고에 공통 적용하고 경고 점수 슬라이더는 목·어깨에만 적용하며 측정 산식은 바꾸지 않음. Windows 네이티브 알림은 신뢰 주 창 IPC를 거쳐 Electron main에서 표시([규칙](monitoring.md#windows-자세-경고-알림)) |
 | `front/src/pages/AiReview.tsx`, `front/src/features/ai-review/` | AI 총평(별도 메뉴 `/ai-review`, 최종 위치 미정). 통계와 같은 기간 수치를 `input.ts`가 요청 형태로 바꾸고 보내기 전에 모두 표시하며, `ReviewCards.tsx`가 총평·잘한 점·개선할 점을 표시. 저장하지 않음. [안내](ai-review.md) |
 | `front/src/features/keyboard/KeyboardRecordDetail.tsx`, `KeyboardKeyExploration.tsx`, `keyExploration.ts` | 키보드 세션 상세 표시, 통계/이력 공용 히트맵·선택 키 표시, DOM 없는 키별 집계·연습 순위. 카메라/실시간 점수 정책을 소유하지 않음 |
 | `features/records/StatisticsData.tsx`, `features/eye/EyeStatistics.tsx`, `EyeRecordData.tsx`의 `EyeStatisticsData`, `records/views.ts`의 `historyView`·`historyGraph` | 2026-10-07 통계·학습이력 개편 뒤 쓰지 않지만 되돌리기용으로 남김(기존 테스트 유지) |

@@ -65,6 +65,7 @@ registerRecorder({
   finish: () => active.forEach(entry => { clearInterval(entry.timer); entry.collector.finish(entry.now()); }),
   discard: owner => { for (const entry of active) if (entry.collector.record.owner === owner) { clearInterval(entry.timer); entry.collector.finish(entry.now()); active.delete(entry); } },
   error: () => [...active].find(entry => entry.error)?.error ?? null,
+  failedForOwner: owner => [...active].some(entry => entry.collector.record.owner === owner && !!entry.error),
 });
 export function beginKeyboardRecording() {
   const owner = getCurrentUser()?.id;

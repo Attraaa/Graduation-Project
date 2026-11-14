@@ -11,17 +11,18 @@ export const getCurrentUser = (): CurrentUser | null => readSession()?.user ?? n
 export const isDuplicateId = async (username: string) =>
   (await apiRequest<{ exists: boolean }>(`/api/auth/check/${encodeURIComponent(username.trim())}`)).exists;
 
-export const registerUser = async (user: { username: string; nickname: string; email: string; password: string }): Promise<Result> => {
+export const registerUser = async (user: { username: string; nickname: string; email: string; password: string }, signal?: AbortSignal): Promise<Result> => {
   try {
-    const { message } = await apiRequest<{ message: string }>('/api/auth/register', { method: 'POST', body: user });
+    const { message } = await apiRequest<{ message: string }>('/api/auth/register', { method: 'POST', body: user, signal });
     return { ok: true, message };
   } catch (error) { return failure(error); }
 };
 
-export const loginUser = async (username: string, password: string): Promise<Result> => {
+export const loginUser = async (username: string, password: string, signal?: AbortSignal): Promise<Result> => {
   try {
     const { token, user } = await apiRequest<{ token: string; user: { id: number; username: string; nickname: string } }>(
-      '/api/auth/login', { method: 'POST', body: { username: username.trim(), password } });
+      '/api/auth/login', { method: 'POST', body: { username: username.trim(), password }, signal });
+    signal?.throwIfAborted();
     writeSession({ token, user: { id: String(user.id), username: user.username, nickname: user.nickname } });
     return { ok: true, message: '로그인되었습니다.' };
   } catch (error) { return failure(error); }
@@ -46,11 +47,12 @@ export const logoutAfterSaving = async (confirmUnsaved: () => Promise<boolean>) 
   return true;
 };
 
-export const updateCurrentUser = async (nickname: string): Promise<Result> => {
+export const updateCurrentUser = async (nickname: string, signal?: AbortSignal): Promise<Result> => {
   const session = readSession();
   if (!session) return { ok: false, message: '로그인이 필요합니다.' };
   try {
-    const { message } = await apiRequest<{ message: string }>('/api/auth/me', { method: 'PUT', body: { nickname } });
+    const { message } = await apiRequest<{ message: string }>('/api/auth/me', { method: 'PUT', body: { nickname }, signal });
+    signal?.throwIfAborted();
     writeSession({ ...session, user: { ...session.user, nickname: nickname.trim() } });
     return { ok: true, message };
   } catch (error) { return failure(error); }
