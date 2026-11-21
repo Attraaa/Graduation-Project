@@ -23,6 +23,6 @@ export default function KeyboardSettings({ className = '' }: { className?: strin
       {!settings.apps.length && <p className="text-sm text-muted">승인한 앱이 없습니다. 기본 상태에서는 외부 입력을 관찰하지 않습니다.</p>}
       <Button variant="outline" onClick={() => void perform(() => window.motiKeyboard!.chooseApp())}>일반 앱 실행 파일 승인</Button>
     </>}
-    <p className="text-xs text-muted">일시정지하면 입력 관찰을 멈춥니다. 화면의 중지 버튼·화면 잠금·절전 시에도 관찰을 끝냅니다. 화면을 이동해도 진행 중인 측정은 유지합니다. 원문·입력 순서·영상은 저장하지 않고 날짜·키·손가락별 횟수와 판정만 서버에 저장합니다.</p>
+    <p className="text-xs text-muted">화면을 이동해도 관찰은 계속돼요. 원문·입력 순서·영상은 저장하지 않아요.</p>
   </section>;
 }

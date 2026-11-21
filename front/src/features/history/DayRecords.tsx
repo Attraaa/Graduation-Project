@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { clockText, longDate, minutesText, rateText, scoreText } from '../dashboard/format';
 import { entryKey, entryMs } from './calendar';
 import type { HistoryEntry } from './calendar';
-import { LEGACY_NOTE, MODE_DOT, MODE_NAME } from './labels';
+import { MODE_DOT, MODE_NAME } from './labels';
 
 const valueText = (entry: HistoryEntry) => {
   if (entry.mode === 'upper') return `목 ${scoreText(entry.turtle)} · 어깨 ${scoreText(entry.shoulder)}`;
@@ -50,7 +50,6 @@ export default function DayRecords({ date, entries, selectedKey, onSelect }: {
           );
         })}
       </ol>
-      {entries.some(entry => entry.legacy) && <p className="mt-auto text-xs text-muted">{LEGACY_NOTE}</p>}
     </section>
   );
 }

@@ -75,12 +75,12 @@ test('the request is shown in words before it is sent, with readable key names',
   assert.equal(rows[1].text, '훈련 점수 71.9 · 판정 가능 88% · 일관성 — · 판정 85회 · 자주 다른 키 J 100%, ; 33%');
 });
 
-test('a review shows the summary, both lists and the reference-only note', () => {
+test('a review shows the summary and both lists without generation metadata', () => {
   const out = renderToStaticMarkup(createElement(ReviewCards, { review: { summary: '이번 주는 목 점수가 올랐어요.',
     strengths: ['측정을 꾸준히 켰어요.'], improvements: [], model: 'claude-opus-5-5', generatedAt: '2026-10-17T05:12:00.000Z' } }));
   for (const title of ['총평', '잘한 점', '개선할 점']) assert.match(out, new RegExp(`<section aria-label="${title}"`));
   assert.match(out, /이번 주는 목 점수가 올랐어요\./);
   assert.match(out, /<li[^>]*>측정을 꾸준히 켰어요\.<\/li>/);
   assert.match(out, /이번 총평에는 따로 꼽은 내용이 없어요/);
-  assert.match(out, /claude-opus-5-5 · .+ 생성 · AI가 기록 수치만 보고 쓴 참고용 문장이에요\. 의학적 판단이 아니며 저장하지 않아요\./);
+  assert.doesNotMatch(out, /claude-opus-5-5|기록 수치만 보고 쓴 참고용/);
 });

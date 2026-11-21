@@ -2,16 +2,11 @@ export const CARD = 'rounded-2xl border border-border bg-surface p-4';
 
 export interface LegendItem { key: string; name: string; color: string; dashed?: boolean }
 
-export function CardTitle({ title, note }: { title: string; note?: string }) {
-  return (
-    <div className="mb-2 flex items-baseline justify-between gap-2">
-      <h3 className="font-bold text-heading">{title}</h3>
-      {note && <span className="text-xs text-muted">{note}</span>}
-    </div>
-  );
+export function CardTitle({ title }: { title: string }) {
+  return <h3 className="mb-2 font-bold text-heading">{title}</h3>;
 }
 
-export function ChartHeader({ title, legend, hint }: { title: string; legend: LegendItem[]; hint?: string }) {
+export function ChartHeader({ title, legend }: { title: string; legend: LegendItem[] }) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-2">
       <h3 className="font-bold text-heading">{title}</h3>
@@ -23,7 +18,6 @@ export function ChartHeader({ title, legend, hint }: { title: string; legend: Le
             {item.name}
           </li>
         ))}
-        {hint && <li>{hint}</li>}
       </ul>
     </div>
   );

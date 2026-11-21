@@ -48,12 +48,12 @@ export default function KeyboardStatistics({ data, date, days, today, detail, on
     <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
       <StatTile label="훈련 점수" value={scoreText(summary.score)} detail={`판정 가능한 ${summary.valid}회 · 인접 ${credit}점`}
         chip={change === null ? null : { text: `직전 ${days}일보다 ${change > 0 ? '+' : ''}${change.toFixed(1)}`, tone: change > 0 ? 'good' : 'neutral' }} />
-      <StatTile label="기본표 일치율" value={percentText(summary.agreement)} detail="권장·허용 손가락 100점" />
+      <StatTile label="기본표 일치율" value={percentText(summary.agreement)} />
       <StatTile label="판정 가능 비율" value={percentText(summary.coverage)} detail={`보류 ${summary.unknown}회 · 미지원/단축키 ${summary.unsupported}회 별도`} />
       <StatTile label="사용 일관성" value={percentText(summary.consistency)} detail={`키·Shift 상황별 10회 이상 · 대상 ${summary.consistencyTotal}회`} />
     </div>
     <section aria-label="연습 변화" className={`${CARD} space-y-3`}>
-      <ChartHeader title="연습 변화" legend={LINES} hint="날짜를 누르면 그날 학습이력으로 가요" />
+      <ChartHeader title="연습 변화" legend={LINES} />
       {counts.length ? <DailyChart label="날짜별 훈련 점수와 판정 가능 비율" lines={LINES} today={today} domain={[0, 100]}
         faded={faded} detail={detail} onSelectDate={onSelectDate}
         data={daily.map(row => ({ date: row.date, score: row.score, coverage: row.coverage }))} />
@@ -76,6 +76,5 @@ export default function KeyboardStatistics({ data, date, days, today, detail, on
         {!reasons.size && <p className="text-sm text-muted">보류·제외 기록이 없습니다.</p>}
       </div>
     </details>
-    <p className="text-xs text-muted">{from}~{date} · 정책 {records[0]?.record.policyVersion ?? '기록 없음'} · 인식 {records[0]?.record.recognitionVersion ?? '—'}. 서로 다른 정책과 가중치는 합산하지 않습니다.</p>
   </div>;
 }

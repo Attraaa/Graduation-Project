@@ -42,12 +42,10 @@ export default function Statistics() {
 
   return (
     <div className="space-y-4 pb-4">
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-extrabold text-heading">통계</h1>
-          <p className="mt-1 text-sm text-muted">{`서버에 저장된 내 측정 기록이에요 · ${rangeText(summary.range.dates[0], end)}`}</p>
-        </div>
-        <div className="flex items-center gap-3">
+      <header className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-extrabold text-heading">통계</h1>
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="text-sm text-muted">{rangeText(summary.range.dates[0], end)}</span>
           {end !== today && (
             <button type="button" onClick={() => setEnd(today)} className="text-sm font-semibold text-secondary hover:underline">오늘까지 보기</button>
           )}

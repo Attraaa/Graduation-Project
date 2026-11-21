@@ -38,7 +38,6 @@ export default function KeyboardKeyExploration({ counts, nearbyCredit, policyVer
       <div className="mt-5 flex flex-wrap gap-x-4 gap-y-2 text-xs text-muted">
         {metric === 'score' ? <><span><i className="keyboard-record-dot bg-mode-upper" />100점</span><span><i className="keyboard-record-dot bg-mode-shoulder" />70~100점 미만</span><span><i className="keyboard-record-dot bg-mode-eye" />70점 미만</span><span><i className="keyboard-record-dot bg-track" />판정 자료 없음</span></> : <span>파란색이 진할수록 입력이 많은 키입니다. 보류·제외 입력도 포함합니다.</span>}
       </div>
-      <p className="mt-3 text-xs text-muted">키를 선택하면 관측된 손가락과 판정별 횟수를 볼 수 있어요.</p>
       {extraKeys.length > 0 && <details className="mt-4 border-t border-border pt-3"><summary className="cursor-pointer text-xs text-muted">그 외 입력한 키 ({extraKeys.length}개)</summary><div className="mt-3 flex flex-wrap gap-2">{extraKeys.map(key => keyButton(key.code))}</div></details>}
     </section>
     <SelectedKey keyData={byKey.get(selectedKey)} code={selectedKey} policyVersion={policyVersion} />

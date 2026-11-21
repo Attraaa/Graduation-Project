@@ -29,7 +29,6 @@ function ListCard({ title, icon, iconClass, items }: { title: string; icon: Reac
 
 /** One generated review: the summary, then strengths and improvements side by side. */
 export default function ReviewCards({ review }: { review: AiReview }) {
-  const time = new Date(review.generatedAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
   return (
     <div className="space-y-4">
       <section aria-label="총평" className={`${CARD} space-y-3`}>
@@ -40,7 +39,6 @@ export default function ReviewCards({ review }: { review: AiReview }) {
         <ListCard title="잘한 점" icon={<ThumbsUp size={16} />} iconClass="bg-mode-upper-soft text-mode-upper" items={review.strengths} />
         <ListCard title="개선할 점" icon={<Lightbulb size={16} />} iconClass="bg-mode-keyboard-soft text-mode-keyboard" items={review.improvements} />
       </div>
-      <p className="text-xs text-muted">{`${review.model} · ${time} 생성 · AI가 기록 수치만 보고 쓴 참고용 문장이에요. 의학적 판단이 아니며 저장하지 않아요.`}</p>
     </div>
   );
 }

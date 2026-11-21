@@ -9,7 +9,6 @@ import { todayDateKey } from '../features/records/views';
 import { BUTTON, BUTTON_STRONG } from '../features/settings/parts';
 import { CARD } from '../features/statistics/parts';
 import type { PeriodDays } from '../features/statistics/period';
-import { rangeText } from '../features/statistics/text';
 import { useStatisticsData } from '../features/statistics/useStatisticsData';
 import NearbyHospitals from '../features/hospitals/NearbyHospitals';
 
@@ -41,11 +40,8 @@ export default function AiReview() {
 
   return (
     <div className="space-y-4 pb-4">
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-extrabold text-heading">AI 총평</h1>
-          <p className="mt-1 text-sm text-muted">{`통계와 같은 기간의 기록으로 AI가 총평을 써요 · ${rangeText(summary.range.dates[0], today)}`}</p>
-        </div>
+      <header className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-extrabold text-heading">AI 총평</h1>
         <div role="group" aria-label="기간" className="flex rounded-xl bg-track p-1">
           {PERIODS.map(value => (
             <button key={value} type="button" aria-pressed={days === value} onClick={() => setDays(value)}
@@ -75,7 +71,7 @@ export default function AiReview() {
               ))}
             </ul>
           ) : <p className="text-sm text-muted">이 기간에 측정한 기록이 없어요. 측정을 시작하면 총평을 받을 수 있어요.</p>}
-        <p className="text-xs text-muted">위 집계만 Anthropic의 Claude로 보내요. 영상·키 입력 원문·계정 정보는 보내지 않고, 만든 총평은 저장하지 않아요.</p>
+        <p className="text-xs text-muted">위 집계만 Anthropic의 Claude로 보내요. 총평은 저장하지 않아요.</p>
       </section>
 
       {shown?.status === 'loading' && (
@@ -92,7 +88,6 @@ export default function AiReview() {
         </div>
       )}
       {shown?.status === 'done' && <ReviewCards review={shown.review} />}
-      {!shown && input && <p className={`${CARD} text-sm text-muted`}>총평 받기를 누르면 이 기간 기록으로 AI 총평을 만들어요.</p>}
       {/* Always in the same place, whatever the scores: the list is never a reaction to the review. */}
       <NearbyHospitals />
     </div>

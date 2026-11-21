@@ -35,11 +35,8 @@ const LearningHistory = () => {
 
   return (
     <div className="space-y-4 pb-4">
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-extrabold text-heading">학습이력</h1>
-          <p className="mt-1 text-sm text-muted">날짜를 고르면 그날 측정한 기록이 보여요</p>
-        </div>
+      <header className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-extrabold text-heading">학습이력</h1>
         <div className="flex items-center gap-3">
           <button type="button" onClick={() => navigate(statistics)} className="text-sm font-semibold text-secondary hover:underline">
             이 날까지 7일 통계 →

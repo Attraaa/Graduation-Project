@@ -15,16 +15,15 @@ const RANGE = 'block h-2 w-full cursor-pointer appearance-none rounded-full'
   + ' [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:cursor-pointer [&::-moz-range-thumb]:rounded-full'
   + ' [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-mode-upper [&::-moz-range-thumb]:bg-[#fff] [&::-moz-range-thumb]:shadow';
 
-/** One settings widget, same anatomy as a dashboard mode card: icon chip, title, optional note, then content. */
-export function SettingsCard({ title, note, icon, iconClass = 'bg-track text-heading', className = '', children }: {
-  title: string; note?: string; icon: ReactNode; iconClass?: string; className?: string; children: ReactNode;
+/** One settings widget with an icon, title, and content. */
+export function SettingsCard({ title, icon, iconClass = 'bg-track text-heading', className = '', children }: {
+  title: string; icon: ReactNode; iconClass?: string; className?: string; children: ReactNode;
 }) {
   return (
     <section aria-label={title} className={`flex flex-col gap-4 rounded-2xl border border-border bg-surface p-4 ${className}`}>
       <div className="flex items-center gap-2">
         <span aria-hidden="true" className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${iconClass}`}>{icon}</span>
         <h2 className="font-bold text-heading">{title}</h2>
-        {note && <span className="ml-auto text-xs text-muted">{note}</span>}
       </div>
       {children}
     </section>

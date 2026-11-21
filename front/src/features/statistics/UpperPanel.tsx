@@ -28,13 +28,12 @@ export default function UpperPanel({ upper, days, periodDays, floor, today, deta
       <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
         <StatTile label="목 평균 점수" value={scoreText(upper.turtle.current)} unit="점" chip={changeChip(upper.turtle, periodDays)} />
         <StatTile label="어깨 평균 점수" value={scoreText(upper.shoulder.current)} unit="점" chip={changeChip(upper.shoulder, periodDays)} />
-        <StatTile label="측정 시간" value={empty ? '—' : minutesText(upper.runMs)}
-          detail={empty ? undefined : `${upper.sessions}회 측정 · 가장 길게 이어진 측정 ${minutesText(upper.longestMs)}`} />
+        <StatTile label="측정 시간" value={empty ? '—' : minutesText(upper.runMs)} />
         <StatTile label="기준에서 벗어남" value={empty ? '—' : String(upper.deviations)} unit="회"
           detail={upper.deviationRate === null ? undefined : `벗어나 있던 시간 ${percentLabel(upper.deviationRate)}`} />
       </div>
       <section aria-label="날짜별 점수" className={`${CARD} space-y-3`}>
-        <ChartHeader title="날짜별 점수" legend={LINES} hint="날짜를 누르면 그날 학습이력으로 가요" />
+        <ChartHeader title="날짜별 점수" legend={LINES} />
         {empty ? <EmptyChart /> : (
           <DailyChart label="날짜별 목·어깨 점수" lines={LINES} today={today} domain={[floor, 100]} ticks={ticks}
             faded={faded} detail={detail} onSelectDate={onSelectDate}
@@ -42,14 +41,14 @@ export default function UpperPanel({ upper, days, periodDays, floor, today, deta
         )}
       </section>
       <div className="grid gap-4 lg:grid-cols-2">
-        <section aria-label="시간대별 점수" className={CARD}>
-          <CardTitle title="시간대별 점수" note={`${periodDays}일 평균`} />
+        <section aria-label="시간대별 평균 점수" className={CARD}>
+          <CardTitle title="시간대별 평균 점수" />
           {empty ? <Waiting /> : (
             <HourlyChart label="시간대별 목·어깨 점수" data={upper.hourly} lines={LINES} domain={[upper.hourlyFloor, 100]} unit="점" />
           )}
         </section>
         <section aria-label="기준 이탈이 잦은 시간" className={CARD}>
-          <CardTitle title="기준 이탈이 잦은 시간" note={`${periodDays}일 · 목·어깨`} />
+          <CardTitle title="기준 이탈이 잦은 시간" />
           {empty ? <Waiting /> : <DeviationHours hours={upper.deviationHours} />}
         </section>
         <section aria-label="측정 품질" className={CARD}>
@@ -57,10 +56,7 @@ export default function UpperPanel({ upper, days, periodDays, floor, today, deta
           {empty ? <Waiting /> : (
             <div className="flex items-center gap-4">
               <ScoreRing value={upper.validRate} strokeClass="stroke-mode-upper" label="제대로 측정" unit="%" />
-              <div className="space-y-1 text-sm text-muted">
-                <p>제대로 측정된 시간</p>
-                <p>{`자리 비움 등으로 측정 못 한 시간 ${minutesText(upper.unmeasuredMs)}`}</p>
-              </div>
+              <p className="text-sm text-muted">{`미측정 ${minutesText(upper.unmeasuredMs)}`}</p>
             </div>
           )}
         </section>
@@ -75,7 +71,6 @@ export default function UpperPanel({ upper, days, periodDays, floor, today, deta
           <HistoryLink onClick={onOpenHistory} />
         </section>
       </div>
-      <p className="text-xs text-muted">점수는 기준 자세와의 화면상 유사도예요. 의학적 진단이 아니에요.</p>
     </div>
   );
 }

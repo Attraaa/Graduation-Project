@@ -74,7 +74,7 @@ test('record rows show the upper line, local times, and the interrupted and lega
   assert.match(out, /10:05 – 10:23 \(18분\)/);
   assert.match(out, />중단됨</);
   assert.match(out, />이전 기준</);
-  assert.match(out, /지금과 다른 점수 기준으로 측정한 기록이에요/);
+  assert.doesNotMatch(out, /지금과 다른 점수 기준으로 측정한 기록이에요/);
   const current = html(DayRecords, { date: '2026-10-02', entries: entries.filter(entry => !entry.legacy), selectedKey: null, onSelect: () => {} });
   assert.doesNotMatch(current, /이전 기준/);
 });

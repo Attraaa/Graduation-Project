@@ -21,7 +21,7 @@ const THEMES: Record<Theme, { name: string; page: string; card: string; line: st
 const FREQUENCIES = [{ id: '0', name: '발생 시' }, { id: '5', name: '5분' }, { id: '10', name: '10분' }, { id: '30', name: '30분' }];
 const SOUNDS = [{ id: 'soft', name: '끄기' }, { id: 'normal', name: '켜기' }];
 const EYE_SENSITIVITIES: { id: EyeSensitivity; name: string }[] = [{ id: 'low', name: '낮음' }, { id: 'normal', name: '보통' }, { id: 'high', name: '높음' }];
-const NEXT_SESSION = '다음 측정부터 적용돼요. 통계는 같은 민감도로 잰 기록끼리만 묶여요.';
+const NEXT_SESSION = '다음 측정부터 적용';
 const MODE_DOTS = ['bg-mode-upper', 'bg-mode-keyboard'];
 const keep = (key: string, value: string) => {
   localStorage.setItem(`postureAI.${key}`, value);
@@ -136,7 +136,6 @@ const Settings = () => {
     <div className="space-y-4 pb-4">
       <header>
         <h1 className="text-2xl font-extrabold text-heading">설정</h1>
-        <p className="mt-1 text-sm text-muted">계정과 앱 환경을 관리해요 · 화면·알림·민감도는 바꾸면 이 기기에 바로 저장돼요</p>
       </header>
 
       <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
@@ -158,7 +157,7 @@ const Settings = () => {
 
         <AccountSecurity />
 
-        <SettingsCard title="화면 테마" note="누르면 바로 바뀌어요" icon={<Palette size={18} />}>
+        <SettingsCard title="화면 테마" icon={<Palette size={18} />}>
           <div role="group" aria-label="테마" className="grid flex-1 grid-cols-2 gap-3">
             <ThemeTile theme="light" selected={!darkMode} onSelect={handleTheme} />
             <ThemeTile theme="dark" selected={darkMode} onSelect={handleTheme} />
@@ -179,19 +178,16 @@ const Settings = () => {
             <Segmented label="알림 소리" options={SOUNDS} value={alertStrength}
               onChange={value => { setAlertStrength(value); keep('alertStrength', value); }} />
           </Field>
-          <p className="text-xs text-muted">다른 앱을 사용하거나 오버레이 모드일 때 자세·키보드·깜빡임과 측정·저장 문제를 알려요. 목·어깨 저점수는 유효 관찰 3초, 키보드는 최근 20회 유효 판정 평균 70점 이하, 깜빡임은 보정 후 눈을 뜬 채 유효 관찰 15초 동안 깜빡이지 않으면 알려요. 반복 간격은 세 경고에 각각 적용돼요. 알림 테스트는 직접 요청한 수동 예외예요.</p>
+          <p className="text-xs text-muted">다른 앱 사용 중 또는 오버레이 모드에서 알림을 받아요.</p>
           <button type="button" disabled={!window.motiNotifications || !notificationsEnabled || testingNotification}
             onClick={handleNotificationTest} className={`${BUTTON} w-full`}>{testingNotification ? '알림 보내는 중…' : '알림 테스트'}</button>
           <p role="status" className="text-xs text-muted">{!window.motiNotifications ? 'Windows 데스크톱 앱에서 사용할 수 있어요.' : deliveryStatus || notificationStatus}</p>
         </SettingsCard>
 
         <SettingsCard title="상체 · 자세 기준" icon={<Activity size={18} />} iconClass="bg-mode-upper-soft text-mode-upper">
-          <div className="space-y-1.5">
-            <Slider id="settings-posture-sensitivity" label="자세 무너짐 민감도" valueText={`${postureSensitivity}%`}
-              min={POSTURE_SENSITIVITY.min} max={POSTURE_SENSITIVITY.max} step={POSTURE_SENSITIVITY.step} minLabel="둔감" maxLabel="민감"
-              value={postureSensitivity} onChange={value => { setPostureSensitivity(value); writePostureSensitivity(value); }} />
-            <p className="text-xs text-muted">높일수록 기준 자세에서 조금만 달라져도 ‘기준에서 벗어남’으로 세요. 점수 계산은 그대로예요.</p>
-          </div>
+          <Slider id="settings-posture-sensitivity" label="자세 무너짐 민감도" valueText={`${postureSensitivity}%`}
+            min={POSTURE_SENSITIVITY.min} max={POSTURE_SENSITIVITY.max} step={POSTURE_SENSITIVITY.step} minLabel="둔감" maxLabel="민감"
+            value={postureSensitivity} onChange={value => { setPostureSensitivity(value); writePostureSensitivity(value); }} />
           <Slider id="settings-score-threshold" label="경고 점수 기준" valueText={`${scoreThreshold}점 이하`}
             min={40} max={95} minLabel="40점" maxLabel="95점" value={scoreThreshold}
             onChange={value => { setScoreThreshold(value); keep('scoreThreshold', String(value)); }} />
@@ -203,7 +199,6 @@ const Settings = () => {
             <Segmented label="깜빡임 민감도" options={EYE_SENSITIVITIES} value={eyeSensitivity}
               onChange={value => { setEyeSensitivity(value); writeEyeSensitivity(value); }} />
           </Field>
-          <p className="text-sm text-muted">높음은 약한 눈 감김도 더 쉽게 판정합니다. 윙크는 세지 않습니다.</p>
           <p className="mt-auto text-xs text-muted">{NEXT_SESSION}</p>
         </SettingsCard>
 
@@ -220,12 +215,9 @@ const Settings = () => {
               <dd className="text-muted">계정과 이 기기의 설정</dd>
             </div>
           </dl>
-          <div className="mt-auto flex flex-wrap items-center justify-between gap-2">
-            <p className="text-xs text-muted">삭제한 데이터는 되돌릴 수 없어요.</p>
-            <button type="button" disabled={clearing} onClick={handleClearStatistics} className={BUTTON_DANGER}>
-              <Trash2 aria-hidden="true" size={16} />통계 삭제
-            </button>
-          </div>
+          <button type="button" disabled={clearing} onClick={handleClearStatistics} className={`${BUTTON_DANGER} mt-auto self-end`}>
+            <Trash2 aria-hidden="true" size={16} />통계 삭제
+          </button>
         </SettingsCard>
       </div>
     </div>

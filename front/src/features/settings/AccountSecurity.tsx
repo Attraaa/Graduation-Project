@@ -161,7 +161,6 @@ export default function AccountSecurity() {
         </p>
       </div>
       {savedEmail === null && <p className="text-xs font-semibold text-danger">등록된 이메일이 없어요. 등록해야 아이디 찾기와 비밀번호 재설정을 할 수 있어요.</p>}
-      <p className="text-xs text-muted">비밀번호는 등록된 이메일로 받은 인증 코드를 확인한 뒤 새로 정해요.</p>
       <div className="mt-auto grid grid-cols-2 gap-2">
         <button type="button" onClick={() => setOpen('email')} className={BUTTON}>{savedEmail === null ? '이메일 등록' : '이메일 변경'}</button>
         <button type="button" onClick={openPassword} className={BUTTON_STRONG}>비밀번호 재설정</button>

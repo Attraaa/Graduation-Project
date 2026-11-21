@@ -7,12 +7,6 @@ const weekday = (date: string) => {
   return WEEKDAYS[new Date(Date.UTC(year, month - 1, day)).getUTCDay()];
 };
 
-/** "10월 6일 화요일" */
-export function headerDate(date: string) {
-  const [, month, day] = parts(date);
-  return `${month}월 ${day}일 ${weekday(date)}요일`;
-}
-
 /** "10월 4일 (일)" */
 export function longDate(date: string) {
   const [, month, day] = parts(date);
