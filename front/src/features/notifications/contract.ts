@@ -11,16 +11,16 @@ export type SystemNotificationRequest = { kind: 'test'; silent: boolean }
 export interface SystemNotificationResult { ok: boolean; message: string; status?: 'shown' | 'suppressed' | 'failed' }
 
 const issues: Record<IssueCode, { title: string; body: string; target: string }> = {
-  'upper-analysis': { title: 'Moti · 상체 관찰이 중지되었습니다', body: '카메라·분석 연결을 확인한 뒤 다시 시작해 주세요.', target: '/learn/upper_body' },
-  'keyboard-analysis': { title: 'Moti · 키보드 관찰이 중지되었습니다', body: '키보드 카메라와 분석기 연결을 확인한 뒤 다시 시작해 주세요.', target: '/learn/keyboard' },
-  'eye-analysis': { title: 'Moti · 깜빡임 분석을 확인해 주세요', body: '깜빡임을 관찰하지 못하고 있습니다. 상체 화면에서 연결 상태를 확인해 주세요.', target: '/learn/upper_body' },
-  tracking: { title: 'Moti · 상체가 보이지 않습니다', body: '얼굴과 양쪽 어깨가 카메라에 보이는지 확인해 주세요.', target: '/learn/upper_body' },
+  'upper-analysis': { title: 'Moti · 상체 관찰이 중지되었습니다', body: '카메라·분석 연결을 확인한 뒤 다시 시작해 주세요.', target: '/dashboard?mode=upper_body' },
+  'keyboard-analysis': { title: 'Moti · 키보드 관찰이 중지되었습니다', body: '키보드 카메라와 분석기 연결을 확인한 뒤 다시 시작해 주세요.', target: '/dashboard?mode=keyboard' },
+  'eye-analysis': { title: 'Moti · 깜빡임 분석을 확인해 주세요', body: '깜빡임을 관찰하지 못하고 있습니다. 상체 화면에서 연결 상태를 확인해 주세요.', target: '/dashboard?mode=upper_body' },
+  tracking: { title: 'Moti · 상체가 보이지 않습니다', body: '얼굴과 양쪽 어깨가 카메라에 보이는지 확인해 주세요.', target: '/dashboard?mode=upper_body' },
   storage: { title: 'Moti · 기록 저장을 확인해 주세요', body: '기록을 서버에 저장하지 못했습니다. 앱을 닫기 전에 저장을 재시도해 주세요.', target: '/dashboard' },
   auth: { title: 'Moti · 다시 로그인해 주세요', body: '로그인이 만료되어 요청을 처리하지 못했습니다. 로그인 상태를 확인해 주세요.', target: '/login' },
 };
 export function notificationTarget(input: SystemNotificationRequest) {
-  return input.kind === 'issue' ? issues[input.code].target : input.kind === 'keyboard' ? '/learn/keyboard'
-    : input.kind === 'posture' || input.kind === 'blink' ? '/learn/upper_body' : null;
+  return input.kind === 'issue' ? issues[input.code].target : input.kind === 'keyboard' ? '/dashboard?mode=keyboard'
+    : input.kind === 'posture' || input.kind === 'blink' ? '/dashboard?mode=upper_body' : null;
 }
 
 /** Main owns all notification text; renderer input is restricted to measured values. */

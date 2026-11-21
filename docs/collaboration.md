@@ -4,10 +4,7 @@
 
 ```mermaid
 flowchart TD
-  Route[LearningSession: 모드 선택] --> PS[PostureSession: 상체 세션]
-  Route --> KS[KeyboardSession: 키보드 세션]
-  PS --> Shared[SessionFrame / useSessionControls / Metric]
-  KS --> Shared
+  Home[Dashboard: 상체·키보드 카드] --> Shared[ModeCards / SessionActions / useSessionControls / Metric]
   App[AppLayout] --> Runtime[MonitoringProvider: 두 세션 상태와 런타임]
   Runtime --> Monitor[PostureMonitor: 카메라·모델 연결]
   Runtime --> Eye[EyeMonitor: 같은 영상의 깜빡임]
@@ -31,14 +28,13 @@ flowchart TD
 | 기준 수집·좌표 정의 | `front/src/features/posture/calibration.ts`, `observation.ts` | 수집/관측 회귀 검사, 실제 촬영 검증 |
 | 시간 평균·연속 관찰·기준 이탈 | `front/src/features/posture/evaluation.ts` | `posture-evaluation.test.mjs` |
 | 점수·습관 카드의 문구·디자인 | `front/src/features/posture/PostureMetrics.tsx` | `posture-metrics.test.mjs`, 실제 화면 확인 |
-| 홈/상세 시작·일시정지·재수집 | `front/src/features/session/MonitoringProvider.tsx`, `SessionActions.tsx`, `front/src/features/posture/PostureSession.tsx` | 두 모드 독립 상태, 이동 시 유지, 중지 시 해제 |
-| 키보드 화면 | `front/src/features/keyboard/KeyboardSession.tsx` | 기존 키보드 계약 유지 |
+| 홈 시작·일시정지·재수집 | `front/src/features/session/MonitoringProvider.tsx`(카메라 설정 창의 기준/위치 다시 잡기 포함), `SessionActions.tsx`, `front/src/features/dashboard/ModeCards.tsx` | 두 모드 독립 상태, 이동 시 유지, 중지 시 해제 |
 | 카메라·모델 연결 | `front/src/components/PostureMonitor.tsx`, `front/src/hooks/` | 생명주기 검사와 실기기 검증 |
 | 공통 틀·타이머·장치 선택 | `front/src/features/session/` | 목·어깨·키보드 화면 모두 확인 |
 
-`LearningSession.tsx`는 모드 화면 선택만 합니다. 새 모드를 추가할 때 연결하고, 점수 산식이나 카드 문구를 바꿀 때는 수정하지 않습니다. 현재 목·어깨는 같은 카메라·랜드마크 추론과 상체 화면을 재사용합니다. 향후 전혀 다른 관측기가 필요할 때 해당 모드의 분석 모듈을 추가하면 됩니다.
+모드별 상세 화면(`LearningSession.tsx`)은 2026-11-21에 없앴습니다. 새 모드는 홈 카드(`ModeCards.tsx`)와 `MonitoringProvider`에 연결합니다. 현재 목·어깨는 같은 카메라·랜드마크 추론과 상체 카드를 재사용합니다. 향후 전혀 다른 관측기가 필요할 때 해당 모드의 분석 모듈을 추가하면 됩니다.
 
-React 상태도 책임에 맞춰 둡니다. 2026-10-10부터 `AppLayout`의 `MonitoringProvider`가 상체와 키보드의 시작/일시정지·결과 상태를 소유합니다. 홈과 상세는 같은 상태를 표시하며 화면 이동으로 세션을 폐기하지 않습니다. 각 분석기의 `key={run}`은 해당 모드의 새 실행만 초기화합니다. 카메라 Provider에 장치별 key를 두면 다른 모드까지 재설정될 수 있으므로 장치 선택은 내부 프로필을 갱신합니다. 상태 소유와 재설정 방식은 [React의 상태 공유](https://react.dev/learn/sharing-state-between-components), [상태 유지와 재설정](https://react.dev/learn/preserving-and-resetting-state) 계약을 따릅니다.
+React 상태도 책임에 맞춰 둡니다. 2026-10-10부터 `AppLayout`의 `MonitoringProvider`가 상체와 키보드의 시작/일시정지·결과 상태를 소유합니다. 홈 카드와 오버레이는 같은 상태를 표시하며 화면 이동으로 세션을 폐기하지 않습니다. 각 분석기의 `key={run}`은 해당 모드의 새 실행만 초기화합니다. 카메라 Provider에 장치별 key를 두면 다른 모드까지 재설정될 수 있으므로 장치 선택은 내부 프로필을 갱신합니다. 상태 소유와 재설정 방식은 [React의 상태 공유](https://react.dev/learn/sharing-state-between-components), [상태 유지와 재설정](https://react.dev/learn/preserving-and-resetting-state) 계약을 따릅니다.
 
 ## 여러 사람이 AI로 작업할 때
 

@@ -9,7 +9,6 @@ import Statistics from './pages/Statistics';
 import Settings from './pages/Settings';
 import AiReview from './pages/AiReview';
 import AppLayout from './components/layout/AppLayout';
-import LearningSession from './pages/LearningSession';
 import LearningHistory from './pages/LearningHistory';
 import { DialogProvider } from './components/AppDialog';
 import WindowTitleBar from './components/layout/WindowTitleBar';
@@ -42,9 +41,10 @@ function App() {
             <Route path="/register" element={<Register />} />
             <Route path="/find-id" element={<FindId />} />
             <Route path="/find-password" element={<FindPassword />} />
+            {/* The monitoring detail screen was removed on 2026-11-21; old links open the home cards. */}
+            <Route path="/learn/*" element={<Navigate to="/dashboard" replace />} />
             <Route element={<AppLayout />}>
               <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/learn/:modeId" element={<LearningSession />} />
               <Route path="/statistics" element={<Statistics />} />
               <Route path="/history" element={<LearningHistory />} />
               <Route path="/ai-review" element={<AiReview />} />

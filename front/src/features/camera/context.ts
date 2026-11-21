@@ -33,6 +33,6 @@ export interface CameraContextValue {
 export const CameraContext = createContext<CameraContextValue | null>(null);
 export function useCameraSettings() {
   const context = useContext(CameraContext);
-  if (!context) throw new Error('Camera settings require SessionFrame');
+  if (!context) throw new Error('Camera settings require CameraProvider');
   return context;
 }

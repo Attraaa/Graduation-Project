@@ -11,7 +11,7 @@ const bundle = await build({ stdin: { contents: "export { default } from './src/
   platform: 'node', format: 'cjs', jsx: 'automatic', external: ['react', 'react-dom'] });
 const compiled = { exports: {} };
 new Function('module', 'exports', 'require', bundle.outputFiles[0].text)(compiled, compiled.exports, createRequire(import.meta.url));
-const render = (snapshot, eye, isRunning = true, rows = false) => renderToStaticMarkup(createElement(compiled.exports.default, { snapshot, eye, isRunning, rows }));
+const render = (snapshot, eye, isRunning = true) => renderToStaticMarkup(createElement(compiled.exports.default, { snapshot, eye, isRunning }));
 
 test('compact upper metrics distinguish measured zero from missing values and retain session averages', () => {
   const snapshot = createMonitorSnapshot();
@@ -34,17 +34,6 @@ test('unavailable samples have no invented score or blink rate', () => {
   assert.doesNotMatch(html, /NaN|Infinity/);
 });
 
-test('the detailed metric rows preserve zero, missing values, units and stopped-session averages', () => {
-  const snapshot = createMonitorSnapshot();
-  snapshot.neck = { ...snapshot.neck, currentScore: 0, averageScore: 0 };
-  snapshot.shoulder = { ...snapshot.shoulder, currentScore: 84.6, averageScore: 90.5 };
-  const eye = { ...emptyEyeSnapshot(), recentBlinksPerMinute: 0, blinksPerMinute: 12.3 };
-  const text = render(snapshot, eye, true, true).replace(/<[^>]+>/g, '');
-  for (const expected of ['0점', '85점', '세션 평균 0점', '세션 평균 91점', '0.0회/분', '세션 평균 12.3회/분']) assert.ok(text.includes(expected), expected);
-  const stopped = render(snapshot, eye, false, true);
-  assert.equal((stopped.match(/>—</g) ?? []).length, 3);
-  assert.match(stopped, /세션 평균 12.3회\/분/);
-});
 test('movement/recovery protection stays visible in the reserved notice above the metrics', () => {
   const snapshot = createMonitorSnapshot();
   snapshot.neck = { ...snapshot.neck, currentScore: 82, protection: 'moving' };

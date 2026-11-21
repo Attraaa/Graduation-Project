@@ -137,7 +137,9 @@ test('main validates keyboard averages and owns fixed text and navigation for bo
   const key = { kind: 'keyboard', score: 70, silent: true, body: 'private input' };
   assert.match(notificationContent(key).body, /20회.*70점/); assert.doesNotMatch(notificationContent(key).body, /private/);
   assert.match(notificationContent({ kind: 'blink', silent: false }).body, /15초/);
-  assert.equal(notificationTarget(key), '/learn/keyboard'); assert.equal(notificationTarget({ kind: 'blink', silent: true }), '/learn/upper_body');
+  assert.equal(notificationTarget(key), '/dashboard?mode=keyboard'); assert.equal(notificationTarget({ kind: 'blink', silent: true }), '/dashboard?mode=upper_body');
+  assert.equal(notificationTarget({ kind: 'issue', code: 'tracking', silent: true }), '/dashboard?mode=upper_body');
+  assert.equal(notificationTarget({ kind: 'issue', code: 'storage', silent: true }), '/dashboard');
 });
 
 test('both new kinds obey native foreground gate, individual cleanup and automatic OFF/lock cleanup', async () => {
@@ -155,7 +157,7 @@ test('both new kinds obey native foreground gate, individual cleanup and automat
   allowed = true;
   assert.equal((await show({ kind: 'keyboard', score: 0, silent: true })).ok, true);
   assert.equal((await show({ kind: 'blink', silent: false })).ok, true);
-  notes[0].click(); notes[1].click(); assert.deepEqual(targets, ['/learn/keyboard', '/learn/upper_body']);
+  notes[0].click(); notes[1].click(); assert.deepEqual(targets, ['/dashboard?mode=keyboard', '/dashboard?mode=upper_body']);
   handlers.get('notifications:clear')({}, 'keyboard'); assert.equal(notes[0].closed, true); assert.equal(notes[1].closed, false);
   clear.automatic(); assert.equal(notes[1].closed, true);
   assert.throws(() => handlers.get('notifications:clear')({}, 'arbitrary'));

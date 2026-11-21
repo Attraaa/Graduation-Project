@@ -1,5 +1,4 @@
 import { Activity, Keyboard, Settings2 } from 'lucide-react';
-import { Link } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import MonitoringPreview from '../session/MonitoringPreview';
 import SessionActions from '../session/SessionActions';
@@ -13,10 +12,11 @@ import { percentText, scoreText } from '../keyboard/labels';
 import { livePressScore } from '../keyboard/liveScore';
 
 function LiveCard({ modeId, children, className }: { modeId: MonitoringMode; children: ReactNode; className?: string }) {
+  const all = useMonitoring();
   const upper = modeId === 'upper_body';
   return <section aria-label={`${upper ? '상체' : '키보드'} 모니터링`} className={`min-w-0 space-y-3 rounded-2xl border border-border bg-surface p-4 ${className ?? ''}`}>
     <header className="flex items-center justify-between gap-3"><div className="flex items-center gap-3"><span className={`flex h-10 w-10 items-center justify-center rounded-xl ${upper ? 'bg-mode-upper-soft text-mode-upper' : 'bg-mode-keyboard-soft text-mode-keyboard'}`}>{upper ? <Activity size={20} /> : <Keyboard size={20} />}</span><div><h2 className="font-bold text-heading">{upper ? '상체' : '키보드'}</h2><p className="mt-1 text-xs text-muted">{upper ? '목·어깨·안구 함께' : '손가락 사용 관찰'}</p></div></div>
-      <Link to={`/learn/${modeId}`} aria-label={`${upper ? '상체' : '키보드'} 설정·상세`} title="설정·상세" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-border text-muted hover:bg-surface-muted"><Settings2 size={17} /></Link>
+      <button type="button" onClick={() => (upper ? all.upper : all.keyboard).camera.open()} aria-label={`${upper ? '상체' : '키보드'} 카메라 설정`} title="카메라 설정" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-border text-muted hover:bg-surface-muted"><Settings2 size={17} /></button>
     </header>
     <MonitoringPreview modeId={modeId} />
     <div className="space-y-2"><SessionStatus modeId={modeId} /><SessionActions modeId={modeId} /></div>

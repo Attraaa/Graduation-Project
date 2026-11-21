@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+import { RotateCcw } from 'lucide-react';
 import CameraProvider from '../camera/CameraProvider';
 import { CameraContext, useCameraSettings, type CameraContextValue } from '../camera/context';
 import CameraSettingsPanel from '../camera/CameraSettingsPanel';
@@ -165,6 +166,10 @@ function MonitoringRuntime({ base, children, upperCamera, portal, configMode, se
       <label className="camera-field">모드<select aria-label="모드" value={configMode} onChange={event => setConfigMode(event.target.value as MonitoringMode)}><option value="upper_body">상체 · 목·어깨·안구</option><option value="keyboard">키보드</option></select></label>
       <label className="camera-field">사용할 카메라<select aria-label="사용할 카메라" value={session.deviceId} disabled={session.isRunning} onChange={event => session.setDeviceId(event.target.value)}><option value="">기본 카메라</option>{session.devices.filter(device => device.deviceId).map((device, index) => <option key={device.deviceId} value={device.deviceId}>{device.label || `카메라 ${index + 1}`}</option>)}</select></label>
       {session.isRunning && <p className="camera-hint">장치를 바꾸려면 해당 모드를 중지해 주세요.</p>}
+      <button type="button" className="camera-recapture" disabled={!session.isRunning || session.isPaused}
+        onClick={configMode === 'upper_body' ? base.upper.recalibrate : base.keyboard.remap}>
+        <RotateCcw size={16} />{configMode === 'upper_body' ? '기준 다시 잡기' : '위치 다시 잡기'}
+      </button>
     </section>} /></CameraContext.Provider>, portal)}
   </MonitoringContext.Provider>;
 }

@@ -43,9 +43,12 @@ export default function SystemNotifications() {
         .finally(() => { pending = false; });
     };
     const off = window.motiDesktop?.onNavigate(target => {
-      if (!['/learn/upper_body', '/learn/keyboard', '/dashboard', '/login'].includes(target)) return;
+      const card = ({ '/dashboard?mode=upper_body': '상체 모니터링', '/dashboard?mode=keyboard': '키보드 모니터링' } as Record<string, string>)[target];
+      if (!card && !['/dashboard', '/login'].includes(target)) return;
       navigation.current(target);
-      if (target === '/dashboard') window.setTimeout(() => document.querySelector('[data-recording-status]')?.scrollIntoView({ block: 'center' }), 150);
+      // Mode alerts show that mode's home card; the plain home target is the storage notice.
+      if (card) window.setTimeout(() => document.querySelector(`section[aria-label="${card}"]`)?.scrollIntoView({ block: 'start' }), 150);
+      else if (target === '/dashboard') window.setTimeout(() => document.querySelector('[data-recording-status]')?.scrollIntoView({ block: 'center' }), 150);
     });
     const offHalt = window.motiKeyboard?.onHalt(() => { issues.clear(); });
     window.addEventListener(SYSTEM_ISSUE_EVENT, receive);
