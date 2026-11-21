@@ -1,79 +1,33 @@
-import DeviationHours from '../features/dashboard/DeviationHours';
 import { KeyboardCard, UpperCard } from '../features/dashboard/ModeCards';
 import RecordingStatus from '../features/records/RecordingStatus';
-import { SourceError, SourceLoading } from '../features/dashboard/SourceState';
-import TodayTimeline from '../features/dashboard/TodayTimeline';
-import WeeklyScoreChart from '../features/dashboard/WeeklyScoreChart';
+import { todayDateKey } from '../features/records/views';
+import LiveScoreChart from '../features/session/LiveScoreChart';
+import { useMonitoring } from '../features/session/monitoringContext';
 import { headerDate } from '../features/dashboard/format';
-import { useDashboardData } from '../features/dashboard/useDashboardData';
 
-const CARD = 'rounded-2xl border border-border bg-surface p-4';
-const LEGEND = [
-  { name: '목', dot: 'bg-mode-upper' },
-  { name: '어깨', dot: 'bg-mode-shoulder' },
-  { name: '키보드', dot: 'bg-mode-keyboard' },
-];
-
+/**
+ * 학습: the two monitoring cards, each with its live score trend underneath. Past scores are in 통계
+ * (daily and hourly charts, deviation hours) and the day's records in 학습이력.
+ */
 const Dashboard = () => {
-  const { today, summary, status, retry } = useDashboardData();
-  const scoresLoading = status.posture === 'loading' || status.keyboard === 'loading';
-  const scoresFailed = status.posture === 'error' && status.keyboard === 'error';
-  const scoresPartial = !scoresFailed && (status.posture === 'error' || status.keyboard === 'error');
-  const timelineLoading = status.history === 'loading' || status.keyboard === 'loading';
-  const timelineFailed = status.history === 'error' || status.keyboard === 'error';
-
+  const { upper, keyboard } = useMonitoring();
   return (
     <div className="space-y-4 pb-4">
       <header>
         <h1 className="text-2xl font-extrabold text-heading">무엇을 모니터링 할까요?</h1>
         <p className="mt-1 text-sm text-muted">
-          {headerDate(today)}
+          {headerDate(todayDateKey())}
         </p>
       </header>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">
-        <UpperCard className="lg:col-span-2" />
-        <KeyboardCard className="lg:col-span-2" />
-
-        <section aria-label="최근 7일 점수" className={`${CARD} flex flex-col gap-3 lg:col-span-4 xl:col-span-3 xl:row-span-2`}>
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="font-bold text-heading">최근 7일 점수</h2>
-            <ul className="flex flex-wrap items-center gap-3 text-xs text-muted">
-              {LEGEND.map(item => (
-                <li key={item.name} className="flex items-center gap-1">
-                  <span aria-hidden="true" className={`h-2 w-2 rounded-full ${item.dot}`} />{item.name}
-                </li>
-              ))}
-            </ul>
-          </div>
-          {scoresLoading ? <SourceLoading className="h-72" />
-            : scoresFailed ? <SourceError onRetry={retry} />
-            : summary.hasScores ? (
-              <div className="min-h-72 flex-1"><WeeklyScoreChart days={summary.days} today={today} floor={summary.chartFloor} /></div>
-            )
-            : <p className="flex h-72 items-center justify-center text-sm text-muted">측정을 시작하면 최근 7일 점수가 여기에 보여요</p>}
-          {scoresPartial && <SourceError onRetry={retry} />}
-          <p className="text-xs text-muted">점수는 기준 자세와의 화면상 유사도와 손가락 사용 점수예요. 의학적 진단이 아니에요.</p>
-        </section>
-
-        <section aria-label="오늘 타임라인" className={`${CARD} space-y-3 lg:col-span-2 xl:col-span-1`}>
-          <h2 className="font-bold text-heading">오늘 타임라인</h2>
-          {timelineLoading ? <SourceLoading className="h-24" />
-            : timelineFailed && !summary.timeline.length ? <SourceError onRetry={retry} />
-            : <TodayTimeline entries={summary.timeline} />}
-          {!timelineLoading && timelineFailed && summary.timeline.length > 0 && <SourceError onRetry={retry} />}
-        </section>
-
-        <section aria-label="기준 이탈이 잦은 시간" className={`${CARD} space-y-3 lg:col-span-2 xl:col-span-1`}>
-          <div>
-            <h2 className="font-bold text-heading">기준 이탈이 잦은 시간</h2>
-            <p className="text-xs text-muted">최근 7일 · 상체</p>
-          </div>
-          {status.posture === 'loading' ? <SourceLoading className="h-24" />
-            : status.posture === 'error' ? <SourceError onRetry={retry} />
-            : <DeviationHours hours={summary.deviationHours} />}
-        </section>
+      {/* Each card is followed by its trend; on wide screens the cards share the first row and the trends the second. */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <UpperCard className="lg:order-1" />
+        <div className="min-w-0 lg:order-3"><LiveScoreChart points={upper.trend} /></div>
+        <KeyboardCard className="lg:order-2" />
+        <div className="min-w-0 lg:order-4"><LiveScoreChart points={keyboard.trend} keyboard /></div>
       </div>
+      <p className="text-xs text-muted">점수는 기준 자세와의 화면상 유사도와 손가락 사용 점수예요. 의학적 진단이 아니에요.</p>
       <RecordingStatus />
     </div>
   );

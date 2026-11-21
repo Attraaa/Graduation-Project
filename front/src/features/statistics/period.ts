@@ -3,8 +3,8 @@ import type { StatisticsRow } from '../../../../database/contracts.ts';
 import { eyeRate } from '../../../../database/eye.ts';
 import type { EyeStatisticsRow } from '../../../../database/eye.ts';
 import type { KeyboardStored } from '../../../../database/keyboard.ts';
-import { dayValues, latestPolicyGroups, periodDates, scoreFloor, sessionIdOf, shiftDate } from '../dashboard/summary.ts';
-import type { DashboardDay } from '../dashboard/summary.ts';
+import { dayValues, deviationHours, latestPolicyGroups, periodDates, scoreFloor, sessionIdOf, shiftDate } from '../dashboard/summary.ts';
+import type { DashboardDay, DeviationHour } from '../dashboard/summary.ts';
 
 export type PeriodDays = 7 | 30;
 export interface StatisticsRange { from: string; to: string; dates: string[]; previousDates: string[] }
@@ -19,6 +19,8 @@ export interface UpperPeriod {
   deviations: number; deviationRate: number | null;
   validRate: number | null; unmeasuredMs: number;
   hourly: UpperHour[]; hourlyFloor: number;
+  /** Deviation episodes per hour of day over the chosen period (moved here from the 학습 screen on 2026-11-21). */
+  deviationHours: DeviationHour[];
 }
 export interface EyePeriod {
   present: boolean;
@@ -87,6 +89,7 @@ function upperPeriod(turtle: StatisticsRow[], shoulder: StatisticsRow[], range: 
     unmeasuredMs: validRate === null ? 0 : runMs * (1 - validRate / 100),
     hourly,
     hourlyFloor: scoreFloor(present(hourly.flatMap(hour => [hour.turtle, hour.shoulder]))),
+    deviationHours: deviationHours(both),
   };
 }
 

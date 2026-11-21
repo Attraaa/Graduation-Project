@@ -1,12 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildDashboard, dashboardDates, dayEntries, pastDateOrNull, periodDates, sessionIdOf, shiftDate } from '../src/features/dashboard/summary.ts';
+import { dayEntries, dayValues, deviationHours, latestPolicyGroups, pastDateOrNull, periodDates, scoreFloor, sessionIdOf, shiftDate } from '../src/features/dashboard/summary.ts';
 import { keyboardSummary } from '../../database/keyboard.ts';
 
 const TODAY = '2026-10-06';
 const KST = -540;
 const at = iso => Date.parse(iso);
-const build = (input = {}) => buildDashboard({ today: TODAY, posture: [], eye: [], keyboard: [], history: [], ...input });
+const groups = (input = {}) => latestPolicyGroups({ posture: [], eye: [], keyboard: [], ...input });
+const day = (input = {}, date = TODAY) => dayValues(groups(input), date);
 
 const postureRow = (over = {}) => ({ date: TODAY, hour: '9', mode: 'turtle',
   scorePolicyVersion: 'upper-body-neck-v3-a', habitPolicyVersion: 'reference-deviation-v1',
@@ -24,41 +25,41 @@ const keyboardStored = (over = {}) => ({
     { date: TODAY, code: 'KeyA', context: 'plain', finger: 'left:ring', verdict: 'nearby', reason: 'neighboring-finger', count: 2 },
   ] });
 
-test('a keyboard entry in mixed history does not duplicate the keyboard statistics timeline', () => {
+test('a keyboard entry in mixed history does not duplicate the keyboard record', () => {
   const stored = keyboardStored();
   const history = { ...stored.record, mode: 'keyboard', summary: keyboardSummary(stored.counts, stored.record.nearbyCredit) };
-  const summary = build({ history: [history], keyboard: [stored] });
-  assert.equal(summary.timeline.length, 1);
-  assert.equal(summary.timeline[0].mode, 'keyboard');
-  assert.equal(summary.timeline[0].score, 94);
-  assert.equal(summary.today.keyboard.sessions, 1);
+  const entries = dayEntries([history], [stored], TODAY);
+  assert.equal(entries.length, 1);
+  assert.equal(entries[0].mode, 'keyboard');
+  assert.equal(entries[0].score, 94);
+  assert.equal(day({ keyboard: [stored] }).keyboard.sessions, 1);
 });
 
-test('dashboardDates covers six days back to today across month and year boundaries', () => {
-  assert.deepEqual(dashboardDates('2026-10-06'),
+test('a seven-day period covers six days back to today across month and year boundaries', () => {
+  assert.deepEqual(periodDates('2026-10-06', 7),
     ['2026-09-30', '2026-10-01', '2026-10-02', '2026-10-03', '2026-10-04', '2026-10-05', '2026-10-06']);
-  assert.deepEqual(dashboardDates('2026-01-03').slice(0, 2), ['2025-12-28', '2025-12-29']);
+  assert.deepEqual(periodDates('2026-01-03', 7).slice(0, 2), ['2025-12-28', '2025-12-29']);
   assert.equal(sessionIdOf('abc:shoulder'), 'abc');
   assert.equal(sessionIdOf('abc:turtle'), 'abc');
 });
 
 test('upper body scores are valid-time weighted and one session counts once', () => {
-  const summary = build({ posture: [
+  const today = day({ posture: [
     postureRow({ hour: '9', runMs: 60_000, validMs: 60_000, scoreTimeSum: 60_000 * 90, deviationEpisodeCount: 1 }),
     postureRow({ hour: '10', runMs: 180_000, validMs: 180_000, scoreTimeSum: 180_000 * 70 }),
     shoulderRow({ hour: '9', runMs: 240_000, validMs: 240_000, scoreTimeSum: 240_000 * 88, deviationEpisodeCount: 2 }),
   ] });
-  const upper = summary.today.upper;
+  const upper = today.upper;
   assert.equal(upper.turtle, 75);       // (90 x 1분 + 70 x 3분) / 4분
   assert.equal(upper.shoulder, 88);
   assert.equal(upper.sessions, 1);      // s1:turtle + s1:shoulder = 세션 1개
   assert.equal(upper.runMs, 240_000);   // 목·어깨 중 큰 값, 합이 아님
   assert.equal(upper.deviations, 3);
-  assert.equal(summary.today.totalMs, 240_000);
+  assert.equal(today.totalMs, 240_000);
 });
 
 test('only the latest policy group of each mode is used', () => {
-  const summary = build({
+  const selected = groups({
     posture: [
       postureRow({ date: '2026-10-02', scorePolicyVersion: 'reference-similarity-turtle-v1', scoreTimeSum: 60_000 * 40 }),
       postureRow({ date: '2026-10-05', scoreTimeSum: 60_000 * 80 }),
@@ -70,40 +71,38 @@ test('only the latest policy group of each mode is used', () => {
       keyboardStored(),
     ],
   });
-  const day = date => summary.days.find(item => item.date === date);
-  assert.equal(day('2026-10-02').upper.turtle, null);
-  assert.equal(day('2026-10-05').upper.turtle, 80);
-  assert.equal(day('2026-10-05').eye.present, false);
-  assert.equal(day('2026-10-06').eye.present, true);
-  assert.equal(day('2026-10-04').keyboard.present, false);
-  assert.equal(day('2026-10-06').keyboard.sessions, 1);
+  const on = date => dayValues(selected, date);
+  assert.equal(on('2026-10-02').upper.turtle, null);
+  assert.equal(on('2026-10-05').upper.turtle, 80);
+  assert.equal(on('2026-10-05').eye.present, false);
+  assert.equal(on('2026-10-06').eye.present, true);
+  assert.equal(on('2026-10-04').keyboard.present, false);
+  assert.equal(on('2026-10-06').keyboard.sessions, 1);
 });
 
 test('days without records stay empty instead of zero', () => {
-  const summary = build({ posture: [postureRow({ date: '2026-10-04' })] });
-  const empty = summary.days.find(day => day.date === '2026-10-03');
+  const posture = [postureRow({ date: '2026-10-04' })];
+  const empty = day({ posture }, '2026-10-03');
   assert.equal(empty.upper.turtle, null);
   assert.equal(empty.upper.sessions, 0);
   assert.equal(empty.hasRecords, false);
   assert.equal(empty.totalMs, 0);
-  assert.equal(summary.days.find(day => day.date === '2026-10-04').hasRecords, true);
-  assert.deepEqual(summary.recent, { upper: true, keyboard: false, eye: false });
+  assert.equal(day({ posture }, '2026-10-04').hasRecords, true);
 });
 
-test('eye rate needs 30 seconds of valid observation and is never a score', () => {
-  const short = build({ eye: [eyeRow({ validMs: 29_000, blinks: 10 })] });
-  assert.equal(short.today.eye.rate, null);
-  assert.equal(short.today.eye.present, true);
-  assert.equal(short.today.hasRecords, true);
-  const enough = build({ eye: [eyeRow()] });
-  assert.equal(enough.today.eye.rate, 14);
-  assert.equal(enough.today.eye.breaks, 2);
-  assert.equal(enough.hasScores, false);
+test('eye rate needs 30 seconds of valid observation', () => {
+  const short = day({ eye: [eyeRow({ validMs: 29_000, blinks: 10 })] });
+  assert.equal(short.eye.rate, null);
+  assert.equal(short.eye.present, true);
+  assert.equal(short.hasRecords, true);
+  const enough = day({ eye: [eyeRow()] });
+  assert.equal(enough.eye.rate, 14);
+  assert.equal(enough.eye.breaks, 2);
 });
 
 test('keyboard values match the shared keyboard summary and count sessions by start date', () => {
   const stored = keyboardStored();
-  const today = build({ keyboard: [stored] }).today.keyboard;
+  const today = day({ keyboard: [stored] }).keyboard;
   const expected = keyboardSummary(stored.counts, 70);
   assert.equal(today.score, expected.score);
   assert.equal(today.coverage, expected.coverage);
@@ -113,10 +112,9 @@ test('keyboard values match the shared keyboard summary and count sessions by st
 });
 
 test('chart floor rounds the lowest score down to ten and stays below 100', () => {
-  assert.equal(build({ posture: [postureRow({ scoreTimeSum: 60_000 * 64 })] }).chartFloor, 60);
-  assert.equal(build({ posture: [postureRow({ scoreTimeSum: 60_000 * 100 })] }).chartFloor, 90);
-  assert.equal(build().chartFloor, 0);
-  assert.equal(build().hasScores, false);
+  assert.equal(scoreFloor([88, 64, 75]), 60);
+  assert.equal(scoreFloor([100]), 90);
+  assert.equal(scoreFloor([]), 0);
 });
 
 const postureRecord = (over = {}) => ({ id: 's1:turtle', owner: '7', mode: 'turtle',
@@ -129,14 +127,14 @@ const eyeRecord = (over = {}) => ({ id: 'e1', owner: '7', mode: 'eye',
   policyVersion: 'eye-habits-v2', status: 'finished',
   runMs: 40 * 60_000, validMs: 40 * 60_000, blinks: 560, breaks: 2, nearReminders: 0, openReminders: 0, ...over });
 
-test('today timeline merges one upper session, keyboard and eye in start order', () => {
+test('day entries merge one upper session, keyboard and eye in start order', () => {
   const turtle = postureRecord();
   const shoulder = postureRecord({ id: 's1:shoulder', mode: 'shoulder',
     scorePolicyVersion: 'upper-body-shoulder-v3-b', scoreTimeSum: 25 * 60_000 * 89 });
   const yesterday = postureRecord({ id: 's0:turtle', startedAt: at('2026-10-05T00:12:00Z') });
-  const summary = build({ history: [eyeRecord({ status: 'interrupted' }), shoulder, turtle, yesterday], keyboard: [keyboardStored()] });
-  assert.deepEqual(summary.timeline.map(entry => [entry.mode, entry.id]), [['upper', 's1'], ['keyboard', 'k1'], ['eye', 'e1']]);
-  const [upper, keyboard, eye] = summary.timeline;
+  const entries = dayEntries([eyeRecord({ status: 'interrupted' }), shoulder, turtle, yesterday], [keyboardStored()], TODAY);
+  assert.deepEqual(entries.map(entry => [entry.mode, entry.id]), [['upper', 's1'], ['keyboard', 'k1'], ['eye', 'e1']]);
+  const [upper, keyboard, eye] = entries;
   assert.equal(upper.turtle, 84);
   assert.equal(upper.shoulder, 89);
   assert.equal(upper.endedAt - upper.startedAt, 25 * 60_000);
@@ -147,21 +145,15 @@ test('today timeline merges one upper session, keyboard and eye in start order',
   assert.equal(eye.interrupted, true);
 });
 
-test('timeline drops records from a policy that is not the latest', () => {
-  const summary = build({ posture: [postureRow()],
-    history: [postureRecord({ id: 'old:turtle', scorePolicyVersion: 'reference-similarity-turtle-v1' }), postureRecord()] });
-  assert.deepEqual(summary.timeline.map(entry => entry.id), ['s1']);
-});
-
 test('deviation hours sum neck and shoulder episodes over the shown hour range', () => {
-  const summary = build({ posture: [
+  const hours = deviationHours([
     postureRow({ hour: '9', deviationEpisodeCount: 1 }),
     shoulderRow({ hour: '9', deviationEpisodeCount: 2 }),
     postureRow({ date: '2026-10-05', hour: '12', deviationEpisodeCount: 4 }),
-  ] });
-  assert.deepEqual(summary.deviationHours.map(hour => [hour.hour, hour.count, hour.strong]),
+  ]);
+  assert.deepEqual(hours.map(hour => [hour.hour, hour.count, hour.strong]),
     [[9, 3, true], [10, 0, false], [11, 0, false], [12, 4, true]]);
-  assert.deepEqual(build().deviationHours, []);
+  assert.deepEqual(deviationHours([]), []);
 });
 
 test('date helpers shift across months, build periods of any length and accept only real past dates', () => {
@@ -176,7 +168,7 @@ test('date helpers shift across months, build periods of any length and accept o
   assert.equal(pastDateOrNull(null, TODAY), null);
 });
 
-test('day entries without a filter keep every policy and expose the stored records', () => {
+test('day entries keep every policy and expose the stored records', () => {
   const old = postureRecord({ id: 'old:turtle', scorePolicyVersion: 'reference-similarity-turtle-v1' });
   const entries = dayEntries([old, postureRecord()], [], TODAY);
   assert.deepEqual(entries.map(entry => entry.id), ['old', 's1']);

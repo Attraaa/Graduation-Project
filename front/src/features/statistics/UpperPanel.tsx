@@ -3,6 +3,7 @@ import ScoreRing from '../dashboard/ScoreRing';
 import { minutesText, scoreText } from '../dashboard/format';
 import type { DashboardDay } from '../dashboard/summary';
 import DailyChart from './DailyChart';
+import DeviationHours from './DeviationHours';
 import HourlyChart from './HourlyChart';
 import StatTile from './StatTile';
 import { CARD, CardTitle, ChartHeader, EmptyChart, HistoryLink, Waiting } from './parts';
@@ -14,7 +15,7 @@ const LINES = [
   { key: 'shoulder', name: '어깨', color: 'var(--color-mode-shoulder)' },
 ];
 
-/** Upper tab: four numbers, the daily neck/shoulder chart, then hourly, quality and record cards. */
+/** Upper tab: four numbers, the daily neck/shoulder chart, then the two time-of-day cards, quality and records. */
 export default function UpperPanel({ upper, days, periodDays, floor, today, detail, onSelectDate, onOpenHistory }: {
   upper: UpperPeriod; days: DashboardDay[]; periodDays: PeriodDays; floor: number; today: string;
   detail: (date: string) => ReactNode; onSelectDate: (date: string) => void; onOpenHistory: () => void;
@@ -40,12 +41,16 @@ export default function UpperPanel({ upper, days, periodDays, floor, today, deta
             data={days.map(day => ({ date: day.date, turtle: day.upper.turtle, shoulder: day.upper.shoulder }))} />
         )}
       </section>
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid gap-4 lg:grid-cols-2">
         <section aria-label="시간대별 점수" className={CARD}>
           <CardTitle title="시간대별 점수" note={`${periodDays}일 평균`} />
           {empty ? <Waiting /> : (
             <HourlyChart label="시간대별 목·어깨 점수" data={upper.hourly} lines={LINES} domain={[upper.hourlyFloor, 100]} unit="점" />
           )}
+        </section>
+        <section aria-label="기준 이탈이 잦은 시간" className={CARD}>
+          <CardTitle title="기준 이탈이 잦은 시간" note={`${periodDays}일 · 목·어깨`} />
+          {empty ? <Waiting /> : <DeviationHours hours={upper.deviationHours} />}
         </section>
         <section aria-label="측정 품질" className={CARD}>
           <CardTitle title="측정 품질" />

@@ -3,6 +3,7 @@ import { useMonitoring } from '../session/monitoringContext';
 import { commandAllowed } from './contract';
 import { overlaySnapshot } from './snapshot';
 import { recordingFailedForCurrentOwner } from '../records/recording';
+import { readNotificationPreferences } from '../notifications/preferences';
 
 export default function MonitoringDesktopBridge() {
   const all = useMonitoring();
@@ -10,7 +11,9 @@ export default function MonitoringDesktopBridge() {
   const current = useRef(all), sequence = useRef(0);
   useLayoutEffect(() => { current.current = all; });
   const publish = useCallback(() => {
-    window.motiDesktop?.publish(overlaySnapshot(current.current, owner, ++sequence.current, document.documentElement.classList.contains('dark-theme') ? 'dark' : 'light', recordingFailedForCurrentOwner()));
+    // The alert score is read each time, so a change in the settings shows on the next update.
+    window.motiDesktop?.publish(overlaySnapshot(current.current, owner, ++sequence.current, document.documentElement.classList.contains('dark-theme') ? 'dark' : 'light',
+      recordingFailedForCurrentOwner(), readNotificationPreferences().scoreThreshold));
   }, [owner]);
   useEffect(() => {
     const bridge = window.motiDesktop;

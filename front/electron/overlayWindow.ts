@@ -2,7 +2,8 @@ import type { BrowserWindow, BrowserWindowConstructorOptions, IpcMain, IpcMainIn
 import { parseOverlayCommand, parseOverlaySnapshot, type OverlayCommand, type OverlayResult, type OverlaySnapshot, type OverlayView } from '../src/features/overlay/contract.ts';
 import { trustedRecordUrl } from './recordHandlers.ts';
 
-export const OVERLAY_SIZE = { width: 360, height: 320 };
+// Mini bar: a thin title row and one row per mode (front/src/features/overlay/overlay.css).
+export const OVERLAY_SIZE = { width: 340, height: 118 };
 export function fitOverlay(bounds: Rectangle, area: Rectangle): Rectangle {
   const width = Math.min(bounds.width, area.width), height = Math.min(bounds.height, area.height);
   return { width, height, x: Math.round(Math.max(area.x, Math.min(bounds.x, area.x + area.width - width))), y: Math.round(Math.max(area.y, Math.min(bounds.y, area.y + area.height - height))) };

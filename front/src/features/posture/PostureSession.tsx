@@ -3,7 +3,6 @@ import SessionFrame from '../session/SessionFrame';
 import SessionActions from '../session/SessionActions';
 import SessionStatus from '../session/SessionStatus';
 import MonitoringPreview from '../session/MonitoringPreview';
-import LiveScoreChart from '../session/LiveScoreChart';
 import { useMonitoring } from '../session/monitoringContext';
 import PostureMetrics from './PostureMetrics';
 import RecordingStatus from '../records/RecordingStatus';
@@ -27,7 +26,6 @@ export default function PostureSession() {
         <div className="session-guidance"><h3>측정 안내</h3><MonitoringNotice modeId="upper_body" /></div>
       </aside>
     </div>
-    <LiveScoreChart points={upper.trend} />
     <RecordingStatus errorsOnly />
   </SessionFrame>;
 }

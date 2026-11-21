@@ -1,11 +1,19 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
+import { createRequire } from 'node:module';
+import { build } from 'esbuild';
 import { OverlayWindow, fitOverlay } from '../electron/overlayWindow.ts';
 import { commandAllowed, overlayTime, parseOverlayCommand, parseOverlaySnapshot } from '../src/features/overlay/contract.ts';
 import { createIssueQueue } from '../src/features/notifications/issues.ts';
 
-const session = { run: 1, running: true, paused: false, seconds: 65.5, status: '관찰 중', detail: '목 80점', error: false };
+const session = { run: 1, running: true, paused: false, seconds: 65.5, status: '관찰 중', detail: '목 80점', error: false,
+  metrics: [{ label: '목', value: '80', low: false }], note: '' };
+// snapshot.ts imports without extensions, so it is bundled the way the app build sees it.
+const bundle = await build({ entryPoints: ['src/features/overlay/snapshot.ts'], bundle: true, write: false, platform: 'node', format: 'cjs' });
+const compiled = { exports: {} };
+new Function('module', 'exports', 'require', bundle.outputFiles[0].text)(compiled, compiled.exports, createRequire(import.meta.url));
+const { overlaySnapshot } = compiled.exports;
 const snapshot = (sequence = 1, owner = 'owner-1') => ({ owner, sequence, theme: 'light', savingFailed: false, upper_body: { ...session }, keyboard: { ...session, running: false } });
 class Window extends EventEmitter {
   destroyed = false; minimized = false; maximized = false; focused = false; shown = 0;
@@ -36,13 +44,50 @@ function harness() {
 test('overlay wire contracts strip extra fields and reject invalid/stale-shaped input', () => {
   const s = parseOverlaySnapshot({ ...snapshot(), token: 'never-forward' });
   assert.equal(Object.hasOwn(s, 'token'), false);
-  for (const input of [null, {}, { ...snapshot(), sequence: -1 }, { ...snapshot(), theme: 'other' }, { ...snapshot(), upper_body: { ...session, seconds: NaN } }, { ...snapshot(), upper_body: { ...session, running: false, paused: true } }]) assert.throws(() => parseOverlaySnapshot(input));
+  const metric = parseOverlaySnapshot({ ...snapshot(), upper_body: { ...session, metrics: [{ label: '목', value: '80', low: true, color: 'red' }] } }).upper_body.metrics[0];
+  assert.deepEqual(metric, { label: '목', value: '80', low: true });
+  const three = [1, 2, 3].map(n => ({ label: `m${n}`, value: '1', low: false }));
+  for (const input of [null, {}, { ...snapshot(), sequence: -1 }, { ...snapshot(), theme: 'other' }, { ...snapshot(), upper_body: { ...session, seconds: NaN } }, { ...snapshot(), upper_body: { ...session, running: false, paused: true } },
+    { ...snapshot(), upper_body: { ...session, metrics: three } }, { ...snapshot(), upper_body: { ...session, metrics: [{ label: '목', value: 80, low: false }] } },
+    { ...snapshot(), upper_body: { ...session, metrics: [{ label: '목', value: '80', low: 'yes' }] } }, { ...snapshot(), keyboard: { ...session, note: undefined } }]) assert.throws(() => parseOverlaySnapshot(input));
   assert.throws(() => parseOverlayCommand({ id: 'a', owner: 'o', mode: 'eye', run: 1, action: 'start' }));
   assert.throws(() => parseOverlayCommand({ id: 'a', owner: 'o', mode: 'keyboard', run: 1, action: 'toggle' }));
   assert.equal(overlayTime(3661.8), '01:01:01');
   assert.equal(overlayTime(0), '00:00:00');
   assert.equal(commandAllowed({ running: true, paused: true }, 'start'), false);
   assert.equal(commandAllowed({ running: true, paused: true }, 'stop'), true);
+});
+
+const counts = (preferred, mismatch) => [
+  { date: '2026-11-21', code: 'KeyA', context: 'plain', finger: 'left:pinky', verdict: 'preferred', reason: 'preferred-finger', count: preferred },
+  { date: '2026-11-21', code: 'KeyA', context: 'plain', finger: 'left:ring', verdict: 'mismatch', reason: 'other-finger', count: mismatch },
+];
+const controls = (over = {}) => ({ run: 3, isRunning: true, isPaused: false, elapsedSeconds: 42, failed: false, ...over });
+const monitoring = ({ upper = {}, upperControls = {}, eye = {}, keyboard = {}, keyboardControls = {} } = {}) => ({
+  upper: { controls: controls(upperControls), snapshot: { phase: 'observing', neck: { currentScore: 70.4 }, shoulder: { currentScore: 88 }, ...upper },
+    eye: { phase: 'observing', measurement: { recentBlinksPerMinute: 14.2, calibrationPhase: null, calibrationBlinks: 0 }, ...eye } },
+  keyboard: { controls: controls(keyboardControls), snapshot: { phase: 'ready', observationStatus: 'observing', counts: counts(8, 2), latest: null, ...keyboard } },
+});
+
+test('overlay numbers turn red at or below the alert score as shown, and guidance replaces them', () => {
+  const s = overlaySnapshot(monitoring(), 'owner-1', 1, 'light', false, 70);
+  assert.deepEqual(parseOverlaySnapshot(s), s);
+  assert.deepEqual(s.upper_body.metrics, [{ label: '목', value: '70', low: true }, { label: '어깨', value: '88', low: false }]);
+  assert.equal(s.upper_body.note, '깜빡임 14.2');
+  assert.match(s.upper_body.detail, /목 70점 · 어깨 88점 · 깜빡임 14.2회\/분/);
+  assert.deepEqual(s.keyboard.metrics, [{ label: '키보드 평균', value: '80', low: false }]);  // (8 x 100 + 2 x 0) / 10
+  assert.equal(s.keyboard.note, '판정 10회');
+  assert.equal(overlaySnapshot(monitoring(), 'o', 1, 'light', false, 90).upper_body.metrics[1].low, true);
+  assert.equal(overlaySnapshot(monitoring({ keyboard: { counts: counts(7, 3) } }), 'o', 1, 'light', false, 70).keyboard.metrics[0].low, true);
+
+  const guided = overlaySnapshot(monitoring({ upper: { phase: 'calibrating' }, keyboard: { observationStatus: 'excluded' } }), 'o', 1, 'light', false, 70);
+  assert.deepEqual([guided.upper_body.metrics, guided.upper_body.detail], [[], '정면을 보고 기준 자세를 유지해 주세요.']);
+  assert.deepEqual([guided.keyboard.metrics, guided.keyboard.note], [[], '']);
+  assert.match(guided.keyboard.detail, /미승인 앱/);
+
+  const idle = overlaySnapshot(monitoring({ upperControls: { isRunning: false, elapsedSeconds: 0 }, keyboardControls: { isRunning: false, elapsedSeconds: 0 } }), 'o', 1, 'light', false, 70);
+  assert.deepEqual(idle.upper_body.metrics.map(m => [m.value, m.low]), [['—', false], ['—', false]]);
+  assert.deepEqual([idle.upper_body.status, idle.upper_body.note, idle.keyboard.metrics[0].value, idle.keyboard.note], ['준비됨', '', '—', '']);
 });
 
 test('open waits for rendered initial state, opens once, and back restores without a measurement command', async () => {

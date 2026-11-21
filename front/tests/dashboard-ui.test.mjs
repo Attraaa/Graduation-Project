@@ -13,8 +13,7 @@ async function load(entry) {
   return compiled.exports.default;
 }
 const DayDetail = await load('src/features/dashboard/DayDetail.tsx');
-const TodayTimeline = await load('src/features/dashboard/TodayTimeline.tsx');
-const DeviationHours = await load('src/features/dashboard/DeviationHours.tsx');
+const DeviationHours = await load('src/features/statistics/DeviationHours.tsx');
 const ScoreRing = await load('src/features/dashboard/ScoreRing.tsx');
 const html = (component, props) => renderToStaticMarkup(createElement(component, props));
 
@@ -32,16 +31,8 @@ test('day detail lists only the modes recorded that day', () => {
   assert.match(out, /총 관찰 35분/);
 });
 
-test('timeline and deviation cards show empty states and interrupted sessions', () => {
-  assert.match(html(TodayTimeline, { entries: [] }), /오늘 측정한 기록이 없어요/);
+test('deviation hours show an empty state and name the busiest hour', () => {
   assert.match(html(DeviationHours, { hours: [] }), /상체 기록이 쌓이면 보여요/);
-  const entry = { id: 'e1', mode: 'eye', startedAt: Date.parse('2026-10-06T04:05:00Z'), endedAt: Date.parse('2026-10-06T04:45:00Z'),
-    offsetMinutes: -540, turtle: null, shoulder: null, score: null, rate: 14, interrupted: true };
-  const out = html(TodayTimeline, { entries: [entry] });
-  assert.match(out, /안구/);
-  assert.match(out, /분당 14회/);
-  assert.match(out, /13:05 – 13:45 \(40분\)/);
-  assert.match(out, /중단됨/);
   const bars = html(DeviationHours, { hours: [{ hour: 9, count: 3, strong: true }, { hour: 10, count: 0, strong: false }] });
   assert.match(bars, /기준 이탈이 많은 시간: 9시/);
 });

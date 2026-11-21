@@ -5,7 +5,6 @@ import SessionActions from '../session/SessionActions';
 import SessionStatus from '../session/SessionStatus';
 import MonitoringPreview from '../session/MonitoringPreview';
 import MonitoringNotice from '../session/MonitoringNotice';
-import LiveScoreChart from '../session/LiveScoreChart';
 import { useMonitoring } from '../session/monitoringContext';
 import { keyboardSummary } from '../../../../database/keyboard';
 import RecordingStatus from '../records/RecordingStatus';
@@ -36,8 +35,6 @@ export default function KeyboardSession() {
         <div className="session-guidance"><h3>측정 안내</h3><MonitoringNotice modeId="keyboard" /></div>
       </aside>
     </div>
-    <div className="session-history-grid">
-    <LiveScoreChart points={keyboard.trend} keyboard />
     <section className="overflow-hidden rounded-2xl border border-border bg-surface">
       <h2 className="p-4 font-bold text-heading">최근 입력</h2>
       {!snapshot.recent.length ? <p className="px-4 pb-4 text-sm text-muted">아직 입력이 없습니다</p> : <div className="overflow-x-auto"><table className="w-full min-w-[380px] table-fixed text-left text-sm">
@@ -45,7 +42,6 @@ export default function KeyboardSession() {
         <tbody>{snapshot.recent.slice(0, 5).map(result => <tr key={result.id} className="border-t border-border text-heading"><td className="truncate px-4 py-3 font-bold">{result.pressedKey}</td><td className="truncate px-4 py-3">{result.observedFinger ? fingerText[result.observedFinger] : '—'}</td><td className="px-4 py-3"><p className={`truncate font-bold ${result.evaluation.verdict === 'unknown' ? 'text-muted' : result.evaluation.verdict === 'mismatch' ? 'text-danger' : 'text-mode-keyboard'}`}>{scoreText(livePressScore(result))}</p><p className="truncate text-xs text-muted" title={reasonText[result.evaluation.reason]}>{reasonText[result.evaluation.reason]}</p></td></tr>)}</tbody>
       </table></div>}
     </section>
-    </div>
     <RecordingStatus errorsOnly />
   </SessionFrame>;
 }

@@ -74,6 +74,20 @@ test('hourly scores leave hours without rows empty and span the first to the las
   assert.equal(summary.upper.hourlyFloor, 60);
 });
 
+test('deviation hours follow the chosen period and leave out the previous one', () => {
+  const posture = [
+    postureRow({ hour: '9', deviationEpisodeCount: 1 }),
+    shoulderRow({ hour: '9', deviationEpisodeCount: 2 }),
+    postureRow({ date: '2026-09-29', hour: '15', recordIds: ['s0:turtle'], deviationEpisodeCount: 5 }),  // 7일 기준 이전 기간
+    postureRow({ date: '2026-09-20', hour: '20', recordIds: ['s9:turtle'], deviationEpisodeCount: 9 }),
+  ];
+  assert.deepEqual(build({ posture }).upper.deviationHours, [{ hour: 9, count: 3, strong: true }]);
+  const month = build({ posture, days: 30 }).upper.deviationHours;
+  assert.deepEqual([month[0].hour, month.at(-1).hour], [9, 20]);
+  assert.deepEqual(month.filter(hour => hour.strong).map(hour => [hour.hour, hour.count]), [[20, 9]]);
+  assert.deepEqual(build().upper.deviationHours, []);
+});
+
 test('a zero score day is 0, a day without records is null, and empty input stays empty', () => {
   const summary = build({ posture: [postureRow({ date: '2026-10-04', scoreTimeSum: 0 })] });
   assert.equal(summary.days.find(day => day.date === '2026-10-04').upper.turtle, 0);

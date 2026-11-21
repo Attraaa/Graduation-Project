@@ -12,7 +12,7 @@
 .session-tool:not(:disabled):hover { background: var(--color-nav-active); }
 .session-tool:disabled { opacity: .4; }
 .learning-session button:focus-visible { outline: 2px solid var(--color-secondary); outline-offset: 3px; }
-.session-workspace, .session-history-grid { display: grid; min-width: 0; gap: 16px; }
+.session-workspace { display: grid; min-width: 0; gap: 16px; }
 .session-camera, .session-insights { min-width: 0; overflow: hidden; border: 1px solid var(--color-border); border-radius: 16px; background: var(--color-surface); }
 .session-camera { display: flex; flex-direction: column; }
 .session-panel-heading { display: flex; min-height: 50px; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 18px; }
@@ -46,7 +46,6 @@
 .session-guidance { margin: 12px 18px 0; padding-top: 14px; border-top: 1px solid var(--color-border); }
 .session-guidance h3 { margin: 0 0 8px; font-size: 11px; font-weight: 650; }
 .session-guidance [role=region] { height: 100px; border-radius: 0; padding: 0; background: transparent; }
-.learning-session > section[aria-label$='점수 추이'], .session-history-grid > section { border-radius: 16px; }
-@media (min-width: 1180px) { .session-workspace { grid-template-columns: minmax(0, 1.75fr) minmax(280px, 1fr); align-items: stretch; } .session-history-grid { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); align-items: start; } }
+@media (min-width: 1180px) { .session-workspace { grid-template-columns: minmax(0, 1.75fr) minmax(280px, 1fr); align-items: stretch; } }
 @media (max-height: 850px) and (min-width: 640px) { .learning-session .session-preview { max-width: calc((100vh - 400px) * 16 / 9); min-width: 180px; align-self: center; } }
 @media (max-width: 639px) { .learning-session { gap: 16px; } .session-title h1 { font-size: 21px; } .session-tools { width: 100%; } .session-tool { flex: 1; } .session-controlbar { gap: 10px; padding: 12px; } .learning-session .session-controls { width: 100%; } .session-status { width: 100%; flex-direction: row; justify-content: space-between; align-items: center; } .session-panel-heading { padding: 12px 14px; } }

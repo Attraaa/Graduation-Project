@@ -1,4 +1,4 @@
-import type { DeviationHour } from './summary';
+import type { DeviationHour } from '../dashboard/summary';
 
 export default function DeviationHours({ hours }: { hours: DeviationHour[] }) {
   if (!hours.length) return <p className="text-sm text-muted">상체 기록이 쌓이면 보여요</p>;
