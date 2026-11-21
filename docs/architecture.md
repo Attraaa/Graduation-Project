@@ -39,7 +39,7 @@ Electron 개발 앱의 키보드 모드는 로컬 Python 프로세스를 자동 
 | `scripts/moti.ps1` | 앱/API/Python 실행과 검사 명령 묶음 |
 | `scripts/package-windows.ps1` | 새 임시 폴더에서 로컬 Electron 배포본으로 설치 파일 생성 후 `front/release/`에 완성 파일만 복사. 빌드 단계·완료 경로 표시 |
 | `scripts/package-keyboard.ps1`, `keyboard-detect/packaging/` | Windows x64 Python 분석기·모델·네이티브 라이브러리 묶음 생성. 실행 검사를 통과한 전체 폴더를 Electron `extraResources`의 `keyboard/`에 동봉 |
-| `front/electron/main.ts` | 준비된 주 창 표시, Python 키보드 프로세스, 신뢰 창 IPC·종료 전 기록 flush 요청 |
+| `front/electron/main.ts` | 준비된 주 창 표시, Python 키보드 프로세스, 신뢰 창 IPC·종료 전 기록 flush 요청. 화면이 여는 새 창(window.open)은 카메라 설정 창만 허용하고, 카카오맵 장소 링크(`externalLinks.ts`)는 기본 브라우저로 엶 |
 | `front/electron/preload.ts` | 키보드 시작·중지, motiRecords 종료 flush 및 주 창 전용 테마 IPC 경계 |
 | `front/electron/overlayWindow.ts`, `front/overlay.html`, `front/src/features/overlay/` | 독립 작은 창·준비 확인·위치 보정·복귀, 검증된 요약/명령 계약. 측정은 기존 본창 Provider가 계속 소유하며 작은 창은 별도 메모리 partition에서 제한된 API만 사용 |
 | `front/electron/notificationHandlers.ts`, `front/src/features/notifications/` | main의 포커스/오버레이/잠금 검사, 고정 문구 Windows 알림, 자세 확인·키보드 최근 20회 평균·기존 깜빡임 15초 신호와 전달 ACK, 운영 오류별 사건 큐. 키보드 입력은 이벤트마다 처리하고 경고별 반복 제한을 독립 관리. 점수·기록 정책과 분리 |
@@ -76,6 +76,7 @@ Electron 개발 앱의 키보드 모드는 로컬 Python 프로세스를 자동 
 | `front/src/pages/LearningHistory.tsx`, `front/src/features/history/` | 학습이력(주간·월간 달력, 시작일별 기록 줄, 오른쪽 상세, 기록 없는 날). `calendar.ts`가 달력·기록 줄·앞뒤 기록을 계산하고 `currentPolicies.ts`가 "이전 기준"을 판단. 세 모드의 세션 상세를 여기서 봄(키보드는 `KeyboardRecordDetail`) |
 | `front/src/pages/Settings.tsx`, `front/src/features/settings/` | 설정. 대시보드와 같은 카드 격자(계정, 비밀번호·이메일, 화면 테마, 알림, 상체·안구·키보드 모드 카드, 데이터 관리). `parts.tsx`가 카드·입력 캡션·구분 버튼·스위치·슬라이더·입력 창(`Modal`)을 제공함. `AccountSecurity.tsx`는 등록 이메일을 보여 주고, 이메일 변경(새 주소로 받은 인증 코드 → 현재 비밀번호)과 비밀번호 재설정(등록 이메일의 코드 확인 → 새 비밀번호)을 창으로 엶. 재설정 단계는 `hooks/usePasswordReset.ts`를 로그인 화면의 비밀번호 재설정(`pages/FindPassword.tsx`)과 함께 씀. `features/keyboard/KeyboardSettings.tsx`는 기존 UI와 관찰 동작을 유지하며 격자 배치만 맞춤. `preferences.ts`가 모드별 민감도(상체 자세 무너짐 10–100%, 안구 깜빡임 낮음/보통/높음)를 이 기기에 저장하고, `MonitoringProvider`가 상체 실행을 시작할 때 읽어 그 실행의 습관·깜빡임 정책에 고정. 테마·알림도 바꾸는 즉시 저장. 알림 켜기·반복 간격·소리는 `features/notifications/`에서 자세·키보드·깜빡임 경고에 공통 적용하고 경고 점수 슬라이더는 목·어깨에만 적용하며 측정 산식은 바꾸지 않음. Windows 네이티브 알림은 신뢰 주 창 IPC를 거쳐 Electron main에서 표시([규칙](monitoring.md#windows-자세-경고-알림)) |
 | `front/src/pages/AiReview.tsx`, `front/src/features/ai-review/` | AI 총평(별도 메뉴 `/ai-review`, 최종 위치 미정). 통계와 같은 기간 수치를 `input.ts`가 요청 형태로 바꾸고 보내기 전에 모두 표시하며, `ReviewCards.tsx`가 총평·잘한 점·개선할 점을 표시. 저장하지 않음. [안내](ai-review.md) |
+| `front/src/features/hospitals/` | 주변 병원 찾기(AI 총평 화면 맨 아래, 점수·총평과 연결하지 않음). 진료과와 동네·주소 또는 약 1km로 반올림한 현재 위치로 `GET /api/hospitals`를 부르고, `kakaoMap.ts`가 불러온 카카오 지도 SDK에 마커와 목록을 함께 표시. [안내](nearby-hospitals.md) |
 | `front/src/features/keyboard/KeyboardRecordDetail.tsx`, `KeyboardKeyExploration.tsx`, `keyExploration.ts` | 키보드 세션 상세 표시, 통계/이력 공용 히트맵·선택 키 표시, DOM 없는 키별 집계·연습 순위. 카메라/실시간 점수 정책을 소유하지 않음 |
 | `server/src/server.ts`, `config.ts` | 환경 검증 후 서버 시작. JWT 비밀값 자동 기본값 없음. AI 총평 키(`ANTHROPIC_API_KEY`)는 선택 |
 | `server/src/app.ts`, `http.ts` | API 조립과 공통 비동기 오류 응답 |
@@ -86,6 +87,7 @@ Electron 개발 앱의 키보드 모드는 로컬 Python 프로세스를 자동 
 | `server/src/repositories/sessions.ts` | MySQL SQL, 행 잠금, 트랜잭션, 통계 집계, 지표·날짜별 측정 데이터 기록/조회 |
 | `server/src/routes/feedback.ts` | 날짜·모드 단위 피드백 기록/조회. 서버가 요약을 만들지는 않음 |
 | `server/src/routes/ai.ts`, `services/aiReview.ts` | AI 총평 `POST /api/ai/review`(토큰 사용자만, 계정당 시간당 10회). 숫자·키 코드만 검사해 받고 `ANTHROPIC_API_KEY`로 Claude를 호출. 키가 없으면 503, 결과는 저장하지 않음. [안내](ai-review.md) |
+| `server/src/routes/hospitals.ts`, `services/hospitals.ts` | 주변 병원 찾기 `GET /api/hospitals`(토큰 사용자만). 진료과 4개만 받고, 카카오 로컬 API로 위치를 찾은 뒤 반경 5km 병원을 거리순 15곳 반환. `KAKAO_REST_API_KEY`가 없으면 503, 위치는 저장·로그하지 않음. [안내](nearby-hospitals.md) |
 | `server/src/routes/records.ts`, `repositories/records.ts`, `migrations/002_record_tables.sql` | 앱 기록 API(토큰 사용자만), MySQL 트랜잭션 저장·조회·삭제 세대 |
 | `server/migrations/` | 기존 DB에 적용하는 변경. `schema.sql`은 새 DB용 전체 정의 |
 | `server/test/` | 입력·인증·HTTP 오류·세션 재시도/소유권 회귀 검사 |

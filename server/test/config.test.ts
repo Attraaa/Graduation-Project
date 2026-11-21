@@ -24,6 +24,12 @@ test('the Anthropic API key is optional and trimmed; a blank value turns the AI 
   assert.equal(readConfig({ ...valid, ANTHROPIC_API_KEY: ' sk-ant-test\n' }).anthropicApiKey, 'sk-ant-test');
 });
 
+test('the Kakao REST API key is optional and trimmed; a blank value turns the hospital search off', () => {
+  assert.equal(readConfig(valid).kakaoRestApiKey, null);
+  assert.equal(readConfig({ ...valid, KAKAO_REST_API_KEY: '  ' }).kakaoRestApiKey, null);
+  assert.equal(readConfig({ ...valid, KAKAO_REST_API_KEY: ' kakao-test\n' }).kakaoRestApiKey, 'kakao-test');
+});
+
 test('explicit setup values produce a usable runtime configuration', () => {
   const config = readConfig({ ...valid, PORT: '4100', JWT_EXPIRES_IN: '30m' });
   assert.equal(config.port, 4100);

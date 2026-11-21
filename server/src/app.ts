@@ -12,9 +12,11 @@ import { createFeedbackRouter } from './routes/feedback.js';
 import { createRecordsRouter } from './routes/records.js';
 import { createAiRouter } from './routes/ai.js';
 import { createRecoveryRouter } from './routes/recovery.js';
+import { createHospitalsRouter } from './routes/hospitals.js';
 import { MysqlRecordRepository } from './repositories/records.js';
 import { createClaudeReviewer } from './services/aiReview.js';
 import { createSmtpMailer } from './services/mail.js';
+import { createKakaoHospitalSearch } from './services/hospitals.js';
 
 export function createApp(config: ServerConfig, pool: Pool) {
   const app = express();
@@ -34,6 +36,8 @@ export function createApp(config: ServerConfig, pool: Pool) {
     ? createClaudeReviewer(new Anthropic({ apiKey: config.anthropicApiKey, timeout: 40_000, maxRetries: 1 }))
     : null;
   app.use('/api/ai', createAiRouter(reviewer, auth));
+  // Optional: without KAKAO_REST_API_KEY the nearby hospital search answers 503 and every other route works as before.
+  app.use('/api/hospitals', createHospitalsRouter(config.kakaoRestApiKey ? createKakaoHospitalSearch(config.kakaoRestApiKey) : null, auth));
   // Liveness only: this intentionally does not imply that a DB has been provisioned.
   app.get('/health', (_req, res) => res.json({ status: 'ok' }));
   app.use(handleError);

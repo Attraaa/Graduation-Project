@@ -8,6 +8,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { trustedRecordUrl } from './recordHandlers'
 import { readKeyboardSettings, chooseKeyboardApp, updateKeyboardSettings } from './keyboardSettings'
 import { cameraSettingsUrl, canOpenCameraSettings } from './cameraWindow'
+import { isKakaoPlaceUrl } from './externalLinks'
 import { windowAppearance } from './windowAppearance'
 import { registerNotificationHandlers } from './notificationHandlers'
 import { OverlayWindow } from './overlayWindow'
@@ -249,11 +250,17 @@ function createWindow() {
 
   // Test active push message to Renderer-process.
   win.webContents.on('will-navigate', (event, url) => { if (!trustedRecordUrl(url, recordsPageUrl)) event.preventDefault() })
-  win.webContents.setWindowOpenHandler(({ url, frameName }) => canOpenCameraSettings(url, frameName, recordsPageUrl)
-    ? { action: 'allow', overrideBrowserWindowOptions: { parent: win!, minWidth: 800, minHeight: 480,
-      autoHideMenuBar: true, title: '카메라 설정 · Moti', titleBarStyle: 'hidden', ...windowAppearance(windowTheme),
-      webPreferences: { contextIsolation: true, nodeIntegration: false, backgroundThrottling: false, preload: undefined } } }
-    : { action: 'deny' })
+  win.webContents.setWindowOpenHandler(({ url, frameName }) => {
+    if (isKakaoPlaceUrl(url)) {
+      void shell.openExternal(url)
+      return { action: 'deny' }
+    }
+    return canOpenCameraSettings(url, frameName, recordsPageUrl)
+      ? { action: 'allow', overrideBrowserWindowOptions: { parent: win!, minWidth: 800, minHeight: 480,
+        autoHideMenuBar: true, title: '카메라 설정 · Moti', titleBarStyle: 'hidden', ...windowAppearance(windowTheme),
+        webPreferences: { contextIsolation: true, nodeIntegration: false, backgroundThrottling: false, preload: undefined } } }
+      : { action: 'deny' }
+  })
   win.webContents.on('did-create-window', child => {
     cameraWindow = child
     child.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))

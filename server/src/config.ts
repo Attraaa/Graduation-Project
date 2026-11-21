@@ -10,6 +10,8 @@ export interface ServerConfig {
   jwt: { secret: string; expiresIn: number };
   /** Key for the AI review (Claude). Optional: without it only /api/ai answers 503. */
   anthropicApiKey: string | null;
+  /** Kakao REST API key for the nearby hospital search. Optional: without it only /api/hospitals answers 503. */
+  kakaoRestApiKey: string | null;
   /** SMTP account that sends ID and password-reset mail. Optional: without it only those two routes answer 503. */
   mail: { host: string; port: number; user: string; password: string; from: string } | null;
 }
@@ -46,6 +48,7 @@ export function readConfig(env: NodeJS.ProcessEnv): ServerConfig {
     },
     jwt: { secret, expiresIn },
     anthropicApiKey: env.ANTHROPIC_API_KEY?.trim() || null,
+    kakaoRestApiKey: env.KAKAO_REST_API_KEY?.trim() || null,
     mail: smtp.host && smtp.user && smtp.password
       ? { host: smtp.host, port: port('SMTP_PORT', 465), user: smtp.user, password: smtp.password, from: env.MAIL_FROM?.trim() || smtp.user }
       : null,

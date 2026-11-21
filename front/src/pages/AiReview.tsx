@@ -11,6 +11,7 @@ import { CARD } from '../features/statistics/parts';
 import type { PeriodDays } from '../features/statistics/period';
 import { rangeText } from '../features/statistics/text';
 import { useStatisticsData } from '../features/statistics/useStatisticsData';
+import NearbyHospitals from '../features/hospitals/NearbyHospitals';
 
 const PERIODS: PeriodDays[] = [7, 30];
 const DOTS = { upper: 'bg-mode-upper', eye: 'bg-mode-eye', keyboard: 'bg-mode-keyboard' };
@@ -92,6 +93,8 @@ export default function AiReview() {
       )}
       {shown?.status === 'done' && <ReviewCards review={shown.review} />}
       {!shown && input && <p className={`${CARD} text-sm text-muted`}>총평 받기를 누르면 이 기간 기록으로 AI 총평을 만들어요.</p>}
+      {/* Always in the same place, whatever the scores: the list is never a reaction to the review. */}
+      <NearbyHospitals />
     </div>
   );
 }
