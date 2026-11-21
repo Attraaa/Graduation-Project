@@ -26,21 +26,20 @@ macOS arm64에서는 같은 역할의 `setup.command`, `moti.command`를 씁니�
 
 ## 다음 팀원과 AI가 읽을 순서
 
-1. [작업 원칙](AGENTS.md)
-2. [현재 구조와 코드 시작점](docs/architecture.md)
-3. [환경과 잠금 파일](docs/dependencies.md)
-4. [실행·검증 가이드](docs/development.md)
-5. [사용자 결정과 제품 설계](docs/product-decisions.md), [캘리브레이션 계약](docs/calibration.md)
-6. [남은 작업](docs/roadmap.md)
-7. [점수·습관 평가 검증 범위와 결과](docs/evaluation.md)
-8. [모드별 개발과 AI 협업](docs/collaboration.md)
+1. [현재 구조와 코드 시작점](docs/architecture.md)
+2. [환경과 잠금 파일](docs/dependencies.md)
+3. [실행·검증 가이드](docs/development.md)
+4. [사용자 결정과 제품 설계](docs/product-decisions.md), [캘리브레이션 계약](docs/calibration.md)
+5. [남은 작업](docs/roadmap.md)
+6. [점수·습관 평가 검증 범위와 결과](docs/evaluation.md)
+7. [모드별 개발과 AI 협업](docs/collaboration.md)
 
 ## AI에게 전달할 공통 작업 지침
 
 팀원이 AI와 새 작업을 시작할 때 아래 문구를 복사하고, 이어서 이번 작업 내용을 적습니다.
 
 ```text
-AGENTS.md와 README.md를 먼저 읽고, docs/architecture.md, docs/product-decisions.md, docs/roadmap.md를 확인해.
+README.md를 먼저 읽고, docs/architecture.md, docs/product-decisions.md, docs/roadmap.md를 확인해.
 확정된 결정과 제안·미구현 항목을 구분하고, 이번 작업과 관련된 코드부터 확인해.
 구조나 계약을 변경하면 문서도 함께 갱신해.
 
@@ -66,7 +65,5 @@ AGENTS.md와 README.md를 먼저 읽고, docs/architecture.md, docs/product-deci
 상체 시작 후 열린 눈 기준 3초와 안내된 깜빡임 3회로 개인 보정을 수집합니다. 보정 동작은 실제 빈도에 포함하지 않습니다. 깜빡임·자세 무너짐 민감도는 설정 화면에서 고르며, 상체를 시작할 때의 값으로 그 실행 동안 고정합니다.
 
 사이드바의 **오버레이**는 본창을 최소화하고 상체·키보드의 활성 시간과 제어를 작은 창에 표시합니다. **돌아가기**로 기존 화면과 실행 상태를 이어갑니다. 설정의 **Windows 알림**은 다른 앱을 보거나 오버레이를 사용하는 동안 자세·키보드·깜빡임 경고와 측정·저장 문제를 안내합니다. 키보드는 최근 20회 유효 판정 평균 70점 이하, 깜빡임은 보정 후 눈을 뜬 채 유효 관찰 15초 동안 깜빡임이 없을 때 알립니다. 본창·카메라 설정에 포커스가 있으면 자동 알림을 생략하며, 수동 알림 테스트는 예외입니다. [알림·오버레이 동작](docs/monitoring.md)
-
-Windows의 `eye.cmd` 브라우저 시연도 상체 화면으로 연결합니다. 이 명령은 프론트만 설치하므로 Electron/키보드 실행에는 기존 `setup.cmd`를 사용하세요. 안구 집계의 서버 저장·통계·학습이력 계약은 유지합니다.
 
 기능·모델·실행·검증 한계 및 팀원의 브랜치 적용 방법은 [docs/eye-mode.md](docs/eye-mode.md)를 참고하세요.

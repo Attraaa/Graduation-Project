@@ -62,7 +62,7 @@ README와 docs/collaboration.md, docs/evaluation.md를 읽어.
 
 ## 기록 담당 경계 (2026-09-19, 2026-10-03 서버 저장으로 변경)
 
-목/어깨의 표시 차이는 `front/src/features/records/modes/turtle.ts`, `shoulder.ts`에 둡니다. `database/contracts.ts`(버전·직렬화), `recorder.ts`(시간 분할), `aggregation.ts`(순수 합산), `front/src/features/records/api.ts`(HTTP), `server/src/routes/records.ts`·`repositories/records.ts`(API·MySQL)는 공통 연결 담당자가 조정합니다. `database/` 계약을 바꾸면 서버도 같은 검증기를 쓰므로 서버를 다시 빌드·배포해야 합니다. 기록 기능이 점수/관측/카메라 정책을 소유하지 않습니다. 저장 경로와 복구·삭제 계약 변경은 [database/README.md](../database/README.md)와 해당 테스트를 함께 갱신합니다.
+목·어깨 기록은 `front/src/features/statistics/UpperPanel.tsx`와 `front/src/features/history/RecordDetail.tsx`에서 표시합니다. `database/contracts.ts`(버전·직렬화), `recorder.ts`(시간 분할), `aggregation.ts`(순수 합산), `front/src/features/records/api.ts`(HTTP), `server/src/routes/records.ts`·`repositories/records.ts`(API·MySQL)는 공통 연결 담당자가 조정합니다. `database/` 계약을 바꾸면 서버도 같은 검증기를 쓰므로 서버를 다시 빌드·배포해야 합니다. 기록 기능이 점수/관측/카메라 정책을 소유하지 않습니다. 저장 경로와 복구·삭제 계약 변경은 [database/README.md](../database/README.md)와 해당 테스트를 함께 갱신합니다.
 
 ## 안구 모드 담당 경계
 

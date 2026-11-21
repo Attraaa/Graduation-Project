@@ -28,7 +28,7 @@
 
 정섭님의 최신 main에 확정된 서버 전용 기록·JWT 로그인에 맞춰 새 안구 측정부터 Moti API 서버 MySQL에 저장합니다. 깜빡임, 실행/유효 시간, 가까워짐·깜빡임 안내 횟수, 사용자 확인 휴식 완료 횟수를 보관합니다. 통계의 안구 모드에서 최근 7/30일, 학습이력에서 시작일별 세션·분별 상세를 확인합니다. 아래의 과거 메모리 전용 설명은 이 변경 이전 상태입니다.
 
-중지·화면 이동·재시작·앱 종료에 저장하고, 휴식·거리 기준 재수집은 같은 기록을 유지합니다. 브라우저 eye.cmd 시연도 로그인하면 같은 API로 저장하며 로그인/네트워크 상태를 화면에 안내합니다. 기존에 저장하지 않았던 결과는 소급 복원하지 않습니다. 서버의 안구 추가 전용 003 마이그레이션과 재시도·삭제 계약은 [database/README.md](../database/README.md)를 참고하세요.
+중지·화면 이동·재시작·앱 종료에 저장하고, 휴식·거리 기준 재수집은 같은 기록을 유지합니다. 브라우저 개발 모드도 로그인하면 같은 API로 저장하며 로그인/네트워크 상태를 화면에 안내합니다. 기존에 저장하지 않았던 결과는 소급 복원하지 않습니다. 서버의 안구 추가 전용 003 마이그레이션과 재시도·삭제 계약은 [database/README.md](../database/README.md)를 참고하세요.
 
 ## 2026-10-02 main 통합 및 모드 전환 수정
 
@@ -59,14 +59,14 @@
 
 ## 2. 실행
 
-1. 저장소 루트의 `moti.cmd app`으로 앱을 실행합니다. 안구 브라우저 시연용 `eye.cmd`도 상체 화면으로 연결합니다.
+1. 저장소 루트의 `moti.cmd app`으로 앱을 실행합니다.
 2. 홈의 상체 설정·상세에서 **카메라 설정**을 열어 상체/키보드의 장치를 선택합니다. 정면 카메라는 얼굴과 양쪽 어깨가 보이도록 고정합니다.
 3. 깜빡임 민감도를 바꾸려면 먼저 설정 화면의 안구 카드에서 선택합니다(기본 보통). 홈의 **상체 시작**을 누릅니다. 목·어깨와 안구가 같은 카메라를 사용하며 민감도는 시작할 때의 설정값으로 고정합니다. 눈을 편안하게 뜨고 정면을 3초간 유지한 뒤, 짧은 보정 안내에 따라 양쪽 눈을 3회 깜빡입니다.
 4. 보정 3회는 실제 횟수에 포함하지 않습니다. 빈도는 보정 후 **유효 관찰 30초부터** 표시하며 세션 평균과 최근 빈도를 구분합니다. 측정 화면에는 안구 점수·민감도 선택·휴식 UI가 없습니다.
 5. 홈/상세에서 상체를 **일시정지/재개**할 수 있습니다. 상체 상세의 **기준 다시 잡기**는 새 기준을 수집하며 안구 누적 기록을 유지합니다. 키보드는 별도 카메라에서 독립적으로 실행·일시정지합니다.
 6. **중지**하면 해당 모드의 카메라와 모델을 해제합니다. 페이지 이동으로는 관찰이 종료되지 않습니다. 로그인한 계정의 집계는 서버에 저장하며 통계·학습이력에서 확인합니다.
 
-`eye.cmd`는 프로젝트 전용 Node/npm과 uv 도구가 없으면 기존 `setup.ps1 -ToolsOnly`로 준비하고, 프론트 의존성만 설치합니다. uv 실행 파일은 기존 도구 검사 계약 때문에 설치되지만 Python 환경/모델은 설치하지 않습니다. 같은 폴더의 데스크톱 실행 환경을 깨뜨리지 않도록 Electron 설치 단계도 유지합니다. 따라서 첫 실행에는 Electron 다운로드 시간도 걸릴 수 있으나 실행 화면은 **브라우저 안구 시연용**입니다. Electron/키보드까지 실행하려면 기존 `setup.cmd`를 먼저 실행한 뒤 `moti.cmd app`을 사용합니다.
+브라우저에서 확인하려면 [프론트 실행 안내](../front/README.md)의 `npm run dev:browser`로 실행하고 상체 화면을 엽니다.
 
 브라우저는 `localhost` 또는 `127.0.0.1`에서 실행하세요. 기존 AWS의 HTTP IP 주소로 올리는 것만으로는 브라우저 카메라를 사용할 수 없습니다. 원격 배포 시 HTTPS 설정은 별도입니다. 이번 작업은 AWS/기존 DB에 아무것도 배포하지 않았습니다.
 
@@ -122,7 +122,7 @@
 | 파일 | 책임 |
 | --- | --- |
 | `front/src/features/eye/EyeSession.tsx` | 시작/중지/재시작, 카드, 휴식 버튼과 설명 |
-| `front/src/features/eye/EyeCalibrationPanel.tsx` | 3초/3회 기준 수집 안내. 현재 화면에서는 쓰지 않음(보정 안내는 `EyeCalibrationGuide.tsx`). 민감도 선택은 설정 화면(`features/settings/preferences.ts`)으로 이동 |
+| `front/src/features/eye/EyeCalibrationGuide.tsx` | 3초/3회 기준 수집 안내. 민감도 선택은 설정 화면(`features/settings/preferences.ts`)에서 제공 |
 | `front/src/features/eye/EyeMonitor.tsx` | 웹캠·모델 연결, 추론 루프, 유실/화면 숨김 처리 |
 | `front/src/features/eye/streamStatus.ts` | 첫 프레임 미도착·영상 정지 상태와 장치/해상도 변경 판정 |
 | `front/src/features/eye/runner.ts` | 늦게 도착한 권한/모델 처리와 자원 해제 |
@@ -130,11 +130,9 @@
 | `front/src/features/eye/measurement.ts` | 순수 기준 수집·깜빡임·유효 시간·크기 변화 계산 |
 | `front/src/features/eye/blinkCalibration.ts` | 양안 교정 동작·개인별 열림/감김 임계값·짧은 동작의 시간 판정 |
 | `front/src/features/eye/eyePolicy.ts` | 버전과 조정 가능한 정책 수치 |
-| `front/src/features/eye/breakTimer.ts` | 명시적 휴식 시간과 완료 규칙 |
 | `front/src/pages/LearningSession.tsx` | 기존 안구 placeholder 대신 실제 화면 연결 |
 | `front/public/models/face_landmarker.task` | 로컬 사전 학습 모델 (3,758,596 bytes) |
 | `front/scripts/copy-mediapipe.mjs` | 잠긴 패키지의 WASM 복사와 모델 SHA-256 확인 |
-| `eye.cmd`, `scripts/eye.ps1` | Python/DB 없이 안구 화면을 실행하는 Windows 진입점 |
 | `front/tests/eye-*.test.mjs` | 계산과 비동기 정리의 자동 테스트 |
 | `front/tests/eye-browser.html`, `eye-browser.tsx` | 실제 카메라 대신 빈 캔버스를 넣는 개발 전용 통합 확인 화면 |
 
@@ -161,7 +159,7 @@ Pop-Location
 
 실촬영은 먼저 사람이 옆에서 센 깜빡임과 1분 관측 횟수를 비교하세요. 정면/안경/어두운 조명 각각 오검출·누락을 메모하고, 한쪽 윙크·1초 이상 감기·잠깐 얼굴 가리기가 횟수를 부풀리지 않는지 확인합니다. 상체를 중지하면 카메라가 해제되고, 화면 이동·키보드 시작은 진행 중인 상체 관찰을 유지하는지도 확인하세요. 가까워짐 계산은 보존하되 현재 UI에 별도 안내/휴식 영역을 표시하지 않습니다. 정책을 조정하면 버전과 테스트, 이 문서의 수치를 함께 바꿉니다.
 
-개발용 가짜 영상 확인은 `eye.cmd` 실행 후 `/tests/eye-browser.html`로 접속합니다. 첫 프레임 정지는 `/tests/eye-browser.html?freeze=1`로 확인합니다. 이 페이지는 실제 카메라를 열지 않습니다. 일반 사용자 진입점·프로덕션 빌드에는 포함되지 않습니다.
+개발용 가짜 영상 확인은 `npm run dev:browser` 실행 후 `/tests/eye-browser.html`로 접속합니다. 첫 프레임 정지는 `/tests/eye-browser.html?freeze=1`로 확인합니다. 이 페이지는 실제 카메라를 열지 않습니다. 일반 사용자 진입점·프로덕션 빌드에는 포함되지 않습니다.
 
 ## 6. 근거·모델 출처
 
@@ -193,7 +191,7 @@ git switch --track origin/codex/eye-mode
 .\moti.cmd app
 ```
 
-이미 해당 로컬 브랜치가 있으면 `git switch codex/eye-mode` 후 `git pull --ff-only`를 사용합니다. Git을 쓰지 않으면 GitHub에서 **codex/eye-mode 브랜치를 선택한 다음** Download ZIP으로 새 폴더에 받아도 됩니다. 앱에서 안구 모드를 선택하세요. 안구 브라우저 시연만 필요하면 `eye.cmd`로 실행할 수 있습니다.
+이미 해당 로컬 브랜치가 있으면 `git switch codex/eye-mode` 후 `git pull --ff-only`를 사용합니다. Git을 쓰지 않으면 GitHub에서 **codex/eye-mode 브랜치를 선택한 다음** Download ZIP으로 새 폴더에 받아도 됩니다. 현재 앱에서는 상체를 시작하면 안구 관찰도 시작합니다.
 
 폴더를 올리는 것만으로 다른 브랜치나 EC2에 적용되지는 않습니다. 이 브랜치에서 확인한 뒤 main 병합 여부를 팀에서 결정합니다. 안구 코드만 따로 복사하면 의존성·모델·라우트 연결이 빠질 수 있으므로, 이번 변경 묶음을 브랜치/PR 단위로 검토하세요. 다른 사람의 `package.json`·잠금 파일 변경과 충돌하면 기존 변경을 보존하고 재검증합니다.
 

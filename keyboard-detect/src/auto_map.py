@@ -115,19 +115,6 @@ def detect_corners_robust(model, image: np.ndarray, conf: float = 0.1,
     }
 
 
-def detect_corners(model, image: np.ndarray, conf: float = 0.1
-                   ) -> Dict[str, Tuple[float, float]]:
-    """Run YOLO and return one (cx,cy) per corner class (highest confidence).
-    Raises if any of the 4 corners is missing."""
-    raw = detect_corners_raw(model, image, conf)
-    missing = set(CORNER_ALIASES) - set(raw)
-    if missing:
-        raise RuntimeError(
-            f"YOLO failed to detect corner(s): {sorted(missing)}. Found: {sorted(raw)}"
-        )
-    return {k: (v[0], v[1]) for k, v in raw.items()}
-
-
 def detect_corners_raw(model, image: np.ndarray, conf: float = 0.1,
                        tta: bool = False, imgsz: int = None
                        ) -> Dict[str, Tuple[float, float, float]]:

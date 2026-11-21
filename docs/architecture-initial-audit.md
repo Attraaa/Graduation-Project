@@ -65,7 +65,7 @@ front/
 | 측정 시작·중지·시간 | 화면 상태와 1초 타이머. 재시작 시 시간·점수 초기화 | [LearningSession.tsx](../front/src/pages/LearningSession.tsx) |
 | 화면 점수 | 100에서 난수로 감소, 최저 58. 카메라 결과와 무관하며 상태 표시는 80점 기준 | 같은 파일의 `useEffect`, `isGoodPosture` |
 | 자세 인식 | Pose 랜드마크와 목 각도 판정. `turtle`에만 실제 판정 분기 존재 | [PostureMonitor.tsx](../front/src/components/PostureMonitor.tsx) |
-| 어깨·키보드·안구 모드 | 선택 UI 있음. 어깨 대칭 계산 함수는 있으나 모니터에서 사용하지 않음. 키보드/안구 전용 측정 연결 없음 | [modes.tsx](../front/src/data/modes.tsx), [postureCalculator.ts](../front/src/utils/postureCalculator.ts) |
+| 어깨·키보드·안구 모드 | 선택 UI 있음. 어깨 대칭 계산 함수는 있으나 모니터에서 사용하지 않음. 키보드/안구 전용 측정 연결 없음 | [modes.tsx](../front/src/data/modes.tsx), 당시의 `front/src/utils/postureCalculator.ts` |
 | 첫 자세 캘리브레이션 | 기준 자세 수집·유효성 검사·저장·재설정 흐름을 현재 소스에서 찾지 못함 | 구현 전 팀 확인 필요 |
 | 카메라 선택 | 셀렉트는 고정 옵션이며 `deviceId` 연결 없음. 웹캠은 1280×720을 우선 요청 | [LearningSession.tsx](../front/src/pages/LearningSession.tsx), [useWebcam.ts](../front/src/hooks/useWebcam.ts) |
 | 통계·이력 | 고정된 예시 배열 사용 | [Statistics.tsx](../front/src/pages/Statistics.tsx), [mockLearningHistory.ts](../front/src/data/mockLearningHistory.ts), [LearningHistory.tsx](../front/src/pages/LearningHistory.tsx) |

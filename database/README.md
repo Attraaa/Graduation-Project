@@ -16,7 +16,7 @@
 2. `recorder.ts / CaptureRecorder`가 실제 분 경계에 유효 구간의 사다리꼴 점수 적분을 분할합니다. 원시 프레임·영상·좌표·비밀번호는 저장하지 않습니다.
 3. renderer는 약 1초마다 바뀐 분 버킷을 최대 120개씩 전달합니다. `contracts.ts`는 ID, 세대, 순번, 버전, 누적 합, 시간 범위의 직렬화 계약입니다.
 4. `features/records/api.ts`가 같은 `RecordsApi` 계약을 HTTP로 구현합니다. 서버의 `server/src/routes/records.ts`가 같은 `database/` 검증기로 입력을 다시 검사하고, `server/src/repositories/records.ts / MysqlRecordRepository`가 트랜잭션으로 저장합니다. 기록의 owner는 로그인 사용자 ID 문자열이며, 서버는 요청 본문의 owner가 토큰 사용자와 다르면 403으로 거절합니다. 조회는 토큰 사용자 기준이며 owner를 받지 않습니다.
-5. `Statistics`와 `LearningHistory`가 API로 실제 데이터를 조회합니다. 목/어깨 표시 어댑터는 `front/src/features/records/modes/`에 있습니다.
+5. `Statistics`와 `LearningHistory`가 API로 실제 데이터를 조회합니다. 목·어깨 통계 표시는 `front/src/features/statistics/UpperPanel.tsx`에, 학습이력 상세 표시는 `front/src/features/history/RecordDetail.tsx`에 있습니다.
 6. Electron main은 창을 닫을 때 renderer에 미전송 배치를 서버로 보내도록 요청(`records:closing`)만 합니다.
 
 ## 시간과 숫자의 의미

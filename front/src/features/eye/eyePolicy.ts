@@ -22,6 +22,4 @@ export const eyePolicy = {
   nearRatio: 1.25,
   nearReleaseRatio: 1.15,
   nearHoldMs: 3000,
-  breakIntervalMs: 20 * 60 * 1000,
-  breakDurationMs: 20000,
 } as const;

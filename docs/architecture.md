@@ -48,7 +48,7 @@ Electron 개발 앱의 키보드 모드는 로컬 Python 프로세스를 자동 
 | `front/src/components/layout/WindowTitleBar.tsx`, `front/electron/windowAppearance.ts` | 테마 제목 표시줄과 Windows 기본 창 버튼 overlay. 브라우저에는 자체 표시줄을 추가하지 않음 |
 | `front/src/components/layout/AppLayout.tsx` | 사이드바와 공통 화면 틀/Outlet |
 | `front/src/styles/tokens.css` | 공통 색상, 의미별 CSS 변수, 다크 테마, 대시보드 모드 색(`mode-*`)·`track`·`nav-active` |
-| `front/src/components/Button.tsx`, `Sidebar.tsx`, `ModeSelector.tsx` | 공유 UI. 새 화면은 공통 토큰/컴포넌트부터 사용. `ModeSelector`는 2026-10-06 대시보드 개편 뒤 쓰지 않지만 되돌리기용으로 남김 |
+| `front/src/components/Button.tsx`, `Sidebar.tsx` | 공유 UI. 새 화면은 공통 토큰과 컴포넌트부터 사용 |
 | `front/src/pages/Dashboard.tsx`, `front/src/features/dashboard/` | 데이터 위젯 대시보드. `summary.ts`는 기존 기록 API 응답에서 모드별 최신 정책 묶음만으로 카드·7일 그래프·타임라인·이탈 시간대를 계산하는 순수 함수, `useDashboardData.ts`가 네 출처를 불러옴. [설계](superpowers/specs/2026-10-06-dashboard-redesign-design.md). 통계·학습이력도 `summary.ts`(날짜 helper·정책 묶음·날짜별 값·기록 줄), `format.ts`, `DayDetail`, `ScoreRing`, `SourceState`를 가져다 씀 |
 | `front/src/components/AppDialog.tsx`, `components/dialog/ModalFrame.tsx` | 라우터 내부의 대화상자 FIFO 큐와 네이티브 모달 표시. 화면 이동/Provider 해제 때 대기 요청을 취소하고 이전 화면의 늦은 호출을 무시 |
 | `front/src/components/dialog/dialogContext.ts`, `useDialog.ts` | 대화상자 타입/상태 계약과 호출 훅 |
@@ -77,7 +77,6 @@ Electron 개발 앱의 키보드 모드는 로컬 Python 프로세스를 자동 
 | `front/src/pages/Settings.tsx`, `front/src/features/settings/` | 설정. 대시보드와 같은 카드 격자(계정, 비밀번호·이메일, 화면 테마, 알림, 상체·안구·키보드 모드 카드, 데이터 관리). `parts.tsx`가 카드·입력 캡션·구분 버튼·스위치·슬라이더·입력 창(`Modal`)을 제공함. `AccountSecurity.tsx`는 등록 이메일을 보여 주고, 이메일 변경(새 주소로 받은 인증 코드 → 현재 비밀번호)과 비밀번호 재설정(등록 이메일의 코드 확인 → 새 비밀번호)을 창으로 엶. 재설정 단계는 `hooks/usePasswordReset.ts`를 로그인 화면의 비밀번호 재설정(`pages/FindPassword.tsx`)과 함께 씀. `features/keyboard/KeyboardSettings.tsx`는 기존 UI와 관찰 동작을 유지하며 격자 배치만 맞춤. `preferences.ts`가 모드별 민감도(상체 자세 무너짐 10–100%, 안구 깜빡임 낮음/보통/높음)를 이 기기에 저장하고, `MonitoringProvider`가 상체 실행을 시작할 때 읽어 그 실행의 습관·깜빡임 정책에 고정. 테마·알림도 바꾸는 즉시 저장. 알림 켜기·반복 간격·소리는 `features/notifications/`에서 자세·키보드·깜빡임 경고에 공통 적용하고 경고 점수 슬라이더는 목·어깨에만 적용하며 측정 산식은 바꾸지 않음. Windows 네이티브 알림은 신뢰 주 창 IPC를 거쳐 Electron main에서 표시([규칙](monitoring.md#windows-자세-경고-알림)) |
 | `front/src/pages/AiReview.tsx`, `front/src/features/ai-review/` | AI 총평(별도 메뉴 `/ai-review`, 최종 위치 미정). 통계와 같은 기간 수치를 `input.ts`가 요청 형태로 바꾸고 보내기 전에 모두 표시하며, `ReviewCards.tsx`가 총평·잘한 점·개선할 점을 표시. 저장하지 않음. [안내](ai-review.md) |
 | `front/src/features/keyboard/KeyboardRecordDetail.tsx`, `KeyboardKeyExploration.tsx`, `keyExploration.ts` | 키보드 세션 상세 표시, 통계/이력 공용 히트맵·선택 키 표시, DOM 없는 키별 집계·연습 순위. 카메라/실시간 점수 정책을 소유하지 않음 |
-| `features/records/StatisticsData.tsx`, `features/eye/EyeStatistics.tsx`, `EyeRecordData.tsx`의 `EyeStatisticsData`, `records/views.ts`의 `historyView`·`historyGraph` | 2026-10-07 통계·학습이력 개편 뒤 쓰지 않지만 되돌리기용으로 남김(기존 테스트 유지) |
 | `server/src/server.ts`, `config.ts` | 환경 검증 후 서버 시작. JWT 비밀값 자동 기본값 없음. AI 총평 키(`ANTHROPIC_API_KEY`)는 선택 |
 | `server/src/app.ts`, `http.ts` | API 조립과 공통 비동기 오류 응답 |
 | `server/src/validation.ts` | HTTP 입력을 런타임에서 검사 |
@@ -103,7 +102,7 @@ Electron 개발 앱의 키보드 모드는 로컬 Python 프로세스를 자동 
 
 키보드는 `MonitoringProvider → KeyboardMonitor → loopback Python service → runtime adapter → finger policy → aggregate recording` 순서이며 `KeyboardSession`은 화면입니다. Electron main은 빈 로컬 포트와 세션 토큰으로 개발 시 `.venv` Python을, 설치 앱에서는 `resources/keyboard/moti-keyboard.exe`를 실행합니다. 설치 분석기는 Python·CPU 추론 라이브러리·모델·키 맵을 함께 배포하며 사용자에게 별도 Python 설치를 요구하지 않습니다. 기본 입력은 Moti 화면의 물리 `code`이고 설정에서 승인한 일반 앱은 시작 때 함께 관찰합니다. 빈 승인 목록은 Moti 관찰만 실행합니다. 일시정지는 입력/프레임·승인 앱 관찰을 멈추고 서버의 임시 프레임/입력 큐를 비우며 재개 때 맵을 새로 확인하고 기존 세션 집계를 이어갑니다. 승인 경로·foreground 권한과 미승인·관리자·확인 불가 앱 제외 경계는 유지합니다.
 
-안구 v3는 3초간 열린 양쪽 눈·거리 기준을 수집하고 안내된 양안 깜빡임 3회로 개인별 판정 기준을 정합니다. `blinkCalibration.ts`가 순수 기준 수집·양안 주기를, `EyeCalibrationGuide.tsx`가 홈/상체 상세에서 보정 진행을 안내합니다. 민감도는 설정 화면의 안구 카드에서 고르고(기본 보통), 공통 모니터링 런타임이 상체 시작 때 읽어 측정·저장에 같은 값을 쓰며 그 실행 동안 고정합니다. `EyeCalibrationPanel.tsx`는 현재 화면에서 쓰지 않으며 민감도 선택 없이 기준 수집 안내만 남아 있습니다. 새 기록은 `eye-habits-v3:low|normal|high`이고 기존 v2 및 다른 민감도와 합산하지 않습니다. 개인 눈 기준은 세션 메모리에만 두며, 교정 동작은 측정 횟수·유효 시간에서 제외합니다. 기준 재수집과 짧은 프레임의 보호 조건은 안구 가이드를 따릅니다.
+안구 v3는 3초간 열린 양쪽 눈·거리 기준을 수집하고 안내된 양안 깜빡임 3회로 개인별 판정 기준을 정합니다. `blinkCalibration.ts`가 순수 기준 수집·양안 주기를, `EyeCalibrationGuide.tsx`가 홈/상체 상세에서 보정 진행을 안내합니다. 민감도는 설정 화면의 안구 카드에서 고르고(기본 보통), 공통 모니터링 런타임이 상체 시작 때 읽어 측정·저장에 같은 값을 쓰며 그 실행 동안 고정합니다. 새 기록은 `eye-habits-v3:low|normal|high`이고 기존 v2 및 다른 민감도와 합산하지 않습니다. 개인 눈 기준은 세션 메모리에만 두며, 교정 동작은 측정 횟수·유효 시간에서 제외합니다. 기준 재수집과 짧은 프레임의 보호 조건은 안구 가이드를 따릅니다.
 
 Python은 손끝 후보와 프레임 시간차를 반환하고 앱의 `ansi-qwerty-touch:2.0.0` 정책이 100·70·0/보류를 결정합니다. 손 가림을 직접 감지하는 모델은 없으며 관측 부족·가까운 후보·시간 차이를 보류 근거로 사용합니다. 손가락 일관성은 별도 지표이며 가산점이 아닙니다. 원문·입력 순서·영상은 저장하지 않고 날짜·키·상황·손가락·판정 횟수만 서버에 저장합니다. 정책별 통계·히트맵은 Statistics의 키보드 탭에, 세션별 키 탐색 상세는 학습이력에 있습니다. 두 화면은 히트맵/선택 키 컴포넌트를 공유합니다. 학습이력 응답에 키보드 요약이 추가되어도 홈 타임라인(최신 정책 묶음)과 학습이력 화면(모든 정책)은 키보드 줄을 키보드 통계 출처에서 한 번만 만듭니다. crop·자유 회전·필터는 미리보기와 분석에 동일하게 적용하고 변경 시 기존 맵과 프레임을 폐기합니다. 세부 산식/품질 한계는 [키보드 계약](../front/src/features/keyboard/README.md), 저장은 [database](../database/README.md)를 따릅니다.
 
@@ -158,6 +157,6 @@ Python은 손끝 후보와 프레임 시간차를 반환하고 앱의 `ansi-qwer
 
 React/Electron, UI 자산, Python 키보드 맵/손끝 분석은 재사용했습니다. 비동기 카메라 연결, 기준 자세 수집, 세션 종료·검증 경계는 새로 구성했습니다. 전체 재작성보다 비용이 낮다는 설계 판단이며 성능 향상을 측정한 결과는 아닙니다.
 
-`front/src/utils/postureCalculator.ts`의 기존 각도 계산 유틸은 현재 새 모니터에서 사용하지 않습니다. 이전 코드를 임의 삭제하지 않고 남겼으며, 정면 캘리브레이션과 혼용하지 않습니다. 기존 Dockerfile과 두 SQL은 이전 구현 자료로 남아 있으므로 현재 개발 진입점 대신 실행하지 않습니다.
+기존 Dockerfile과 두 SQL은 이전 구현 자료입니다. 현재 개발에는 저장소 루트의 실행 스크립트와 서버 마이그레이션을 사용합니다.
 
 안구 기록은 `EyeMonitor → EyeRecorder → features/records/api.ts → /api/records/eye → MysqlRecordRepository`로 저장합니다. 통계는 `/eye-statistics`, 통합 달력은 `/history`, 안구 상세는 `/eye/:id`를 사용하며 JWT 사용자·record_owners 잠금·삭제 세대와 재시도 계약을 다른 모드와 공유합니다.

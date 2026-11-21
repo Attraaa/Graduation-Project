@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createEyeMeasurement } from '../src/features/eye/measurement.ts';
 import { readEyes } from '../src/features/eye/observation.ts';
-import { createBreakTimer } from '../src/features/eye/breakTimer.ts';
 import { eyeCameraChanged, eyeStreamIssue } from '../src/features/eye/streamStatus.ts';
 
 const open = { left: 0.05, right: 0.1, faceWidth: 0.3 };
@@ -99,27 +98,6 @@ test('model adapter uses category names; rejects multiple faces, tilt, crop and 
   const missing = result(); missing.faceBlendshapes = [];
   assert.equal(readEyes(missing, 1280, 720).observation, null);
 });
-test('20-minute break due time; early cancel cannot reset work or count a break', () => {
-  const t = createBreakTimer(); t.tick(0);
-  for (let now = 1000; now <= 1200000; now += 1000) t.tick(now);
-  assert.equal(t.snapshot().due, true);
-  t.start(1200000); t.tick(1201000);
-  assert.equal(t.finish(1201000).completed, 0);
-  assert.equal(t.snapshot().due, true);
-  t.start(1201000);
-  for (let now = 1202000; now <= 1221000; now += 1000) t.tick(now);
-  assert.equal(t.snapshot().remainingMs, 0);
-  assert.equal(t.snapshot().completed, 0); // Still requires explicit user confirmation.
-  assert.equal(t.finish(1221000).completed, 1);
-  assert.equal(t.snapshot().due, false);
-  assert.equal(t.finish(1221000).completed, 1);
-});
-test('sleep does not silently complete a rest timer', () => {
-  const t = createBreakTimer(); t.start(0);
-  assert.equal(t.tick(60000).remainingMs, 20000);
-  assert.equal(t.finish(60000).completed, 0);
-});
-
 test('recent blink rate expires old events while session totals stay intact', () => {
   const f = fixture();
   f.step(); f.step(closed); f.step(closed); f.step();

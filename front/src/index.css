@@ -1,11 +1,6 @@
 @import "tailwindcss";
 @import "./styles/tokens.css";
 
-@utility font-duo {
-  font-family: 'Nunito', 'Inter', system-ui, sans-serif;
-  font-weight: 700;
-}
-
 body {
   background-color: var(--color-background);
   color: var(--color-text);
@@ -64,8 +59,7 @@ body {
 }
 
 .dark-theme .text-gray-600,
-.dark-theme .text-gray-500,
-.dark-theme .text-gray-400 {
+.dark-theme .text-gray-500 {
   color: var(--color-muted);
 }
 

@@ -6,7 +6,6 @@ import { emptyEyeTotals, parseEyeBatch, eyeRate } from '../../database/eye.ts';
 import { createEyeMeasurement } from '../src/features/eye/measurement.ts';
 import { eyePolicyVersion } from '../src/features/eye/eyePolicy.ts';
 import { sampleBatch } from './fixtures/record-batch.mjs';
-import { historyView } from '../src/features/records/views.ts';
 
 const start = Date.parse('2026-10-01T14:59:59.900Z');
 const record = (id = 'eye') => ({ ...emptyEyeTotals(), id, owner: '7', mode: 'eye', startedAt: start, updatedAt: start, offsetMinutes: -540, policyVersion: 'eye-habits-v2', status: 'running' });
@@ -27,7 +26,7 @@ test('eye minute boundaries, local midnight, reminder edges and declared breaks 
   assert.equal(rows[0].blinks, 0); assert.equal(rows[1].blinks, 1);
   assert.equal(rows[1].breaks, 1); assert.equal(rows[1].nearReminders, 1);
   assert.equal(db.history(query).counts['2026-10-01'], 1);
-  assert.equal(historyView(db.eyeDetail('7', 'eye').record).mode, 'eye');
+  assert.equal(db.eyeDetail('7', 'eye').record.mode, 'eye');
   assert.equal(eyeRate({ blinks: 0, validMs: 0 }), null);
   assert.equal(eyeRate({ blinks: 0, validMs: 30000 }), 0);
 });
