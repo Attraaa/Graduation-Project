@@ -9,6 +9,9 @@ lerna-debug.log*
 
 node_modules
 public/mediapipe/
+public/ort/
+# E19 parity fixtures hold study participants' face landmarks: local only (docs/calibration.md)
+tests/fixtures/fhp-e19-parity/
 .moti-cache/
 dist
 dist-ssr
