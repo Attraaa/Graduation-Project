@@ -9,12 +9,6 @@ import { YAW_LIMIT } from './scoreSettings.ts';
  * 한 프레임은 카메라에서 전달된 한 시점의 관측 결과입니다.
  */
 export interface PostureDeltas {
-  // 기준보다 화면상 귀 수평 폭이 커진 비율. 실제 목 전진 거리 자체는 아닙니다.
-  headForward: number;
-  // 기준보다 화면상 양어깨 거리가 커진 비율.
-  torsoForward: number;
-  // 기준보다 귀-어깨 수직 간격이 줄어든 양 / 기준 어깨 폭.
-  neckSlump: number;
   // 현재 양어깨의 높이 차이 / 현재 어깨 폭. 기준 기울기를 빼는 값은 아닙니다.
   shoulderTilt: number;
   // 귀-어깨 수직 간격이 기준과 달라진 양의 절댓값 / 기준 어깨 폭.
@@ -101,10 +95,6 @@ export function advanceObservation(
     reason: null,
     measurement, velocityPxPerSecond,
     delta: {
-      // Math.max(0, 값): 폭이 줄어드는 반대 방향 변화는 0으로 제한합니다.
-      headForward: Math.max(0, (measurement.earSpanPx - reference.baseEarSpanPx) / reference.baseEarSpanPx),
-      torsoForward: Math.max(0, (measurement.shoulderSpanPx - reference.baseShoulderSpanPx) / reference.baseShoulderSpanPx),
-      neckSlump: Math.max(0, heightChange),
       shoulderTilt: Math.abs(measurement.shoulderHeightDifferenceShoulderWidths),
       // Math.abs는 부호를 없앱니다. 어깨는 간격 증가·감소를 모두 반영합니다.
       // 귀를 기준으로 하므로 머리의 상하 움직임도 이 값에 영향을 줄 수 있습니다.

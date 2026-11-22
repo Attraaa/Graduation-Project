@@ -1,22 +1,20 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { scorePosture } from '../src/features/posture/scoring.ts';
-import { turtleScorePolicy as neck } from '../src/features/posture/modes/turtle.ts';
 import { shoulderScorePolicy as shoulder } from '../src/features/posture/modes/shoulder.ts';
-import { NECK_WEIGHTS, SHOULDER_WEIGHTS, scoreSettingsVersion, NECK_LIMITS } from '../src/features/posture/scoreSettings.ts';
-const policies = [neck, shoulder];
-const delta = (value = 0, overrides = {}) => ({ headForward: value, torsoForward: value, neckSlump: value, shoulderTilt: value, shoulderShrug: value, yawRatio: 0, ...overrides });
+import { SHOULDER_WEIGHTS, SHOULDER_LIMITS, scoreSettingsVersion } from '../src/features/posture/scoreSettings.ts';
+// The ratio-based weighted score is the shoulder's; the neck score comes from E19 (tests/e19-runtime.test.mjs).
+const policies = [shoulder];
+const delta = (value = 0, overrides = {}) => ({ shoulderTilt: value, shoulderShrug: value, yawRatio: 0, ...overrides });
 const close = (a, b) => assert.ok(Math.abs(a - b) < 1e-9, `${a} != ${b}`);
 
-test('each part uses its own weighted sum rather than the largest feature or a combined score', () => {
-  close(scorePosture(delta(0, { headForward: 0.2, torsoForward: 0.1, neckSlump: 0.3 }), neck).deviation, 0.215);
+test('the shoulder uses its own weighted sum rather than the largest feature', () => {
   close(scorePosture(delta(0, { shoulderTilt: 0.2, shoulderShrug: 0.1 }), shoulder).deviation, 0.1775);
-  close(Object.values(NECK_WEIGHTS).reduce((a,b) => a+b), 1);
   close(Object.values(SHOULDER_WEIGHTS).reduce((a,b) => a+b), 1);
 });
-test('yaw boundary preserves frontal scoring and suspends both turned-head scores', () => {
-  const sample = delta(0, { headForward: 0.4, torsoForward: 0.2, neckSlump: 0.2 });
-  close(scorePosture({ ...sample, yawRatio: 0.15 }, neck).deviation, 0.27);
+test('yaw boundary preserves frontal scoring and suspends a turned-head score', () => {
+  const sample = delta(0, { shoulderTilt: 0.2, shoulderShrug: 0.1 });
+  close(scorePosture({ ...sample, yawRatio: 0.15 }, shoulder).deviation, 0.1775);
   for (const policy of policies) {
     assert.ok(scorePosture({ ...sample, yawRatio: 0.15 }, policy).score !== null);
     for (const yawRatio of [0.15 + 1e-9, 1, -0.1, NaN, Infinity, undefined])
@@ -26,8 +24,7 @@ test('yaw boundary preserves frontal scoring and suspends both turned-head score
 test('full and zero credit boundaries, linear midpoint and adjacent values', () => {
   for (const policy of policies) {
     const a = policy.fullCreditDelta, b = policy.zeroCreditDelta;
-    const sample = d => policy === neck ? delta(0, { neckSlump: d / NECK_WEIGHTS.neckSlump })
-      : delta(0, { shoulderTilt: d / SHOULDER_WEIGHTS.shoulderTilt });
+    const sample = d => delta(0, { shoulderTilt: d / SHOULDER_WEIGHTS.shoulderTilt });
     close(scorePosture(sample(a), policy).score, 100);
     assert.ok(scorePosture(sample(a + 1e-8), policy).score < 100);
     close(scorePosture(sample((a+b)/2), policy).score, 50);
@@ -46,7 +43,7 @@ test('missing and invalid inputs are unknown; zero is a real measured score', ()
     }
   }
 });
-test('parts are independent and inputs are deterministic and immutable', () => {
+test('inputs are deterministic and immutable', () => {
   const sample = Object.freeze(delta(0.1234));
   for (const policy of policies) {
     const before = structuredClone({ sample, policy });
@@ -54,8 +51,6 @@ test('parts are independent and inputs are deterministic and immutable', () => {
     assert.deepEqual({ sample, policy }, before);
     assert.ok(Object.isFrozen(policy.weights));
   }
-  assert.equal(scorePosture(delta(0, { shoulderTilt: 100, shoulderShrug: NaN }), neck).score, 100);
-  assert.equal(scorePosture(delta(0, { headForward: 100, torsoForward: NaN, neckSlump: NaN }), shoulder).score, 100);
 });
 test('score decreases monotonically within zero and one hundred', () => {
   for (const policy of policies) {
@@ -66,8 +61,8 @@ test('score decreases monotonically within zero and one hundred', () => {
     }
   }
 });
-test('tuning weights creates a different persisted policy version', () => {
-  assert.match(neck.version, /^upper-body-neck-v3-/);
-  assert.match(shoulder.version, /^upper-body-shoulder-v3-/);
-  assert.notEqual(scoreSettingsVersion('neck', { ...NECK_WEIGHTS, headForward: 0.6 }, NECK_LIMITS), neck.version);
+test('the shoulder policy version is unchanged and tuning creates a different one', () => {
+  // Same ID as before the neck model change, so existing shoulder records stay in the same statistics group.
+  assert.equal(shoulder.version, 'upper-body-shoulder-v3-1xhti1n');
+  assert.notEqual(scoreSettingsVersion('shoulder', { ...SHOULDER_WEIGHTS, shoulderTilt: 0.6 }, SHOULDER_LIMITS), shoulder.version);
 });

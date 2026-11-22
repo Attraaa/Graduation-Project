@@ -1,8 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { advanceEvaluation, createEvaluation } from '../src/features/posture/evaluation.ts';
+import { advanceEvaluation, createEvaluation, HABIT_POLICY } from '../src/features/posture/evaluation.ts';
 import { advanceObservation, createObservation } from '../src/features/posture/observation.ts';
-import { turtleScorePolicy } from '../src/features/posture/modes/turtle.ts';
+import { neckDeviation, turtleScorePolicy } from '../src/features/posture/modes/turtle.ts';
+import { shoulderScorePolicy } from '../src/features/posture/modes/shoulder.ts';
 import { CaptureRecorder } from '../../database/recorder.ts';
 import { MemoryRecords } from './fixtures/memory-records.mjs';
 import { sampleBatch } from './fixtures/record-batch.mjs';
@@ -12,7 +13,7 @@ test('capture storage conserves real evaluation totals across missing, duplicate
   const baseline = { schemaVersion: 2, baseEarSpanPx: 200, baseShoulderSpanPx: 500, baseEarHeightPx: 250, sourceId: 'camera-one', widthPx: 1000, heightPx: 1000,
     startedAtMs: 0, completedAtMs: 3000, sampleCount: 31,
     metrics: { earOffsetShoulderWidths: 0, earHeightShoulderWidths: 0.5, shoulderHeightDifferenceShoulderWidths: 0 } };
-  const policy = turtleScorePolicy;
+  const policy = shoulderScorePolicy;
   let observation = createObservation(), evaluation = createEvaluation(policy);
   const capture = new CaptureRecorder({ ...sampleBatch().record, scorePolicyVersion: policy.version,
     startedAt: Date.parse('2026-12-31T23:59:59Z'), updatedAt: Date.parse('2026-12-31T23:59:59Z') }, 3000);
@@ -38,7 +39,6 @@ test('capture storage conserves real evaluation totals across missing, duplicate
 // Verify both real scoring streams are stored independently without mixing old policies.
 test('upper-body paired scores persist independently and preserve earlier policy records', async () => {
   const { advanceCalibration, createCalibration } = await import('../src/features/posture/calibration.ts');
-  const { shoulderScorePolicy } = await import('../src/features/posture/modes/shoulder.ts');
   const { localDateKey } = await import('../../database/contracts.ts');
   const { summarizeStatistics } = await import('../../database/aggregation.ts');
   const frame = at => {
@@ -59,9 +59,13 @@ test('upper-body paired scores persist independently and preserve earlier policy
     mode: policy.mode, scorePolicyVersion: policy.version, habitPolicyVersion: createEvaluation(policy).habitPolicyVersion },3000));
   let observation=createObservation();
   let evaluations=policies.map(createEvaluation);
+  // The neck score is E19's (computed outside; here a fixed 100 → 80 step), the shoulder the ratio score of the same frames.
+  const neckScore = at => at >= 4000 ? 80 : 100;
   for (let at=3000; at<=16000; at+=100) {
     observation=advanceObservation(observation,calibration.reference,frame(at));
-    evaluations=evaluations.map((state,index)=>advanceEvaluation(state,observation,policies[index]));
+    evaluations=evaluations.map((state,index)=>index === 0
+      ? advanceEvaluation(state,observation,turtleScorePolicy,HABIT_POLICY,observation.delta ? { score: neckScore(at), deviation: neckDeviation(neckScore(at)) } : { score: null, deviation: null })
+      : advanceEvaluation(state,observation,policies[index]));
     captures.forEach((capture,index)=>capture.sample(at,evaluations[index]));
   }
   const db=new MemoryRecords();

@@ -36,9 +36,7 @@ test('calibration time and first valid frame add no observed duration', () => {
   assert.equal(pending.delta, null);
   const first = advanceObservation(pending, reference(), frame(3000));
   assert.equal(first.observedSeconds, 0);
-  assert.deepEqual(first.delta, {
-    headForward: 0, torsoForward: 0, neckSlump: 0, shoulderTilt: 0, shoulderShrug: 0, yawRatio: 0,
-  });
+  assert.deepEqual(first.delta, { shoulderTilt: 0, shoulderShrug: 0, yawRatio: 0 });
   assert.equal(advanceObservation(first, reference(), frame(3100)).observedSeconds, 0.1);
 });
 
@@ -99,17 +97,15 @@ test('stream interruption, camera replacement and a new reference do not join ol
   assert.equal(advanceObservation(createObservation(), baseline, frame(2999)).reason, 'invalid-time');
 });
 
-test('head growth, one-sided height loss and absolute shoulder tilt follow the design', () => {
+test('ear-shoulder height change in both directions and absolute shoulder tilt follow the design', () => {
   const baseline = reference();
   const moved = frame(3100);
   moved.landmarks[7].x = 0.65; moved.landmarks[8].x = 0.35;
   moved.landmarks[7].y = moved.landmarks[8].y = 0.35;
   const result = advanceObservation(createObservation(), baseline, moved);
-  assert.ok(Math.abs(result.delta.headForward - 0.5) < 1e-12);
-  assert.ok(Math.abs(result.delta.neckSlump - 0.2) < 1e-12);
-  assert.equal(result.delta.shoulderShrug, result.delta.neckSlump);
+  assert.ok(Math.abs(result.delta.shoulderShrug - 0.2) < 1e-12);
   moved.landmarks[7].y = moved.landmarks[8].y = 0.15;
-  assert.equal(advanceObservation(createObservation(), baseline, moved).delta.neckSlump, 0);
+  assert.ok(Math.abs(advanceObservation(createObservation(), baseline, moved).delta.shoulderShrug - 0.2) < 1e-12);
   moved.landmarks[11].y = 0.6;
   assert.ok(advanceObservation(createObservation(), baseline, moved).delta.shoulderTilt > 0);
 });

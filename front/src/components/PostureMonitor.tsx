@@ -7,8 +7,13 @@ import { advanceObservation, createObservation, interruptObservation } from '../
 import { advanceEvaluation, createEvaluation, habitPolicy, interruptEvaluation } from '../features/posture/evaluation';
 import { createMonitorSnapshot } from '../features/posture/monitorTypes';
 import type { MonitorSnapshot } from '../features/posture/monitorTypes';
-import { turtleScorePolicy } from '../features/posture/modes/turtle';
+import { NECK_ONE_EURO, neckDeviation, neckScore, turtleScorePolicy } from '../features/posture/modes/turtle';
 import { shoulderScorePolicy } from '../features/posture/modes/shoulder';
+import { advanceNeckFlow, createOneEuro, finishNeckFlow, NECK_FLOW, neckSecondsLeft, referenceFailure, startNeckFlow } from '../features/posture/e19/flow';
+import type { NeckFlow } from '../features/posture/e19/flow';
+import { neckFrame } from '../features/posture/e19/frame';
+import type { FaceBuffer } from '../features/posture/e19/frame';
+import type { NeckFrame, NeckModel } from '../features/posture/e19/model';
 import type { CaptureSink, CaptureStart } from '../features/records/recording';
 import { useCameraSettings } from '../features/camera/context';
 
@@ -21,9 +26,11 @@ interface PostureMonitorProps {
   recordCapture?: (start: CaptureStart) => CaptureSink;
   /** "자세 무너짐 민감도" from Settings; fixed for the whole run. */
   sensitivity?: number;
+  /** Latest FaceLandmarker results of the same transformed canvas (EyeMonitor), paired with each pose frame for E19. */
+  faces?: FaceBuffer;
 }
 
-const PostureMonitor = ({ isRunning, paused = false, referenceRequest = 0, deviceId, onUpdate, recordCapture, sensitivity }: PostureMonitorProps) => {
+const PostureMonitor = ({ isRunning, paused = false, referenceRequest = 0, deviceId, onUpdate, recordCapture, sensitivity, faces }: PostureMonitorProps) => {
   const pausedRef = useRef(paused);
   const interrupt = useRef<() => void>(() => {});
   const recollect = useRef<() => void>(() => {});
@@ -67,13 +74,37 @@ const PostureMonitor = ({ isRunning, paused = false, referenceRequest = 0, devic
     let watchdog: ReturnType<typeof setInterval> | undefined;
     let lastFrameAt: number | null = null;
     let capturedGeneration = 0;
+    let capturedVideoTime = -1;
     let resumeAt = 0;
-    interrupt.current = () => {
-      if (!calibration.reference) calibration = createCalibration();
-      observation = interruptObservation(observation);
-      neck = interruptEvaluation(neck);
+    // E19: 3초 준비 → 5초 기록 → 보정(실패하면 이유 안내 뒤 다시). null이면 다음 프레임에서 새로 시작합니다.
+    let model: NeckModel | null = null;
+    let flow: NeckFlow | null = null;
+    let flowToken = 0, calibrating = false, inferring = false;
+    let lastInferAt = -Infinity, neckInterruptedAt = -Infinity;
+    let angleDropDeg: number | null = null;
+    const loadFilter = createOneEuro(NECK_ONE_EURO.minCutoff, NECK_ONE_EURO.beta, NECK_ONE_EURO.dCutoff);
+    const angleFilter = createOneEuro(NECK_ONE_EURO.minCutoff, NECK_ONE_EURO.beta, NECK_ONE_EURO.dCutoff);
+    const restartNeck = () => {
+      flow = null; flowToken++; model?.clear(); calibration = createCalibration();
+      loadFilter.reset(); angleFilter.reset(); angleDropDeg = null; lastInferAt = -Infinity;
+    };
+    // Older E19 results (still running) must not overwrite a later interruption.
+    const interruptNeck = (at: number) => { neckInterruptedAt = at; angleDropDeg = null; neck = interruptEvaluation(neck); };
+    const fail = () => {
+      if (abort.signal.aborted) return;
+      interruptNeck(performance.now());
       shoulder = interruptEvaluation(shoulder);
+      publish({ ...createMonitorSnapshot(), phase: 'error', observedSeconds: observation.observedSeconds, neck, shoulder });
+      stopWebcam();
+      detach();
+      void stopProcessing();
+    };
+    interrupt.current = () => {
+      if (flow?.step !== 'ready') restartNeck();
       resumeAt = performance.now();
+      observation = interruptObservation(observation);
+      interruptNeck(resumeAt);
+      shoulder = interruptEvaluation(shoulder);
       // Record the continuity boundary, without displaying a new value during pause.
       recording[0]?.sample(resumeAt, neck);
       recording[1]?.sample(resumeAt, shoulder);
@@ -82,10 +113,36 @@ const PostureMonitor = ({ isRunning, paused = false, referenceRequest = 0, devic
       const at = performance.now();
       recording.forEach(sink => sink?.finish(at));
       recording = beginRecord(at); recordedReference = null;
-      calibration = createCalibration(); observation = createObservation();
+      restartNeck(); observation = createObservation();
       neck = createEvaluation(turtleScorePolicy, habit); shoulder = createEvaluation(shoulderScorePolicy, habit);
-      resumeAt = at;
+      resumeAt = at; neckInterruptedAt = at;
       publish({ ...createMonitorSnapshot(), phase: 'calibrating' });
+    };
+    const calibrate = (frames: readonly NeckFrame[]) => {
+      // The shoulder reference must come from the same 5 s; otherwise show why and start again.
+      const token = flowToken, reference = calibration.reference;
+      calibrating = true;
+      const result = reference ? model!.calibrate(frames) : Promise.resolve({ ok: false as const, reason: referenceFailure(calibration.reason) });
+      void result.then(info => {
+        if (abort.signal.aborted || token !== flowToken) return;
+        flow = finishNeckFlow(performance.now(), info);
+        if (info.ok) { loadFilter.reset(); angleFilter.reset(); }
+        else calibration = createCalibration();
+      }, fail).finally(() => { calibrating = false; });
+    };
+    const inferNeck = (input: NeckFrame, observed: typeof observation, at: number) => {
+      const token = flowToken;
+      inferring = true; lastInferAt = at;
+      void model!.infer(input).then(result => {
+        if (abort.signal.aborted || token !== flowToken || at <= neckInterruptedAt) return;
+        if (!result.measuring) interruptNeck(at);
+        else {
+          const score = neckScore(loadFilter.filter(result.scoreLoad, at));
+          angleDropDeg = angleFilter.filter(result.scoreNeck, at) * model!.config.delta_ref_deg / 100;
+          neck = advanceEvaluation(neck, observed, turtleScorePolicy, habit, { score, deviation: neckDeviation(score) });
+        }
+        recording[0]?.sample(at, neck);
+      }, fail).finally(() => { inferring = false; });
     };
     const setup = async () => {
       const stream = await startWebcam(deviceId || undefined);
@@ -102,7 +159,7 @@ const PostureMonitor = ({ isRunning, paused = false, referenceRequest = 0, devic
       const ended = () => {
         if (abort.signal.aborted) return;
         observation = interruptObservation(observation);
-        neck = interruptEvaluation(neck);
+        interruptNeck(performance.now());
         shoulder = interruptEvaluation(shoulder);
         publish({ ...latest.current, phase: 'error', reason: 'interrupted', delta: null, neck, shoulder });
         stopWebcam();
@@ -111,10 +168,12 @@ const PostureMonitor = ({ isRunning, paused = false, referenceRequest = 0, devic
       };
       track.addEventListener('ended', ended);
       removeTrackListener = () => track.removeEventListener('ended', ended);
+      const loading = import('../features/posture/e19/load').then(module => module.loadNeckModel());
+      loading.catch(() => {}); // awaited below; the rejection reaches setup's error path there
       const pose = await initMediaPipe((results, capturedAtMs) => {
         const video = videoRef.current;
         const canvas = canvasRef.current;
-        if (abort.signal.aborted || pausedRef.current || capturedAtMs <= resumeAt || !video || !canvas || capturedGeneration !== runtime.current.generation) return;
+        if (abort.signal.aborted || !model || pausedRef.current || capturedAtMs <= resumeAt || !video || !canvas || capturedGeneration !== runtime.current.generation) return;
         const receivedAtMs = performance.now();
         lastFrameAt = receivedAtMs;
         if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
@@ -150,28 +209,44 @@ const PostureMonitor = ({ isRunning, paused = false, referenceRequest = 0, devic
           landmarks: results.poseLandmarks, widthPx: video.videoWidth, heightPx: video.videoHeight,
           sourceId: `${track.id}:${capturedGeneration}`, timestampMs: capturedAtMs,
         };
-        calibration = advanceCalibration(calibration, frame);
-        observation = advanceObservation(observation, calibration.reference, frame);
-        const reference = calibration.reference;
+        const input = neckFrame(capturedAtMs, results.poseLandmarks, faces?.match(capturedAtMs, capturedVideoTime) ?? null, video.videoWidth, video.videoHeight);
+        const collectMs = model.config.calibration.window_sec * 1000;
+        // A new camera identity or image size invalidates the reference, as before: calibrate again.
+        const held = calibration.reference;
+        if (flow?.step === 'ready' && held && (held.sourceId !== frame.sourceId || held.widthPx !== frame.widthPx || held.heightPx !== frame.heightPx)) restartNeck();
+        if (flow?.step !== 'ready') {
+          flow = advanceNeckFlow(flow ?? startNeckFlow(capturedAtMs), capturedAtMs, input, collectMs);
+          if (flow.step === 'collect') calibration = advanceCalibration(calibration, frame);
+          else if (flow.step === 'prep') calibration = createCalibration();
+          if (flow.step === 'computing' && !calibrating) calibrate(flow.frames);
+        }
+        const ready = flow!.step === 'ready';
+        const reference = ready ? calibration.reference : null;
+        observation = advanceObservation(observation, reference, frame);
         const referenceKey = reference ? `${reference.completedAtMs}:${reference.widthPx}:${reference.heightPx}` : null;
         if (recordedReference && recordedReference !== referenceKey) {
           recording.forEach(sink => sink?.finish(capturedAtMs));
           recording = beginRecord(capturedAtMs);
           neck = createEvaluation(turtleScorePolicy, habit);
           shoulder = createEvaluation(shoulderScorePolicy, habit);
+          neckInterruptedAt = capturedAtMs; angleDropDeg = null;
         }
         recordedReference = referenceKey;
-        neck = advanceEvaluation(neck, observation, turtleScorePolicy, habit);
         shoulder = advanceEvaluation(shoulder, observation, shoulderScorePolicy, habit);
-        recording[0]?.sample(capturedAtMs, neck);
         recording[1]?.sample(capturedAtMs, shoulder);
+        // Neck: the same valid frames as the shoulder, scored by E19 about 10 times a second.
+        if (ready && !observation.delta) {
+          if (neck.currentScore !== null || angleDropDeg !== null) { interruptNeck(capturedAtMs); recording[0]?.sample(capturedAtMs, neck); }
+        } else if (ready && !inferring && capturedAtMs - lastInferAt >= NECK_FLOW.sampleMs - 5) inferNeck(input, observation, capturedAtMs);
+        const current = flow!;
         const snapshot: MonitorSnapshot = {
-          phase: calibration.reference ? (observation.delta ? 'observing' : 'unavailable') : 'calibrating',
-          progress: calibration.progress,
+          phase: ready ? (observation.delta ? 'observing' : 'unavailable') : 'calibrating',
+          progress: current.step === 'collect' ? Math.min(1, (capturedAtMs - current.since) / collectMs) : current.step === 'computing' || ready ? 1 : 0,
           reason: observation.reason ?? calibration.reason,
           observedSeconds: observation.observedSeconds,
           delta: observation.delta,
           neck, shoulder,
+          neckModel: { step: current.step, secondsLeft: neckSecondsLeft(current, capturedAtMs, collectMs), failure: current.failure, angleDropDeg: ready ? angleDropDeg : null },
         };
         if (receivedAtMs - lastUiAt >= 200 || (observation.delta === null && latest.current.delta !== null)) {
           lastUiAt = receivedAtMs;
@@ -184,38 +259,33 @@ const PostureMonitor = ({ isRunning, paused = false, referenceRequest = 0, devic
       if (!pose) {
         neck = interruptEvaluation(neck);
         shoulder = interruptEvaluation(shoulder);
-        publish({ phase: 'error', progress: 0, reason: null, observedSeconds: observation.observedSeconds, delta: null, neck, shoulder });
+        publish({ ...createMonitorSnapshot(), phase: 'error', observedSeconds: observation.observedSeconds, neck, shoulder });
         stopWebcam();
         detach();
         return;
       }
+      model = await loading;
+      if (abort.signal.aborted) return;
       if (video) {
         await video.play();
         if (!abort.signal.aborted) {
           lastFrameAt = performance.now();
-          startProcessing(video, () => { capturedGeneration = runtime.current.generation; return previewRef.current ?? video; }, () => !pausedRef.current);
+          startProcessing(video, () => { capturedGeneration = runtime.current.generation; capturedVideoTime = runtime.current.videoTime; return previewRef.current ?? video; }, () => !pausedRef.current);
           watchdog = setInterval(() => {
             if (!abort.signal.aborted && !pausedRef.current && lastFrameAt !== null && performance.now() - lastFrameAt > 1500 && latest.current.phase !== 'error') {
               canvasRef.current?.getContext('2d')?.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+              if (flow?.step !== 'ready') restartNeck();
               observation = interruptObservation(observation);
-              neck = interruptEvaluation(neck);
+              interruptNeck(performance.now());
               shoulder = interruptEvaluation(shoulder);
-              publish({ ...latest.current, phase: 'unavailable', reason: 'interrupted', delta: null, neck, shoulder });
+              publish({ ...latest.current, phase: 'unavailable', reason: 'interrupted', delta: null, neck, shoulder,
+                neckModel: { ...latest.current.neckModel, angleDropDeg: null } });
             }
           }, 500);
         }
       }
     };
-    void setup().catch(() => {
-      if (!abort.signal.aborted) {
-        neck = interruptEvaluation(neck);
-        shoulder = interruptEvaluation(shoulder);
-        publish({ phase: 'error', progress: 0, reason: null, observedSeconds: observation.observedSeconds, delta: null, neck, shoulder });
-        stopWebcam();
-        detach();
-        void stopProcessing();
-      }
-    });
+    void setup().catch(fail);
     return () => {
       abort.abort();
       interrupt.current = () => {};
@@ -228,14 +298,15 @@ const PostureMonitor = ({ isRunning, paused = false, referenceRequest = 0, devic
       detach();
       void stopProcessing();
     };
-  }, [isRunning, deviceId, publish, videoRef, canvasRef, startWebcam, stopWebcam, initMediaPipe, startProcessing, stopProcessing, recordCapture, connect, detach, runtime, sensitivity]);
+  }, [isRunning, deviceId, publish, videoRef, canvasRef, startWebcam, stopWebcam, initMediaPipe, startProcessing, stopProcessing, recordCapture, connect, detach, runtime, sensitivity, faces]);
 
   useEffect(() => {
     // Flush the last computed interval on stop, but never publish from an old keyed session's cleanup.
     if (!isRunning && latest.current.phase !== 'loading') {
       publish({ ...latest.current, delta: null,
         neck: { ...latest.current.neck, currentScore: null, currentDeviation: null, continuousMs: 0, deviationState: 'unknown', protection: 'none' },
-        shoulder: { ...latest.current.shoulder, currentScore: null, currentDeviation: null, continuousMs: 0, deviationState: 'unknown', protection: 'none' } });
+        shoulder: { ...latest.current.shoulder, currentScore: null, currentDeviation: null, continuousMs: 0, deviationState: 'unknown', protection: 'none' },
+        neckModel: { ...latest.current.neckModel, angleDropDeg: null } });
     }
   }, [isRunning, publish]);
 
@@ -243,7 +314,8 @@ const PostureMonitor = ({ isRunning, paused = false, referenceRequest = 0, devic
     if (isRunning && (aiError || webcamError)) {
       publish({ ...latest.current, phase: 'error', delta: null,
         neck: { ...latest.current.neck, currentScore: null, currentDeviation: null, continuousMs: 0, deviationState: 'unknown', protection: 'none' },
-        shoulder: { ...latest.current.shoulder, currentScore: null, currentDeviation: null, continuousMs: 0, deviationState: 'unknown', protection: 'none' } });
+        shoulder: { ...latest.current.shoulder, currentScore: null, currentDeviation: null, continuousMs: 0, deviationState: 'unknown', protection: 'none' },
+        neckModel: { ...latest.current.neckModel, angleDropDeg: null } });
       stopWebcam();
       detach();
       void stopProcessing();

@@ -3,14 +3,14 @@ import test from 'node:test';
 import { advanceObservation, createObservation } from '../src/features/posture/observation.ts';
 import { advanceEvaluation, createEvaluation } from '../src/features/posture/evaluation.ts';
 import { scorePosture } from '../src/features/posture/scoring.ts';
-import { turtleScorePolicy as neck } from '../src/features/posture/modes/turtle.ts';
 import { shoulderScorePolicy as shoulder } from '../src/features/posture/modes/shoulder.ts';
 import { MOTION_PROTECTION } from '../src/features/posture/scoreSettings.ts';
 import { CaptureRecorder } from '../../database/recorder.ts';
 import { MemoryRecords } from './fixtures/memory-records.mjs';
 import { sampleBatch } from './fixtures/record-batch.mjs';
 
-const policies = [neck, shoulder];
+// The ratio-based score with time protection is the shoulder's (the neck uses E19 and is suspended by PostureMonitor).
+const policies = [shoulder];
 const close = (a, b) => assert.ok(Math.abs(a - b) < 1e-7, `${a} != ${b}`);
 const reference = { schemaVersion: 2, sourceId: 'camera', widthPx: 1000, heightPx: 1000,
   startedAtMs: 0, completedAtMs: 0, sampleCount: 31, baseEarSpanPx: 200, baseShoulderSpanPx: 500,
@@ -35,7 +35,7 @@ function replay() {
   };
 }
 
-test('turning left or right suspends both scores and averages; frontal reacquisition keeps the prior score', () => {
+test('turning left or right suspends the score and average; frontal reacquisition keeps the prior score', () => {
   for (const direction of [-1, 1]) {
     const feed = replay(); let before;
     for (let at = 0; at <= 6000; at += 100) before = feed(at);
@@ -60,7 +60,7 @@ test('turning left or right suspends both scores and averages; frontal reacquisi
   }
 });
 
-test('missing landmarks, duplicate timestamps and long gaps cannot reset either score to one hundred', () => {
+test('missing landmarks, duplicate timestamps and long gaps cannot reset the score to one hundred', () => {
   for (const interruption of ['missing', 'duplicate', 'long-gap']) {
     const feed = replay(); let before;
     for (let at = 0; at <= 6000; at += 100) before = feed(at);
