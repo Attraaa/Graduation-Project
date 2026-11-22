@@ -19,9 +19,3 @@ if (sha256 !== '64184e229b263107bc2b804c6625db1341ff2bb731874b0bcc2fe6544e0bc9ff
   throw new Error('Face Landmarker model checksum differs. See docs/eye-mode.md.');
 }
 console.log('MediaPipe Face WASM copied; local Face Landmarker model found.');
-
-// The neck model (E19) runs on ONNX Runtime Web; its WASM ships with the app instead of a CDN.
-const ortDestination = new URL('../public/ort/', import.meta.url);
-await mkdir(ortDestination, { recursive: true });
-await cp(new URL('../node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.wasm', import.meta.url), new URL('ort-wasm-simd-threaded.wasm', ortDestination));
-console.log('ONNX Runtime Web WASM copied from the locked npm package.');

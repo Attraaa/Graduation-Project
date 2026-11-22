@@ -47,7 +47,7 @@ export const finishNeckFlow = (now: number, result: NeckCalibration): NeckFlow =
 /** 준비·기록·실패 안내에 보여 줄 남은 초(올림). 그 밖의 단계는 null. */
 export function neckSecondsLeft(flow: NeckFlow, now: number, collectMs: number) {
   const total = flow.step === 'prep' ? NECK_FLOW.prepMs : flow.step === 'collect' ? collectMs : flow.step === 'failed' ? NECK_FLOW.failureMs : null;
-  return total === null ? null : Math.max(1, Math.ceil((total - (now - flow.since)) / 1000));
+  return total === null ? null : Math.max(1, Math.ceil((total - Math.max(0, now - flow.since)) / 1000));
 }
 
 /** One Euro 필터(연구 도구와 같은 식, 시간은 ms로 받아 초 단위로 계산). 보정할 때 reset합니다. */

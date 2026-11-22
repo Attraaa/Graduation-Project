@@ -215,7 +215,8 @@ const PostureMonitor = ({ isRunning, paused = false, referenceRequest = 0, devic
         const held = calibration.reference;
         if (flow?.step === 'ready' && held && (held.sourceId !== frame.sourceId || held.widthPx !== frame.widthPx || held.heightPx !== frame.heightPx)) restartNeck();
         if (flow?.step !== 'ready') {
-          flow = advanceNeckFlow(flow ?? startNeckFlow(capturedAtMs), capturedAtMs, input, collectMs);
+          // Count the 3 s prep from when results arrive: the first MediaPipe frame can take seconds to warm up.
+          flow = advanceNeckFlow(flow ?? startNeckFlow(receivedAtMs), capturedAtMs, input, collectMs);
           if (flow.step === 'collect') calibration = advanceCalibration(calibration, frame);
           else if (flow.step === 'prep') calibration = createCalibration();
           if (flow.step === 'computing' && !calibrating) calibrate(flow.frames);
