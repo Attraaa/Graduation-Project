@@ -8,6 +8,8 @@ export default defineConfig(({ mode }) => ({
   base: './',
   cacheDir: './.vite-cache-screenshots',
   build: { rollupOptions: { input: { index: 'index.html', overlay: 'overlay.html' } } },
+  // ONNX Runtime Web finds its wasm next to its own module; pre-bundling would move the module away from it.
+  optimizeDeps: { exclude: ['onnxruntime-web'] },
   plugins: [
     tailwindcss(),
     react(),

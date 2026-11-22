@@ -2,13 +2,16 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { advanceEvaluation, createEvaluation, interruptEvaluation, HABIT_POLICY, habitPolicy, isCurrentHabitPolicy, normalizePostureSensitivity } from '../src/features/posture/evaluation.ts';
 import { createObservation, advanceObservation } from '../src/features/posture/observation.ts';
-import { turtleScorePolicy as policy } from '../src/features/posture/modes/turtle.ts';
+import { turtleScorePolicy } from '../src/features/posture/modes/turtle.ts';
 import { shoulderScorePolicy } from '../src/features/posture/modes/shoulder.ts';
 import { MOTION_PROTECTION } from '../src/features/posture/scoreSettings.ts';
 const close = (a,b) => assert.ok(Math.abs(a-b)<1e-7, `${a} != ${b}`);
+// The ratio scorer's time rules with a one-metric policy (deviation = d, 100 points at 0.04, 0 at 0.20).
+// The neck score itself comes from E19 since 2026-11-23 and is tested below with measured scores.
+const policy = Object.freeze({ version: 'test-ratio-policy', mode: 'turtle', weights: { shoulderTilt: 1 }, fullCreditDelta: 0.04, zeroCreditDelta: 0.20 });
 function observed(ms, deviation = 0, velocity = 0) {
   return { ...createObservation(), observedSeconds: ms / 1000, velocityPxPerSecond: velocity,
-    delta: deviation === null ? null : { headForward: deviation, torsoForward: deviation, neckSlump: deviation, shoulderTilt: deviation, shoulderShrug: deviation, yawRatio: 0 } };
+    delta: deviation === null ? null : { shoulderTilt: deviation, shoulderShrug: deviation, yawRatio: 0 } };
 }
 const step = (state, ms, d=0, v=0, selected=policy) => advanceEvaluation(state, observed(ms,d,v), selected);
 function run(until, d=0, v=0, interval=100, selected=policy) {
@@ -115,14 +118,33 @@ test('habit hysteresis uses weighted deviations and excludes moving intervals', 
   const exited=step(continuing,2200,0.10); assert.equal(exited.deviationState,'near-reference'); close(exited.deviationMs,100);
   const moving=step(continuing,2200,0.2,MOTION_PROTECTION.velocityPxPerSecond + 50); assert.equal(moving.deviationState,'unknown'); close(moving.deviationMs,100);
 });
-test('neck and shoulder have independent grace timers', () => {
-  let neck=step(createEvaluation(policy),0), shoulder=step(createEvaluation(shoulderScorePolicy),0,0,0,shoulderScorePolicy);
-  for(let at=100; at<=MOTION_PROTECTION.graceMs + 1100; at+=100) {
+test('a measured neck score (E19) is used as given while the shoulder keeps its own grace timer', () => {
+  let neck=createEvaluation(turtleScorePolicy), shoulder=step(createEvaluation(shoulderScorePolicy),0,0,0,shoulderScorePolicy);
+  for(let at=0; at<=MOTION_PROTECTION.graceMs + 1100; at+=100) {
     const sample=observed(at,0);
-    sample.delta.headForward=1;
-    neck=advanceEvaluation(neck,sample,policy); shoulder=advanceEvaluation(shoulder,sample,shoulderScorePolicy);
+    neck=advanceEvaluation(neck,sample,turtleScorePolicy,HABIT_POLICY,{ score: 60, deviation: 0.2 });
+    if (at) shoulder=advanceEvaluation(shoulder,sample,shoulderScorePolicy);
   }
-  close(neck.currentScore, 100 - MOTION_PROTECTION.penaltyPointsPerSecond * 1); assert.equal(shoulder.currentScore,100); assert.equal(shoulder.staticDeviationMs,0);
+  assert.equal(neck.currentScore,60); assert.equal(neck.protection,'none'); close(neck.averageScore,60);
+  assert.equal(shoulder.currentScore,100); assert.equal(shoulder.staticDeviationMs,0);
+});
+test('measured neck scores ignore motion protection but keep time, average and habit rules', () => {
+  const measured=(state,at,score,velocity=0) => advanceEvaluation(state,observed(at,0,velocity),turtleScorePolicy,HABIT_POLICY,{ score, deviation: score === null ? null : (100 - score) / 200 });
+  let state=createEvaluation(turtleScorePolicy);
+  state=measured(state,0,90); state=measured(state,100,80,MOTION_PROTECTION.velocityPxPerSecond * 4);
+  assert.equal(state.currentScore,80); assert.equal(state.protection,'none'); close(state.validMs,100); close(state.averageScore,85);
+  for(let at=200; at<=2200; at+=100) state=measured(state,at,70);
+  assert.equal(state.deviationEpisodeCount,1); assert.equal(state.deviationState,'away');
+  const missing=measured(state,2300,null);
+  assert.equal(missing.currentScore,null); close(missing.validMs,state.validMs);
+  const back=measured(missing,2400,95);
+  close(back.validMs,state.validMs); assert.equal(back.deviationState,'unknown');
+});
+test('a measured neck score needs only its own observed time, not the shoulder observation', () => {
+  const measured=(state,seconds,score) => advanceEvaluation(state,{ observedSeconds: seconds },turtleScorePolicy,HABIT_POLICY,{ score, deviation: (100 - score) / 200 });
+  let state=measured(createEvaluation(turtleScorePolicy),0,90);
+  state=measured(state,0.1,80);
+  assert.equal(state.currentScore,80); close(state.validMs,100); close(state.averageScore,85);
 });
 test('identical samples preserve caller data and replay deterministically', () => {
   const state=createEvaluation(policy), input=observed(0,0.2), before=structuredClone({state,input});

@@ -1,0 +1,177 @@
+{
+  "name": "fhp-v2",
+  "run": "20261117_ensemble_v1",
+  "model_file": "model.onnx",
+  "feature_version": "v3",
+  "label_version": "v2",
+  "rule": "cond",
+  "io": {
+    "inputs": {
+      "pose": [
+        1,
+        13,
+        4
+      ],
+      "face": [
+        1,
+        478,
+        3
+      ],
+      "fmat": [
+        1,
+        16
+      ],
+      "wh": [
+        1,
+        2
+      ],
+      "face_ok": [
+        1
+      ],
+      "ref_scale": [
+        1,
+        3
+      ],
+      "ref_pose": [
+        1,
+        13,
+        4
+      ],
+      "ref_face": [
+        1,
+        478,
+        3
+      ],
+      "ref_fmat": [
+        1,
+        16
+      ]
+    },
+    "outputs": [
+      "delta_deg",
+      "sigma_deg",
+      "load_pct",
+      "sigma_load_pct",
+      "psi_deg",
+      "type_prob",
+      "delta_raw_deg",
+      "load_raw_pct",
+      "scale"
+    ],
+    "dtype": "float32",
+    "notes": {
+      "pose": "MediaPipe legacy Pose landmarks 0-12 (x,y normalized, z, visibility) — never 23/24 (R16)",
+      "face": "tasks-vision FaceLandmarker 478 (x,y,z normalized); zeros + face_ok=0 if absent",
+      "fmat": "facialTransformationMatrixes[0].data (column-major 4x4)",
+      "wh": "analysed canvas width, height (px)",
+      "ref_scale": "median 'scale' output over the 5-s upright calibration frames that have a face",
+      "scale": "this frame's sw_over_W / eye_over_W / tz_cm",
+      "ref_pose": "element-wise median of the calibration frames' pose 0-12 (13,4)",
+      "ref_face": "... of face mesh (478,3)",
+      "ref_fmat": "... of the head matrix (16), column-major"
+    },
+    "fallback_outputs": [
+      "delta_deg",
+      "sigma_deg",
+      "load_pct",
+      "sigma_load_pct",
+      "psi_deg",
+      "type_prob",
+      "delta_raw_deg",
+      "load_raw_pct"
+    ]
+  },
+  "delta_ref_deg": 40.0,
+  "delta_ref_raw_deg": 37.84592300470709,
+  "load_ref_pct": 150.0,
+  "load_ref_raw_pct": 152.40908812907662,
+  "load_com_ab": [
+    0.1,
+    0.3
+  ],
+  "default_score": "both",
+  "default_score_note": "Q15 (user, 2026-11-17): show both score_load and score_neck; drop one later if needed — runs/DECISIONS.md",
+  "bands": [
+    {
+      "max_deg": 5,
+      "label": "좋은 자세"
+    },
+    {
+      "max_deg": 10,
+      "label": "조금 나옴"
+    },
+    {
+      "max_deg": 15,
+      "label": "나옴"
+    },
+    {
+      "max_deg": 999,
+      "label": "많이 나옴"
+    }
+  ],
+  "qc": {
+    "min_visibility": 0.5,
+    "max_face_pose_link": 0.5,
+    "max_abs_yaw_deg": 35.0,
+    "sigma_max_deg": null,
+    "sigma_p95_deg": 14.002853393554688,
+    "sigma_gate_note": "disabled: sigma grows with the predicted change; a size-relative gate is a follow-up"
+  },
+  "temporal": {
+    "window_sec": 2.5,
+    "one_euro": {
+      "min_cutoff": 0.5,
+      "beta": 0.01
+    },
+    "applied_by": "app"
+  },
+  "calibration": {
+    "enabled": true,
+    "default_mode": "cal",
+    "window_sec": 5,
+    "min_valid_frac": 0.8,
+    "max_sd_deg": 3.0,
+    "max_abs_offset_frac": 1.0,
+    "max_abs_psi_deg": 12.0,
+    "require_type": null,
+    "also_offset": [
+      "load_pct",
+      "psi_rel"
+    ],
+    "note": "offset only (no gain, 5.6). Calibrating while slouched makes that posture the reference (trust-the-user policy).",
+    "psi_limit_note": "12 deg: user decision 2026-11-17 (runs/DECISIONS.md); was 8 deg"
+  },
+  "display": {
+    "est_cva": false,
+    "baseline_cva_deg": null
+  },
+  "runtime_requirements": {
+    "face_landmarker_before_legacy_pose": true,
+    "mediapipe_pose": "@mediapipe/pose 0.5.1675469404 modelComplexity 1 smoothLandmarks true",
+    "face_landmarker": "@mediapipe/tasks-vision 0.10.32 VIDEO CPU (+ outputFacialTransformationMatrixes: true)"
+  },
+  "medical": "웰니스 참고용. 진단·절대 CVA·임상 판정 표시 금지(R14, R18).",
+  "mode": "cal_ref_ensemble",
+  "fallback_model_file": "fallback.onnx",
+  "fallback_source": "release/20261117_landmark_v4 (E11, used before calibration)",
+  "ref_scale": {
+    "features": [
+      "sw_over_W",
+      "eye_over_W",
+      "tz_cm"
+    ],
+    "how": "calibrate: run model.onnx with ref_scale=1 on each calibration frame with a face, take the median 'scale' -> ref_scale; reference landmarks = element-wise median of those frames' pose/face/fmat; then offset calibration on the same frames with both references"
+  },
+  "ensemble": {
+    "families": [
+      "E16_ref_caldist (calibration scale cues)",
+      "E18c (reference landmarks + absolute features + pseudo-people)"
+    ],
+    "weights": [
+      0.5,
+      0.5
+    ],
+    "members_per_family": 5
+  },
+  "experiment": "E19 = 0.5 E16 + 0.5 E18c (scripts/t32_siamese.py, scripts/t33_package_ensemble.py)"
+}

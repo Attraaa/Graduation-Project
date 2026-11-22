@@ -1,9 +1,9 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import { CameraOff, Pause } from 'lucide-react';
 import { useMonitoring, type MonitoringMode } from './monitoringContext';
 
-/** Copies the existing transformed frame/overlay. Navigation never requests a camera. */
-export default function MonitoringPreview({ modeId }: { modeId: MonitoringMode }) {
+/** Copies the existing transformed frame/overlay. Navigation never requests a camera. children draw over the frame (guidance). */
+export default function MonitoringPreview({ modeId, children }: { modeId: MonitoringMode; children?: ReactNode }) {
   const all = useMonitoring();
   const session = modeId === 'upper_body' ? all.upper : all.keyboard;
   const { runtime } = session.camera;
@@ -32,5 +32,6 @@ export default function MonitoringPreview({ modeId }: { modeId: MonitoringMode }
     <canvas ref={canvas} aria-label={`${modeId === 'upper_body' ? '상체' : '키보드'} 카메라 미리보기`} className="absolute inset-0 h-full w-full object-contain" />
     {!isRunning && <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-3 text-center text-sm text-slate-300"><CameraOff size={28} /><span>시작하면 카메라가 켜집니다</span></div>}
     {isRunning && isPaused && <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-slate-950/60 text-sm font-bold text-white"><Pause size={24} />일시정지 · 마지막 화면</div>}
+    {children}
   </div>;
 }

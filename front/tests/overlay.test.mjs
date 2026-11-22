@@ -80,8 +80,12 @@ test('overlay numbers turn red at or below the alert score as shown, and guidanc
   assert.equal(overlaySnapshot(monitoring(), 'o', 1, 'light', false, 90).upper_body.metrics[1].low, true);
   assert.equal(overlaySnapshot(monitoring({ keyboard: { counts: counts(7, 3) } }), 'o', 1, 'light', false, 70).keyboard.metrics[0].low, true);
 
-  const guided = overlaySnapshot(monitoring({ upper: { phase: 'calibrating' }, keyboard: { observationStatus: 'excluded' } }), 'o', 1, 'light', false, 70);
-  assert.deepEqual([guided.upper_body.metrics, guided.upper_body.detail], [[], '정면을 보고 기준 자세를 유지해 주세요.']);
+  const calibrating = neckModel => monitoring({ upper: { phase: 'calibrating', neckModel: { step: 'prep', secondsLeft: null, failure: null, angleDropDeg: null, ...neckModel } }, keyboard: { observationStatus: 'excluded' } });
+  const guided = overlaySnapshot(calibrating({ secondsLeft: 3 }), 'o', 1, 'light', false, 70);
+  assert.deepEqual([guided.upper_body.metrics, guided.upper_body.detail], [[], '편하게 바르게 앉아 화면 가운데를 보세요 · 3초 뒤 기록']);
+  assert.equal(overlaySnapshot(calibrating({ step: 'collect', secondsLeft: 4 }), 'o', 1, 'light', false, 70).upper_body.detail, '그대로 유지해 주세요 · 4초 남음');
+  for (const [failure, text] of [['too_few_frames', '얼굴과 양쪽 어깨가 보이게 앉아 주세요'], ['unstable', '움직임이 있었어요. 그대로 앉아 계세요'], ['not_upright', '고개를 들어 화면 가운데를 봐 주세요']])
+    assert.equal(overlaySnapshot(calibrating({ step: 'failed', failure, secondsLeft: 2 }), 'o', 1, 'light', false, 70).upper_body.detail, `${text} · 2초 뒤 다시 시작`);
   assert.deepEqual([guided.keyboard.metrics, guided.keyboard.note], [[], '']);
   assert.match(guided.keyboard.detail, /미승인 앱/);
 

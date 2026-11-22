@@ -12,12 +12,15 @@ import { scheduleAnalysisFrame } from '../session/analysisFrame';
 import { useCameraSettings } from '../camera/context';
 import { imageSignature } from '../camera/profile';
 import type { EyeSensitivity } from './eyePolicy';
+import type { FaceSample } from '../posture/e19/frame';
 
 export type EyeUpdate = { measurement: EyeSnapshot; phase: 'loading' | 'calibrating' | 'observing' | 'unavailable' | 'error'; message: string };
 
-export default function EyeMonitor({ active, deviceId, reference, eyeReference, sensitivity = 'normal', onUpdate, onSample, shared = false, paused = false }: {
+export default function EyeMonitor({ active, deviceId, reference, eyeReference, sensitivity = 'normal', onUpdate, onSample, onFace, shared = false, paused = false }: {
   onSample: (at: number, snapshot: EyeSnapshot) => void;
   active: boolean; deviceId: string; reference: number; eyeReference: number; sensitivity?: EyeSensitivity; onUpdate: (update: EyeUpdate) => void;
+  /** Hands each face result (with the head matrix) to the upper-body neck model; blink measurement does not use it. */
+  onFace?: (sample: FaceSample) => void;
   shared?: boolean; paused?: boolean;
 }) {
   const { videoRef, startWebcam, stopWebcam, webcamError } = useWebcam();
@@ -92,7 +95,8 @@ export default function EyeMonitor({ active, deviceId, reference, eyeReference, 
         const files = await FilesetResolver.forVisionTasks(new URL('mediapipe/face/wasm', base).href);
         return initializeMediaPipe(() => FaceLandmarker.createFromOptions(files, {
           baseOptions: { modelAssetPath: new URL('models/face_landmarker.task', base).href, delegate: 'CPU' },
-          runningMode: 'VIDEO', numFaces: 2, outputFaceBlendshapes: true,
+          // The head matrix is extra output for the neck model (E19); landmarks and blendshapes are unchanged.
+          runningMode: 'VIDEO', numFaces: 2, outputFaceBlendshapes: true, outputFacialTransformationMatrixes: true,
           minFaceDetectionConfidence: 0.6, minFacePresenceConfidence: 0.6, minTrackingConfidence: 0.6,
         }), true);
       },
@@ -112,7 +116,9 @@ export default function EyeMonitor({ active, deviceId, reference, eyeReference, 
                 cameraChanged = true;
               }
               cameraSignature.current = signature;
+              const videoTime = runtime.current.videoTime;
               const result = model.detectForVideo((shared ? runtime.current.canvas : previewRef.current) ?? video, now);
+              onFace?.({ t: now, videoTime, faces: result.faceLandmarks, matrices: result.facialTransformationMatrixes ?? [] });
               const { observation, reason } = readEyes(result, video.videoWidth, video.videoHeight);
               const current = engine.sample(now, observation);
               onSample(now, current);
@@ -155,7 +161,7 @@ export default function EyeMonitor({ active, deviceId, reference, eyeReference, 
       engine.sample(performance.now(), null);
       runner.stop();
     };
-  }, [active, shared, deviceId, onUpdate, onSample, startWebcam, stopWebcam, videoRef, connect, detach, runtime]);
+  }, [active, shared, deviceId, onUpdate, onSample, onFace, startWebcam, stopWebcam, videoRef, connect, detach, runtime]);
   if (shared) return null;
   return (
     <div className="relative overflow-hidden rounded-2xl bg-surface-muted">

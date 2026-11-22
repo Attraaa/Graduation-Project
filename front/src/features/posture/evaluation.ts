@@ -1,15 +1,18 @@
 import { DEFAULT_CALIBRATION_OPTIONS } from './calibration.ts';
 import type { ObservationState } from './observation.ts';
 import { scorePosture } from './scoring.ts';
-import type { ScorePolicy } from './scoring.ts';
+import type { PostureScore, ScorePolicy } from './scoring.ts';
 import { MOTION_PROTECTION } from './scoreSettings.ts';
 
 /**
  * [역할: 원점수에 시간 규칙을 적용하고 세션 결과를 누적]
- * 매 관측마다 scoring.ts를 호출한 뒤 움직임 동결·감점 유예·복귀 확인을 적용합니다.
+ * 어깨는 매 관측마다 scoring.ts를 호출한 뒤 움직임 동결·감점 유예·복귀 확인을 적용합니다.
+ * 목은 E19 모델이 계산해 One Euro 필터로 다듬은 점수를 받아(measured) 보호 규칙 없이 그대로 씁니다.
  * 목과 어깨는 이 함수를 각각 호출하고, 각자 별도의 상태와 평균을 가집니다.
  * 실제 DB 쓰기는 이 파일 밖의 기록 모듈이 담당합니다.
  */
+/** 이 파일 밖에서 계산한 점수와 습관 편차. null은 판정 불가입니다. */
+export type MeasuredScore = Pick<PostureScore, 'score' | 'deviation'>;
 
 // "지속된 기준 이탈" 횟수/시간에만 사용하는 규칙입니다. 점수 감점 유예와 별도입니다.
 // 가중 편차 0.15 이상이 2초 이어지면 1회 확정, 이후 0.10 이하이면 해당 이탈 구간 종료.
@@ -89,7 +92,7 @@ export interface EvaluationState {
 }
 
 /** 새 세션의 빈 상태입니다. 아직 측정하지 않았으므로 처음부터 100점을 넣지 않습니다. */
-export function createEvaluation(policy: ScorePolicy, habit: HabitPolicy = HABIT_POLICY): EvaluationState {
+export function createEvaluation(policy: Pick<ScorePolicy, 'version'>, habit: HabitPolicy = HABIT_POLICY): EvaluationState {
   return {
     scorePolicyVersion: policy.version,
     habitPolicyVersion: habit.version,
@@ -123,17 +126,25 @@ export function interruptEvaluation(previous: EvaluationState): EvaluationState 
   };
 }
 
-/** 매 프레임의 observation 결과를 한 번씩 처리합니다. 화면 갱신보다 먼저 계산·누적합니다. */
+/**
+ * 매 프레임의 observation 결과를 한 번씩 처리합니다. 화면 갱신보다 먼저 계산·누적합니다.
+ * measured를 주면 scoring.ts 대신 그 점수를 쓰고 움직임 동결·유예·복귀 확인을 적용하지 않습니다(목, E19).
+ * 이때 observation에서는 관찰 시간(observedSeconds)만 읽습니다(목은 E19가 잰 결과로 따로 셉니다).
+ * 시간 누적·평균·기준 이탈은 어느 쪽이든 같은 규칙입니다.
+ */
+export function advanceEvaluation(previous: EvaluationState, observation: ObservationState, policy: ScorePolicy, habit?: HabitPolicy): EvaluationState;
+export function advanceEvaluation(previous: EvaluationState, observation: Pick<ObservationState, 'observedSeconds'>, policy: Pick<ScorePolicy, 'version'>, habit: HabitPolicy, measured: MeasuredScore): EvaluationState;
 export function advanceEvaluation(
   previous: EvaluationState,
-  observation: ObservationState,
-  policy: ScorePolicy,
+  observation: Pick<ObservationState, 'observedSeconds'> & Partial<ObservationState>,
+  policy: Pick<ScorePolicy, 'version'>,
   habit: HabitPolicy = HABIT_POLICY,
+  measured?: MeasuredScore,
 ): EvaluationState {
   // 규칙 버전이 달라졌으면 새 상태로 시작해 서로 다른 규칙의 평균을 섞지 않습니다.
   const base = previous.scorePolicyVersion === policy.version && previous.habitPolicyVersion === habit.version
     ? previous : createEvaluation(policy, habit);
-  const current = scorePosture(observation.delta, policy);
+  const current = measured ?? scorePosture(observation.delta ?? null, policy as ScorePolicy);
   // 이번 상태를 만들고 원점수부터 넣습니다. 아래 보호 규칙이 currentScore를 조정할 수 있습니다.
   const next: EvaluationState = {
     ...interruptEvaluation(base),
@@ -151,9 +162,11 @@ export function advanceEvaluation(
   if (current.score === null) return next;
   // 유지할 점수는 마지막 표시 점수입니다. 측정 이력이 처음이면 실제 원점수를 사용합니다.
   const held = base.lastScore ?? current.score;
-  const moving = observation.velocityPxPerSecond !== null
-    && observation.velocityPxPerSecond > MOTION_PROTECTION.velocityPxPerSecond;
-  if (moving) {
+  const velocity = observation.velocityPxPerSecond ?? null;
+  const moving = !measured && velocity !== null && velocity > MOTION_PROTECTION.velocityPxPerSecond;
+  if (measured) {
+    // 바깥에서 이미 시간 필터를 적용한 점수입니다. 그대로 표시·누적합니다.
+  } else if (moving) {
     // 빠르게 움직일 때는 마지막 점수를 유지합니다. 이력이 없으면 null로 기다립니다.
     next.protection = 'moving';
     next.currentScore = base.lastScore;

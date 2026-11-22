@@ -7,7 +7,8 @@ import KeyboardSettings from '../features/keyboard/KeyboardSettings';
 import AccountSecurity from '../features/settings/AccountSecurity';
 import { POSTURE_SENSITIVITY } from '../features/posture/evaluation';
 import { BUTTON, BUTTON_DANGER, Field, INPUT, Segmented, SettingsCard, Slider, Switch } from '../features/settings/parts';
-import { readEyeSensitivity, readPostureSensitivity, writeEyeSensitivity, writePostureSensitivity } from '../features/settings/preferences';
+import { readBaseCva, readEyeSensitivity, readPostureSensitivity, writeBaseCva, writeEyeSensitivity, writePostureSensitivity } from '../features/settings/preferences';
+import { BASE_CVA } from '../features/posture/modes/turtle';
 import { NOTIFICATION_SETTING_KEYS, NOTIFICATION_SETTINGS_CHANGED, readNotificationPreferences } from '../features/notifications/preferences';
 import { useSubmission } from '../hooks/useSubmission';
 import { notificationDeliveryMessage, reportNotificationDelivery, subscribeNotificationDelivery } from '../features/notifications/delivery';
@@ -84,6 +85,7 @@ const Settings = () => {
   const [alertStrength, setAlertStrength] = useState(() => readNotificationPreferences().silent ? 'soft' : 'normal');
   const [scoreThreshold, setScoreThreshold] = useState(() => readNotificationPreferences().scoreThreshold);
   const [postureSensitivity, setPostureSensitivity] = useState(() => readPostureSensitivity());
+  const [baseCva, setBaseCva] = useState(() => readBaseCva());
   const [eyeSensitivity, setEyeSensitivity] = useState(() => readEyeSensitivity());
 
   const handleTheme = (theme: Theme) => {
@@ -191,6 +193,9 @@ const Settings = () => {
           <Slider id="settings-score-threshold" label="경고 점수 기준" valueText={`${scoreThreshold}점 이하`}
             min={40} max={95} minLabel="40점" maxLabel="95점" value={scoreThreshold}
             onChange={value => { setScoreThreshold(value); keep('scoreThreshold', String(value)); }} />
+          <Slider id="settings-base-cva" label="기준 CVA" valueText={`${baseCva}°`}
+            min={BASE_CVA.min} max={BASE_CVA.max} minLabel={`${BASE_CVA.min}°`} maxLabel={`${BASE_CVA.max}°`} value={baseCva}
+            onChange={value => { setBaseCva(value); writeBaseCva(value); }} />
           <p className="mt-auto text-xs text-muted">{`민감도는 ${NEXT_SESSION}`}</p>
         </SettingsCard>
 
