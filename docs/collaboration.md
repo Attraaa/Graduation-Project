@@ -22,12 +22,12 @@ flowchart TD
 
 | 작업 | 담당 경로 | 검증 |
 | --- | --- | --- |
-| 목 점수 지표·감점 기준 | `front/src/features/posture/modes/turtle.ts` | `posture-scoring.test.mjs`의 목 모드·격리 사례 |
+| 목 점수(거북목 모델 E19) | 정책 `front/src/features/posture/modes/turtle.ts`, 모델 실행·보정 `front/src/features/posture/e19/`, 모델 패키지 `front/public/models/fhp-e19`(숫자 변경 금지) | `e19-runtime.test.mjs`, `fhp-e19-parity.test.mjs`(fixtures는 Git 제외) |
 | 어깨 점수 지표·감점 기준 | `front/src/features/posture/modes/shoulder.ts` | 같은 테스트의 어깨 모드·격리 사례 |
 | 모든 상체 점수에 공통인 산식 | `front/src/features/posture/scoring.ts` | 양 모드 경계·누락·재현성 |
 | 기준 수집·좌표 정의 | `front/src/features/posture/calibration.ts`, `observation.ts` | 수집/관측 회귀 검사, 실제 촬영 검증 |
 | 시간 평균·연속 관찰·기준 이탈 | `front/src/features/posture/evaluation.ts` | `posture-evaluation.test.mjs` |
-| 점수·습관 카드의 문구·디자인 | `front/src/features/posture/PostureMetrics.tsx` | `posture-metrics.test.mjs`, 실제 화면 확인 |
+| 점수·습관 카드의 문구·디자인 | `front/src/features/posture/PostureMetrics.tsx`, 카메라 화면 안내 띠 `CameraGuidance.tsx`·`guidance.ts`(공통 띠 `features/session/GuidanceBand.tsx`) | `posture-metrics.test.mjs`, `session-ui.test.mjs`, 실제 화면 확인 |
 | 홈 시작·일시정지·재수집 | `front/src/features/session/MonitoringProvider.tsx`(카메라 설정 창의 기준/위치 다시 잡기 포함), `SessionActions.tsx`, `front/src/features/dashboard/ModeCards.tsx` | 두 모드 독립 상태, 이동 시 유지, 중지 시 해제 |
 | 카메라·모델 연결 | `front/src/components/PostureMonitor.tsx`, `front/src/hooks/` | 생명주기 검사와 실기기 검증 |
 | 공통 틀·타이머·장치 선택 | `front/src/features/session/` | 목·어깨·키보드 화면 모두 확인 |
@@ -62,10 +62,10 @@ README와 docs/collaboration.md, docs/evaluation.md를 읽어.
 
 ## 안구 모드 담당 경계
 
-안구 계산·정책·영상 처리는 `front/src/features/eye/`가 소유합니다. 2026-10-10부터 독립 `EyeSession` 화면은 제거하고 `EyeMonitor(shared)`가 상체의 기존 변환 영상과 스트림을 빌립니다. 카메라 시작/해제는 `PostureMonitor`가 소유하고 깜빡임은 `PostureMetrics`에서 빈도와 평균으로 표시합니다. 공통 기록·서버 계약은 연결 담당자가 조정합니다. 안구 정책 변경은 `eyePolicy.ts`, 안구 테스트, [eye-mode.md](eye-mode.md)를 함께 갱신합니다. 안구 결과는 공통 MySQL/HTTP 경계에 저장하고 기존 안구 통계·학습이력에서 조회합니다.
+안구 계산·정책·영상 처리는 `front/src/features/eye/`가 소유합니다. 2026-11-23부터 `EyeMonitor`는 FaceLandmarker의 머리 행렬 출력을 켜고 얼굴 결과를 `onFace`로 상체 목 모델에 넘깁니다(깜빡임 계산과 랜드마크는 그대로). 옵션을 바꿀 때는 E19 학습 조건(`config.json`의 runtime_requirements)과 맞는지 목 점수 담당과 함께 확인합니다. 2026-10-10부터 독립 `EyeSession` 화면은 제거하고 `EyeMonitor(shared)`가 상체의 기존 변환 영상과 스트림을 빌립니다. 카메라 시작/해제는 `PostureMonitor`가 소유하고 깜빡임은 `PostureMetrics`에서 빈도와 평균으로 표시합니다. 공통 기록·서버 계약은 연결 담당자가 조정합니다. 안구 정책 변경은 `eyePolicy.ts`, 안구 테스트, [eye-mode.md](eye-mode.md)를 함께 갱신합니다. 안구 결과는 공통 MySQL/HTTP 경계에 저장하고 기존 안구 통계·학습이력에서 조회합니다.
 
 ## 상체 통합 담당 경계 (2026-10-02)
 
-사용자가 선택하는 상체 화면은 `upper_body` 하나이며 목·어깨를 동시에 계산합니다. `modes/turtle.ts`와 `shoulder.ts`는 독립 부위 정책으로 유지하고, 조정값은 `scoreSettings.ts` 상단에 모읍니다. 한 카메라의 관측을 두 evaluation 상태와 두 저장 sink에 전달합니다. 가중치·상하 gain·보호 설정 해시가 정책 ID에 포함되며, 공식 변경 시 정책 버전도 올립니다. 현재 회전 보류·상하 양방향 감도·복귀 확인은 점수/습관 v3이고 기준 스키마는 v2입니다. 기존 저장 부위 키와 데이터는 보존합니다.
+사용자가 선택하는 상체 화면은 `upper_body` 하나이며 목·어깨를 동시에 계산합니다. `modes/turtle.ts`(2026-11-23부터 E19 목 정책)와 `shoulder.ts`는 독립 부위 정책으로 유지하고, 어깨 조정값은 `scoreSettings.ts` 상단에 모읍니다. 한 카메라의 관측을 두 evaluation 상태와 두 저장 sink에 전달합니다. 가중치·상하 gain·보호 설정 해시가 정책 ID에 포함되며, 공식 변경 시 정책 버전도 올립니다. 현재 회전 보류·상하 양방향 감도·복귀 확인은 점수/습관 v3이고 기준 스키마는 v2입니다. 기존 저장 부위 키와 데이터는 보존합니다.
 
 안구 저장 통합은 `database/eye.ts`, `eyeRecorder.ts`, `front/src/features/eye/recording.ts`와 공통 HTTP 저장소/API가 소유합니다. 안구 표본/순수 정책과 서버 인증/SQL을 분리하며 서버 추가 테이블은 `server/migrations/003_eye_records.sql`을 따릅니다. 안구 통계·학습이력은 기존 상체·키보드 화면과 함께 유지합니다.

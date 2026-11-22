@@ -44,6 +44,7 @@ front와 server는 각각 `package.json`과 `package-lock.json`을 유지합니�
 | recharts | 3.8.1 | 통계 차트 |
 | postcss / autoprefixer | 8.5.28 / 10.5.0 | CSS 처리 |
 | @mediapipe/pose | 0.5.1675469404 | 브라우저 자세 랜드마크 추론 |
+| onnxruntime-web | 1.23.2 | 거북목 모델 E19 실행(wasm, 스레드 1개). 연구에서 일치 시험을 통과한 버전 |
 | socket.io-client | 4.8.1 | Electron 키보드 화면과 로컬 Python 분석 서비스 연결 |
 | electron / electron-builder | 41.10.7 / 26.15.3 | 데스크톱 실행·설치 파일 생성 |
 | vite / @vitejs/plugin-react | 8.2.2 / 6.0.1 | 개발·빌드 |
@@ -55,7 +56,7 @@ front와 server는 각각 `package.json`과 `package-lock.json`을 유지합니�
 
 사용하지 않던 `vite-plugin-electron-renderer`는 제거했습니다. 현재 렌더러는 브라우저 API를 사용하며 Node API를 직접 가져오지 않습니다. 필요한 데스크톱 기능은 preload를 통한 명시적 IPC 계약으로 추가합니다.
 
-브라우저 MediaPipe는 버전 없는 CDN 대신 npm 패키지를 정확히 고정했습니다. [copy-mediapipe.mjs](../front/scripts/copy-mediapipe.mjs)가 설치·개발·빌드 준비 단계에서 JavaScript, WASM, 모델 자원을 함께 `front/public/mediapipe/pose`로 복사합니다. 생성 폴더는 Git에 넣지 않으며 원본 패키지와 잠금으로 복원합니다. 자세 분석 자원을 실행 중 외부 CDN에서 가져오지 않습니다.
+브라우저 MediaPipe는 버전 없는 CDN 대신 npm 패키지를 정확히 고정했습니다. [copy-mediapipe.mjs](../front/scripts/copy-mediapipe.mjs)가 설치·개발·빌드 준비 단계에서 JavaScript, WASM, 모델 자원을 함께 `front/public/mediapipe/pose`로 복사합니다. 생성 폴더는 Git에 넣지 않으며 원본 패키지와 잠금으로 복원합니다. 자세 분석 자원을 실행 중 외부 CDN에서 가져오지 않습니다. ONNX Runtime Web의 `ort-wasm-simd-threaded.wasm`(약 11.9 MB)은 빌드가 런타임 모듈 옆(`dist/assets`)에 한 번만 넣고, 개발 서버는 `vite.config.ts`의 `optimizeDeps.exclude`로 `node_modules`에서 그대로 읽습니다. 목 모델 E19 패키지(`model.onnx`·`config.json`, 약 1.3 MB)는 `front/public/models/fhp-e19`에 커밋되어 있고, 앱 테스트가 원본 manifest의 SHA-256과 같은지 확인합니다.
 
 ### 주요 서버 잠금 버전
 

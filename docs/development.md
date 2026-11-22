@@ -449,3 +449,13 @@ macOS에서 `bash scripts/moti.sh check`를 실행해 타입·린트, 프론트 
 - 카메라 설정 창의 `.camera-preview-image svg` 규칙이 카메라 꺼짐 아이콘까지 미리보기 크기로 키워 안내를 가리던 문제를 직계 레이어만 채우도록 고쳤고, 꺼짐 안내는 "홈에서 시작을 눌러 주세요."로 바꿨습니다.
 
 macOS `bash scripts/moti.sh check`에서 타입·린트, 프론트 264개(상세 행 표시 테스트 1개 삭제), 서버 76개가 통과했습니다(실제 MySQL 11개 skip, Python 단계는 Windows 전용 잠금 파일로 실행 불가). 가짜 기록 API·browser 모드 vite·Headless Chrome으로 홈 카드 버튼 두 개가 카메라 설정 창 하나를 열어 모드를 바꾸는 것과 비활성 상태의 기준/위치 다시 잡기, 좁은 홈에서 알림 대상별 카드 이동, 예전 알림 대상 무시와 예전 주소의 홈 이동을 확인했습니다. 실제 Electron 설정 창과 측정 중 다시 잡기 동작은 확인하지 않았습니다.
+
+## 2026-11-23 목 점수 거북목 모델 E19 연결 검증
+
+브랜치 `feat/e19-neck-model`. 목 점수를 E19(100 − 목 부하 점수)로 바꾸고 5초 기준 보정·카메라 화면 안내 띠·추정 CVA·기준 CVA 설정을 붙였습니다. 계약은 [calibration.md](calibration.md#거북목-모델-e19-보정-2026-11-23), [evaluation.md](evaluation.md#목-점수-e19-2026-11-23)에 있습니다.
+
+- `moti.cmd check`: 프론트 타입·린트와 279개 테스트, 서버 빌드와 76개 테스트(실제 MySQL 11개 skip), Python 환경·키보드 모델 확인 통과.
+- 일치 시험(`fhp-e19-parity.test.mjs`): 앱 안 `model.onnx`의 SHA-256이 원본 manifest와 같고, 학습 때 기대값과 300프레임 목 Δ 최대 차이 7.6e-6°, 부하 3.1e-5 %, 얼굴 없는 5프레임 1.9e-6°(기준 0.05°·0.25 %). fixtures는 학습 참가자 얼굴 랜드마크라 Git에 넣지 않고 `front/tests/fixtures/fhp-e19-parity/`에만 두며, 없는 PC에서는 이 시험만 건너뜁니다.
+- 브라우저(개발 서버): ONNX Runtime Web이 `node_modules`의 wasm으로 로딩되고 E19 한 프레임 추론 약 0.45ms, 50프레임 보정 약 48ms.
+- 운영 빌드(`npm run build`, `file://`): ORT wasm은 `dist/assets`에 한 벌(11.9 MB). 별도 프로필의 Electron과 Chromium 가짜 카메라로 상체를 시작해 DevTools 프로토콜로 안내 띠를 읽었습니다. 3초 준비(3→2→1) → 5초 기록 → 사람이 없어 "얼굴과 양쪽 어깨가 화면 안에 보이게 앉아 주세요. 3초 뒤 다시 시작해요." → 자동 재시도까지 확인했습니다. 실제 사람·웹캠 정확도와 설치 파일(`moti.cmd package`)은 이 검사에 포함하지 않았습니다.
+- 기존 빌드 경고(큰 청크, records 정적/동적 import)는 그대로입니다. `keyboard-settings.test.mjs`의 한 시험이 전체 실행 중 한 번 실패하고 다시 실행하면 통과했습니다(이번 변경과 관계없음).
