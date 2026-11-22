@@ -5,16 +5,16 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { existsSync, readFileSync } from 'node:fs';
 import { createNeckModel } from '../src/features/posture/e19/model.ts';
-import { advanceNeckFlow, createOneEuro, finishNeckFlow, NECK_FLOW, neckSecondsLeft, referenceFailure, startNeckFlow } from '../src/features/posture/e19/flow.ts';
+import { advanceNeckFlow, breakNeckClock, createOneEuro, finishNeckFlow, NECK_FLOW, neckSecondsLeft, referenceFailure, startNeckClock, startNeckFlow, tickNeckClock } from '../src/features/posture/e19/flow.ts';
 import { createFaceBuffer, neckFrame } from '../src/features/posture/e19/frame.ts';
-import { BASE_CVA, estimatedCva, neckDeviation, neckScore, turtleScorePolicy } from '../src/features/posture/modes/turtle.ts';
+import { appNeckConfig, BASE_CVA, estimatedCva, NECK_MAX_YAW_DEG, neckDeviation, neckScore, turtleScorePolicy } from '../src/features/posture/modes/turtle.ts';
 import { HABIT_POLICY } from '../src/features/posture/evaluation.ts';
 
 const config = JSON.parse(readFileSync(new URL('../public/models/fhp-e19/config.json', import.meta.url), 'utf8'));
 const close = (a, b, tolerance = 1e-5) => assert.ok(Math.abs(a - b) < tolerance, `${a} != ${b}`);
 class Tensor { constructor(type, data, dims) { Object.assign(this, { type, data, dims }); } }
 // Fake E19: neck Δ = 100 × (nose x − reference nose x), load = 1000 × (nose y − reference nose y), head pitch = 100 × nose z.
-function fakeModel() {
+function fakeModel(cfg = config) {
   const feeds = [];
   const session = { run: async input => {
     feeds.push(input);
@@ -22,7 +22,7 @@ function fakeModel() {
     return { delta_deg: { data: Float32Array.of((p[0] - r[0]) * 100) }, load_pct: { data: Float32Array.of((p[1] - r[1]) * 1000) },
       psi_deg: { data: Float32Array.of(p[2] * 100) }, scale: { data: Float32Array.of(1, 1, 1) } };
   } };
-  return { model: createNeckModel({ Tensor }, session, config), feeds };
+  return { model: createNeckModel({ Tensor }, session, cfg), feeds };
 }
 function frame(t, { x = 0.5, y = 0.4, z = 0, visibility = 1, face = true, yaw = 0, faceX = x } = {}) {
   const pose = Array.from({ length: 13 }, () => [0.5, 0.5, 0, visibility]);
@@ -80,6 +80,25 @@ test('a head turned over 35° stops measuring; a missing or far face still measu
   assert.equal(noFace.measuring, true); assert.equal(noFace.faceUsed, false); assert.equal(feeds.at(-1).face_ok.data[0], 0);
   const other = await model.infer(frame(0, { faceX: 0.85, yaw: 60 }));
   assert.equal(other.measuring, true); assert.equal(other.faceUsed, false);
+});
+
+test('the app lowers only the head-turn limit to 25° (package config stays 35°, same model)', async () => {
+  const { model } = fakeModel(appNeckConfig(config));
+  await model.calibrate(upright());
+  assert.equal(NECK_MAX_YAW_DEG, 25); assert.equal(config.qc.max_abs_yaw_deg, 35);
+  assert.deepEqual(await model.infer(frame(0, { yaw: 26 })), { measuring: false, reason: 'head_turned' });
+  assert.equal((await model.infer(frame(0, { yaw: 24 }))).measuring, true);
+  assert.deepEqual(appNeckConfig(config), { ...config, qc: { ...config.qc, max_abs_yaw_deg: 25 } });
+});
+
+test('neck observed time adds gaps up to 500 ms between measured results and restarts after a break', () => {
+  let clock = tickNeckClock(startNeckClock(), 1000);
+  assert.equal(clock.seconds, 0);
+  clock = tickNeckClock(clock, 1100); close(clock.seconds, 0.1);
+  clock = tickNeckClock(clock, 1600); close(clock.seconds, 0.6);
+  clock = tickNeckClock(clock, 2101); close(clock.seconds, 0.6);
+  clock = tickNeckClock(breakNeckClock(clock), 2200); close(clock.seconds, 0.6);
+  clock = tickNeckClock(clock, 2300); close(clock.seconds, 0.7);
 });
 
 test('calibration order: 3 s prep, 5 s of about ten frames a second, computing, and a 3 s failure notice before retrying', () => {

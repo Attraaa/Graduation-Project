@@ -1,4 +1,4 @@
-import type { CalibrationReason } from '../calibration.ts';
+import { DEFAULT_CALIBRATION_OPTIONS, type CalibrationReason } from '../calibration.ts';
 import type { NeckCalibration, NeckFailure, NeckFrame } from './model.ts';
 
 /**
@@ -65,3 +65,16 @@ export function createOneEuro(minCutoff: number, beta: number, dCutoff = 1.0) {
     reset() { x = null; dx = 0; last = null; },
   };
 }
+
+/**
+ * 목 점수의 관찰 시간(초). 목은 어깨의 관측 조건과 따로 E19 자체 검사만 따르므로 시간도 따로 셉니다.
+ * E19가 잰 결과끼리 간격이 500ms 이하일 때만 더합니다(어깨 관찰 시간과 같은 규칙).
+ */
+export interface NeckClock { seconds: number; lastAt: number | null }
+export const startNeckClock = (): NeckClock => ({ seconds: 0, lastAt: null });
+export function tickNeckClock(clock: NeckClock, at: number): NeckClock {
+  const gap = clock.lastAt === null ? null : at - clock.lastAt;
+  return { seconds: clock.seconds + (gap !== null && gap > 0 && gap <= DEFAULT_CALIBRATION_OPTIONS.maxGapMs ? gap / 1000 : 0), lastAt: at };
+}
+/** 측정이 끊기면 다음 결과와 잇지 않습니다. */
+export const breakNeckClock = (clock: NeckClock): NeckClock => ({ ...clock, lastAt: null });

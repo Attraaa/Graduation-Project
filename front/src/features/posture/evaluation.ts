@@ -129,13 +129,14 @@ export function interruptEvaluation(previous: EvaluationState): EvaluationState 
 /**
  * 매 프레임의 observation 결과를 한 번씩 처리합니다. 화면 갱신보다 먼저 계산·누적합니다.
  * measured를 주면 scoring.ts 대신 그 점수를 쓰고 움직임 동결·유예·복귀 확인을 적용하지 않습니다(목, E19).
+ * 이때 observation에서는 관찰 시간(observedSeconds)만 읽습니다(목은 E19가 잰 결과로 따로 셉니다).
  * 시간 누적·평균·기준 이탈은 어느 쪽이든 같은 규칙입니다.
  */
 export function advanceEvaluation(previous: EvaluationState, observation: ObservationState, policy: ScorePolicy, habit?: HabitPolicy): EvaluationState;
-export function advanceEvaluation(previous: EvaluationState, observation: ObservationState, policy: Pick<ScorePolicy, 'version'>, habit: HabitPolicy, measured: MeasuredScore): EvaluationState;
+export function advanceEvaluation(previous: EvaluationState, observation: Pick<ObservationState, 'observedSeconds'>, policy: Pick<ScorePolicy, 'version'>, habit: HabitPolicy, measured: MeasuredScore): EvaluationState;
 export function advanceEvaluation(
   previous: EvaluationState,
-  observation: ObservationState,
+  observation: Pick<ObservationState, 'observedSeconds'> & Partial<ObservationState>,
   policy: Pick<ScorePolicy, 'version'>,
   habit: HabitPolicy = HABIT_POLICY,
   measured?: MeasuredScore,
@@ -143,7 +144,7 @@ export function advanceEvaluation(
   // 규칙 버전이 달라졌으면 새 상태로 시작해 서로 다른 규칙의 평균을 섞지 않습니다.
   const base = previous.scorePolicyVersion === policy.version && previous.habitPolicyVersion === habit.version
     ? previous : createEvaluation(policy, habit);
-  const current = measured ?? scorePosture(observation.delta, policy as ScorePolicy);
+  const current = measured ?? scorePosture(observation.delta ?? null, policy as ScorePolicy);
   // 이번 상태를 만들고 원점수부터 넣습니다. 아래 보호 규칙이 currentScore를 조정할 수 있습니다.
   const next: EvaluationState = {
     ...interruptEvaluation(base),
@@ -161,8 +162,8 @@ export function advanceEvaluation(
   if (current.score === null) return next;
   // 유지할 점수는 마지막 표시 점수입니다. 측정 이력이 처음이면 실제 원점수를 사용합니다.
   const held = base.lastScore ?? current.score;
-  const moving = !measured && observation.velocityPxPerSecond !== null
-    && observation.velocityPxPerSecond > MOTION_PROTECTION.velocityPxPerSecond;
+  const velocity = observation.velocityPxPerSecond ?? null;
+  const moving = !measured && velocity !== null && velocity > MOTION_PROTECTION.velocityPxPerSecond;
   if (measured) {
     // 바깥에서 이미 시간 필터를 적용한 점수입니다. 그대로 표시·누적합니다.
   } else if (moving) {

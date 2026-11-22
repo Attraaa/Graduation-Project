@@ -9,7 +9,7 @@ import { createMonitorSnapshot } from '../features/posture/monitorTypes';
 import type { MonitorSnapshot } from '../features/posture/monitorTypes';
 import { NECK_ONE_EURO, neckDeviation, neckScore, turtleScorePolicy } from '../features/posture/modes/turtle';
 import { shoulderScorePolicy } from '../features/posture/modes/shoulder';
-import { advanceNeckFlow, createOneEuro, finishNeckFlow, NECK_FLOW, neckSecondsLeft, referenceFailure, startNeckFlow } from '../features/posture/e19/flow';
+import { advanceNeckFlow, breakNeckClock, createOneEuro, finishNeckFlow, NECK_FLOW, neckSecondsLeft, referenceFailure, startNeckClock, startNeckFlow, tickNeckClock } from '../features/posture/e19/flow';
 import type { NeckFlow } from '../features/posture/e19/flow';
 import { neckFrame } from '../features/posture/e19/frame';
 import type { FaceBuffer } from '../features/posture/e19/frame';
@@ -82,14 +82,15 @@ const PostureMonitor = ({ isRunning, paused = false, referenceRequest = 0, devic
     let flowToken = 0, calibrating = false, inferring = false;
     let lastInferAt = -Infinity, neckInterruptedAt = -Infinity;
     let angleDropDeg: number | null = null;
+    let neckClock = startNeckClock();
     const loadFilter = createOneEuro(NECK_ONE_EURO.minCutoff, NECK_ONE_EURO.beta, NECK_ONE_EURO.dCutoff);
     const angleFilter = createOneEuro(NECK_ONE_EURO.minCutoff, NECK_ONE_EURO.beta, NECK_ONE_EURO.dCutoff);
     const restartNeck = () => {
       flow = null; flowToken++; model?.clear(); calibration = createCalibration();
-      loadFilter.reset(); angleFilter.reset(); angleDropDeg = null; lastInferAt = -Infinity;
+      loadFilter.reset(); angleFilter.reset(); angleDropDeg = null; lastInferAt = -Infinity; neckClock = startNeckClock();
     };
     // Older E19 results (still running) must not overwrite a later interruption.
-    const interruptNeck = (at: number) => { neckInterruptedAt = at; angleDropDeg = null; neck = interruptEvaluation(neck); };
+    const interruptNeck = (at: number) => { neckInterruptedAt = at; angleDropDeg = null; neckClock = breakNeckClock(neckClock); neck = interruptEvaluation(neck); };
     const fail = () => {
       if (abort.signal.aborted) return;
       interruptNeck(performance.now());
@@ -130,16 +131,17 @@ const PostureMonitor = ({ isRunning, paused = false, referenceRequest = 0, devic
         else calibration = createCalibration();
       }, fail).finally(() => { calibrating = false; });
     };
-    const inferNeck = (input: NeckFrame, observed: typeof observation, at: number) => {
+    const inferNeck = (input: NeckFrame, at: number) => {
       const token = flowToken;
       inferring = true; lastInferAt = at;
       void model!.infer(input).then(result => {
         if (abort.signal.aborted || token !== flowToken || at <= neckInterruptedAt) return;
         if (!result.measuring) interruptNeck(at);
         else {
+          neckClock = tickNeckClock(neckClock, at);
           const score = neckScore(loadFilter.filter(result.scoreLoad, at));
           angleDropDeg = angleFilter.filter(result.scoreNeck, at) * model!.config.delta_ref_deg / 100;
-          neck = advanceEvaluation(neck, observed, turtleScorePolicy, habit, { score, deviation: neckDeviation(score) });
+          neck = advanceEvaluation(neck, { observedSeconds: neckClock.seconds }, turtleScorePolicy, habit, { score, deviation: neckDeviation(score) });
         }
         recording[0]?.sample(at, neck);
       }, fail).finally(() => { inferring = false; });
@@ -230,18 +232,17 @@ const PostureMonitor = ({ isRunning, paused = false, referenceRequest = 0, devic
           recording = beginRecord(capturedAtMs);
           neck = createEvaluation(turtleScorePolicy, habit);
           shoulder = createEvaluation(shoulderScorePolicy, habit);
-          neckInterruptedAt = capturedAtMs; angleDropDeg = null;
+          neckInterruptedAt = capturedAtMs; angleDropDeg = null; neckClock = startNeckClock();
         }
         recordedReference = referenceKey;
         shoulder = advanceEvaluation(shoulder, observation, shoulderScorePolicy, habit);
         recording[1]?.sample(capturedAtMs, shoulder);
-        // Neck: the same valid frames as the shoulder, scored by E19 about 10 times a second.
-        if (ready && !observation.delta) {
-          if (neck.currentScore !== null || angleDropDeg !== null) { interruptNeck(capturedAtMs); recording[0]?.sample(capturedAtMs, neck); }
-        } else if (ready && !inferring && capturedAtMs - lastInferAt >= NECK_FLOW.sampleMs - 5) inferNeck(input, observation, capturedAtMs);
+        // Neck: E19 about 10 times a second under its own checks only (like the research tool), not the shoulder's checks above.
+        if (ready && !inferring && capturedAtMs - lastInferAt >= NECK_FLOW.sampleMs - 5) inferNeck(input, capturedAtMs);
         const current = flow!;
         const snapshot: MonitorSnapshot = {
-          phase: ready ? (observation.delta ? 'observing' : 'unavailable') : 'calibrating',
+          // Unavailable only when neither the neck nor the shoulder can be measured.
+          phase: ready ? (observation.delta || neck.currentScore !== null ? 'observing' : 'unavailable') : 'calibrating',
           progress: current.step === 'collect' ? Math.min(1, (capturedAtMs - current.since) / collectMs) : current.step === 'computing' || ready ? 1 : 0,
           reason: observation.reason ?? calibration.reason,
           observedSeconds: observation.observedSeconds,

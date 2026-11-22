@@ -140,6 +140,12 @@ test('measured neck scores ignore motion protection but keep time, average and h
   const back=measured(missing,2400,95);
   close(back.validMs,state.validMs); assert.equal(back.deviationState,'unknown');
 });
+test('a measured neck score needs only its own observed time, not the shoulder observation', () => {
+  const measured=(state,seconds,score) => advanceEvaluation(state,{ observedSeconds: seconds },turtleScorePolicy,HABIT_POLICY,{ score, deviation: (100 - score) / 200 });
+  let state=measured(createEvaluation(turtleScorePolicy),0,90);
+  state=measured(state,0.1,80);
+  assert.equal(state.currentScore,80); close(state.validMs,100); close(state.averageScore,85);
+});
 test('identical samples preserve caller data and replay deterministically', () => {
   const state=createEvaluation(policy), input=observed(0,0.2), before=structuredClone({state,input});
   advanceEvaluation(state,input,policy); assert.deepEqual({state,input},before);

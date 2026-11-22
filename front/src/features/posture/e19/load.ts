@@ -1,4 +1,5 @@
 import { createNeckModel, type NeckModelConfig } from './model.ts';
+import { appNeckConfig } from '../modes/turtle.ts';
 
 /**
  * 앱 안의 E19 패키지(public/models/fhp-e19)를 읽습니다. ONNX Runtime Web의 wasm은 빌드가 런타임 옆에 함께 넣으므로
@@ -13,5 +14,5 @@ export async function loadNeckModel() {
   if (!response.ok) throw new Error('목 모델 설정을 불러오지 못했습니다. 설치 파일을 확인해 주세요.');
   const config = await response.json() as NeckModelConfig;
   const session = await ort.InferenceSession.create(new URL('model.onnx', base).href, { executionProviders: ['wasm'] });
-  return createNeckModel(ort, session, config);
+  return createNeckModel(ort, session, appNeckConfig(config));
 }
