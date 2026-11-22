@@ -7,7 +7,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 
 const bundle = await build({ stdin: { contents: [
   "export { default as SessionActions } from './src/features/session/SessionActions.tsx';",
-  "export { default as MonitoringNotice } from './src/features/session/MonitoringNotice.tsx';",
+  "export { default as KeyboardGuidance } from './src/features/session/KeyboardGuidance.tsx';",
   "export { default as CameraGuidance } from './src/features/posture/CameraGuidance.tsx';",
   "export { MonitoringContext } from './src/features/session/monitoringContext.ts';",
   "export { createMonitorSnapshot } from './src/features/posture/monitorTypes.ts';",
@@ -39,17 +39,24 @@ test('both modes keep three distinct action slots and enable only valid actions'
   }
 });
 
-test('the keyboard notice region contains idle, pause and error information', () => {
+test('the keyboard camera view carries mapping, unapproved-app and error guidance and clears once presses are judged', () => {
   const current = state(false);
-  assert.match(render(app.MonitoringNotice, current), /키보드 측정 안내[^]*시작하면 카메라/);
+  const band = () => render(app.KeyboardGuidance, current);
+  assert.equal(band(), '');
   current.keyboard.controls = { ...current.keyboard.controls, isRunning: true, isPaused: true };
-  assert.match(render(app.MonitoringNotice, current), /일시정지 중/);
+  assert.equal(band(), '');
   current.keyboard.controls.isPaused = false;
-  assert.match(render(app.MonitoringNotice, current), /키보드 위치를 찾고/);
+  assert.match(band(), /키보드 측정 안내[^]*키보드 위치를 찾고/);
+  current.keyboard.snapshot = { phase: 'ready', message: '키보드 위치를 잡았습니다. 이 화면에서 타이핑해 보세요.', observationStatus: 'observing', latest: null, detectedPresses: 0 };
+  assert.match(band(), /이 화면에서 타이핑해 보세요/);
+  current.keyboard.snapshot = { ...current.keyboard.snapshot, detectedPresses: 1, message: '입력과 가장 가까운 카메라 프레임으로 손가락을 판정했습니다.' };
+  assert.equal(band(), '');
+  current.keyboard.snapshot = { ...current.keyboard.snapshot, observationStatus: 'excluded' };
+  assert.match(band(), /미승인 앱/);
   current.keyboard.snapshot = { phase: 'error', message: '분석 연결 실패' };
-  assert.match(render(app.MonitoringNotice, current), /role="alert"[^>]*>분석 연결 실패/);
+  assert.match(band(), /role="alert"[^>]*>[^]*분석 연결 실패/);
   current.keyboard.controls = { ...current.keyboard.controls, isRunning: false, failed: true };
-  assert.match(render(app.MonitoringNotice, current), /role="alert"[^>]*>분석 연결 실패/);
+  assert.match(band(), /role="alert"[^>]*>[^]*분석 연결 실패/);
 });
 
 test('the upper camera view carries calibration countdown, the three failure reasons, blink calibration and errors', () => {

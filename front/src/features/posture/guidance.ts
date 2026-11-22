@@ -1,5 +1,6 @@
 import type { MonitorSnapshot, NeckModelView } from './monitorTypes.ts';
 import type { NeckFailure } from './e19/model.ts';
+import type { GuidanceLine } from '../session/GuidanceBand.tsx';
 
 /** 기준 자세 보정 실패 세 가지 안내. full은 카메라 화면 띠, short는 오버레이 미니 바에 씁니다. */
 export const NECK_FAILURE_TEXT: Readonly<Record<NeckFailure, { full: string; short: string }>> = Object.freeze({
@@ -7,14 +8,6 @@ export const NECK_FAILURE_TEXT: Readonly<Record<NeckFailure, { full: string; sho
   unstable: { full: '5초 동안 움직임이 있었어요. 움직이지 말고 그대로 계세요.', short: '움직임이 있었어요. 그대로 앉아 계세요' },
   not_upright: { full: '고개를 들어 화면 가운데를 봐 주세요.', short: '고개를 들어 화면 가운데를 봐 주세요' },
 });
-
-export interface GuidanceLine {
-  text: string;
-  tone: 'info' | 'warn' | 'error';
-  /** 남은 초(숫자) 또는 경고 표시. */
-  badge?: number | 'alert';
-  progress?: number;
-}
 
 /** 상체 카메라 화면 아래 띠의 안내. 관찰 중에는 비어 있고, 깜빡임 보정 안내는 EyeCalibrationGuide가 따로 그립니다. */
 export function upperGuidance(snapshot: MonitorSnapshot, controls: { isRunning: boolean; isPaused: boolean; failed?: boolean }): GuidanceLine[] {
