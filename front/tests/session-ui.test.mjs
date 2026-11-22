@@ -8,6 +8,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 const bundle = await build({ stdin: { contents: [
   "export { default as SessionActions } from './src/features/session/SessionActions.tsx';",
   "export { default as MonitoringNotice } from './src/features/session/MonitoringNotice.tsx';",
+  "export { default as CameraGuidance } from './src/features/posture/CameraGuidance.tsx';",
   "export { MonitoringContext } from './src/features/session/monitoringContext.ts';",
   "export { createMonitorSnapshot } from './src/features/posture/monitorTypes.ts';",
   "export { emptyEyeSnapshot } from './src/features/eye/measurement.ts';",
@@ -38,21 +39,46 @@ test('both modes keep three distinct action slots and enable only valid actions'
   }
 });
 
-test('the same notice region contains idle, pause, calibration and error information', () => {
+test('the keyboard notice region contains idle, pause and error information', () => {
   const current = state(false);
-  assert.match(render(app.MonitoringNotice, current), /시작하면 카메라/);
-  current.upper.controls = { ...current.upper.controls, isRunning: true, isPaused: true };
+  assert.match(render(app.MonitoringNotice, current), /키보드 측정 안내[^]*시작하면 카메라/);
+  current.keyboard.controls = { ...current.keyboard.controls, isRunning: true, isPaused: true };
   assert.match(render(app.MonitoringNotice, current), /일시정지 중/);
-  current.upper.controls.isPaused = false;
-  current.upper.snapshot.phase = 'calibrating';
-  const calibration = render(app.MonitoringNotice, current);
-  assert.match(calibration, /기준 자세 수집 진행률/);
-  assert.match(calibration, /깜빡임 보정/);
-  current.upper.snapshot.phase = 'error';
-  assert.match(render(app.MonitoringNotice, current), /role="alert"[^>]*>카메라·분석 연결/);
-  current.keyboard.controls = { ...current.keyboard.controls, isRunning: true };
+  current.keyboard.controls.isPaused = false;
+  assert.match(render(app.MonitoringNotice, current), /키보드 위치를 찾고/);
   current.keyboard.snapshot = { phase: 'error', message: '분석 연결 실패' };
-  assert.match(render(app.MonitoringNotice, current, 'keyboard'), /role="alert"[^>]*>분석 연결 실패/);
+  assert.match(render(app.MonitoringNotice, current), /role="alert"[^>]*>분석 연결 실패/);
   current.keyboard.controls = { ...current.keyboard.controls, isRunning: false, failed: true };
-  assert.match(render(app.MonitoringNotice, current, 'keyboard'), /role="alert"[^>]*>분석 연결 실패/);
+  assert.match(render(app.MonitoringNotice, current), /role="alert"[^>]*>분석 연결 실패/);
+});
+
+test('the upper camera view carries calibration countdown, the three failure reasons, blink calibration and errors', () => {
+  const current = state(false);
+  const band = () => render(app.CameraGuidance, current);
+  const text = () => band().replace(/<[^>]+>/g, '');
+  assert.equal(band(), '');
+  current.upper.controls = { ...current.upper.controls, failed: true };
+  assert.match(band(), /role="alert"[^>]*>[^]*카메라·분석 연결을 확인한 뒤 다시 시작/);
+  current.upper.controls = { isRunning: true, isPaused: true };
+  assert.equal(band(), '');
+  current.upper.controls.isPaused = false;
+  assert.match(text(), /카메라와 상체 분석을 준비/);
+  const neck = model => { current.upper.snapshot = { ...app.createMonitorSnapshot(), phase: 'calibrating', progress: 0.4, neckModel: { step: 'prep', secondsLeft: 3, failure: null, angleDropDeg: null, ...model } }; };
+  neck();
+  assert.match(text(), /3편하게 바르게 앉아 화면 가운데를 보세요\. 3초 뒤 기준 자세를 기록해요\./);
+  assert.match(text(), /깜빡임 보정/);
+  neck({ step: 'collect', secondsLeft: 4 });
+  assert.match(text(), /4그대로 유지해 주세요\. 기준 자세를 기록하고 있어요\./);
+  assert.match(band(), /width:40%/);
+  for (const [failure, reason] of [['too_few_frames', '얼굴과 양쪽 어깨가 화면 안에 보이게 앉아 주세요.'], ['unstable', '5초 동안 움직임이 있었어요. 움직이지 말고 그대로 계세요.'], ['not_upright', '고개를 들어 화면 가운데를 봐 주세요.']]) {
+    neck({ step: 'failed', failure, secondsLeft: 2 });
+    assert.ok(text().includes(`${reason} 2초 뒤 다시 시작해요.`), failure);
+  }
+  current.upper.eye = { phase: 'observing', measurement: { ...app.emptyEyeSnapshot(), calibrated: true } };
+  current.upper.snapshot = { ...app.createMonitorSnapshot(), phase: 'unavailable' };
+  assert.equal(text(), '얼굴과 양쪽 어깨가 화면에 보이도록 정면을 향해 주세요.');
+  current.upper.snapshot.phase = 'observing';
+  assert.equal(band(), '');
+  current.upper.snapshot.phase = 'error';
+  assert.match(band(), /role="alert"[^>]*>[^]*카메라·분석 연결을 확인한 뒤 중지하고 다시 시작/);
 });

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readEyeSensitivity, readPostureSensitivity, writeEyeSensitivity, writePostureSensitivity } from '../src/features/settings/preferences.ts';
+import { readBaseCva, readEyeSensitivity, readPostureSensitivity, writeBaseCva, writeEyeSensitivity, writePostureSensitivity } from '../src/features/settings/preferences.ts';
 
 const memory = (initial = {}) => {
   const data = new Map(Object.entries(initial));
@@ -32,4 +32,14 @@ test('unknown or unreadable stored values fall back to the defaults', () => {
   const broken = { getItem() { throw new Error('storage blocked'); }, setItem() {} };
   assert.equal(readPostureSensitivity(broken), 50);
   assert.equal(readEyeSensitivity(broken), 'normal');
+});
+
+test('the base CVA for the on-screen estimate is a whole degree between 40 and 60, 50 by default', () => {
+  const store = memory();
+  assert.equal(readBaseCva(store), 50);
+  writeBaseCva(52.4, store);
+  assert.deepEqual([...store.data], [['moti.settings.baseCva', '52']]);
+  assert.equal(readBaseCva(store), 52);
+  for (const [stored, value] of [['30', 40], ['75', 60], ['abc', 50], ['', 50]]) assert.equal(readBaseCva(memory({ 'moti.settings.baseCva': stored })), value);
+  assert.equal(readBaseCva({ getItem() { throw new Error('storage blocked'); } }), 50);
 });

@@ -2,6 +2,7 @@ import type { MonitoringState } from '../session/monitoringContext';
 import { sessionLabel } from '../session/presentation';
 import { keyboardSummary } from '../../../../database/keyboard';
 import { KEYBOARD_ALERT_THRESHOLD } from '../notifications/activityPolicy';
+import { overlayCalibrationText } from '../posture/guidance';
 import type { OverlayMetric, OverlaySession, OverlaySnapshot } from './contract';
 
 const score = (n: number | null) => n === null ? '—' : `${Math.round(n)}점`;
@@ -29,7 +30,7 @@ export function overlaySnapshot(all: MonitoringState, owner: string, sequence: n
   let guidance = upper.controls.failed, note = '';
   if (upper.controls.isRunning) {
     const rate = upper.eye.measurement.recentBlinksPerMinute;
-    if (upper.snapshot.phase === 'calibrating') { detail = '정면을 보고 기준 자세를 유지해 주세요.'; guidance = true; }
+    if (upper.snapshot.phase === 'calibrating') { detail = overlayCalibrationText(upper.snapshot.neckModel); guidance = true; }
     else if (upper.snapshot.phase === 'unavailable') { detail = '얼굴과 양쪽 어깨가 보이도록 맞춰 주세요.'; guidance = true; }
     else if (upper.eye.phase === 'calibrating') {
       const eyes = upper.eye.measurement.calibrationPhase === 'eyes';
