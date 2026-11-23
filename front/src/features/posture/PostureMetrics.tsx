@@ -2,15 +2,7 @@ import type { MonitorSnapshot } from './monitorTypes';
 import type { EyeSnapshot } from '../eye/measurement';
 import { estimatedCva } from './modes/turtle';
 import { readBaseCva } from '../settings/preferences';
-
-function Tile({ label, value, unit }: { label: string; value: string | null; unit?: string }) {
-  return <div className="min-w-0 rounded-xl border border-border bg-surface-muted px-3 py-2">
-    <p className="truncate text-xs font-bold text-muted" title={label}>{label}</p>
-    <p className="whitespace-nowrap text-[clamp(1.125rem,2vw,1.5rem)] font-black leading-8 tabular-nums text-heading">
-      {value === null ? '—' : <>{value}{unit && <span className="ml-1 text-xs font-medium">{unit}</span>}</>}
-    </p>
-  </div>;
-}
+import Tile from '../session/MetricTile';
 
 /** 목 점수·추정 CVA·어깨 점수·깜빡임 빈도의 지금 값만 보여 줍니다(세션 평균은 통계). 점수 산식·임계값은 갖지 않습니다. */
 export default function PostureMetrics({ snapshot, eye, isRunning, baseCva = readBaseCva() }: {

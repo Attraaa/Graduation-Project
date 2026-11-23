@@ -59,7 +59,7 @@ Electron 개발 앱의 키보드 모드는 로컬 Python 프로세스를 자동 
 | `front/src/features/session/` | 두 모드의 지속 런타임·시작/일시정지/재개/중지·활성 시간·캔버스 복사 미리보기·실시간 그래프·공통 상세 틀. 장치 선택은 카메라 설정 창에 저장 |
 | `front/src/features/session/analysisFrame.ts` | 네이티브 앱의 카메라 변환·자세/안구 분석 예약. Windows 최소화에서 RAF가 느려져도 취소 가능한 30ms 타이머로 새 영상만 처리하며, 브라우저는 기존 RAF 사용. 캡처 시각·중복 프레임·단일 추론·자원 해제 계약 유지 |
 | `front/src/features/camera/`, `front/electron/cameraWindow.ts` | 모드·실제 카메라별 구도 자동 저장, 확대·이동까지 공통 변환 영상으로 분석, 동일 스트림의 별도 설정 창, 수동 키보드 외곽/방향 UI. [계약](camera-settings.md) |
-| `front/src/features/posture/PostureMetrics.tsx` | 목 점수·추정 CVA·어깨 점수·깜빡임 빈도의 지금 값 4칸(세션 평균은 통계). 추정 CVA = 설정의 기준 CVA − 줄어든 목 각도. 점수 산식·임계값을 소유하지 않음 |
+| `front/src/features/posture/PostureMetrics.tsx` | 목 점수·추정 CVA·어깨 점수·깜빡임 빈도의 지금 값 4칸(세션 평균은 통계). 추정 CVA = 설정의 기준 CVA − 줄어든 목 각도. 점수 산식·임계값을 소유하지 않음. 칸은 키보드 카드와 같은 `features/session/MetricTile.tsx` |
 | `front/src/features/posture/e19/` | 거북목 모델 E19(`public/models/fhp-e19`) 실행. `model.ts` 보정·추론(연구 런타임의 E19 부분), `flow.ts` 3초 준비·5초 기록·실패 안내 후 재시도와 One Euro, `frame.ts` 같은 영상 프레임의 포즈·얼굴 짝짓기, `load.ts` 앱 안의 모델·ORT wasm 로딩(CDN 없음). [보정 계약](calibration.md#거북목-모델-e19-보정-2026-11-23) |
 | `front/src/features/posture/CameraGuidance.tsx`, `guidance.ts`, `features/session/GuidanceBand.tsx`, `KeyboardGuidance.tsx` | 카메라 화면 아래쪽 안내 띠(상체: 보정·깜빡임 보정·관찰 불가·오류, 키보드: 준비·위치 인식·오류·미승인 앱). 2026-11-23부터 별도 회색 안내 칸 없음 |
 | `front/src/features/posture/monitorTypes.ts` | 카메라와 독립된 상태·점수·습관 표시 계약 |

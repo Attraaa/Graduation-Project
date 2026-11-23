@@ -7,9 +7,8 @@ import { useMonitoring, type MonitoringMode } from '../session/monitoringContext
 import PostureMetrics from '../posture/PostureMetrics';
 import CameraGuidance from '../posture/CameraGuidance';
 import KeyboardGuidance from '../session/KeyboardGuidance';
-import Metric from '../session/Metric';
+import MetricTile from '../session/MetricTile';
 import { keyboardSummary } from '../../../../database/keyboard';
-import { percentText, scoreText } from '../keyboard/labels';
 import { livePressScore } from '../keyboard/liveScore';
 
 function LiveCard({ modeId, children, className }: { modeId: MonitoringMode; children: ReactNode; className?: string }) {
@@ -34,9 +33,11 @@ export function UpperCard({ className }: { className?: string }) {
 export function KeyboardCard({ className }: { className?: string }) {
   const { keyboard } = useMonitoring();
   const totals = keyboardSummary(keyboard.snapshot.counts);
+  const score = keyboard.controls.isRunning ? livePressScore(keyboard.snapshot.latest) : null;
+  // Same tiles (and height) as the upper-body card.
   return <LiveCard modeId="keyboard" className={className}><div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-    <Metric compact label="현재 점수" value={scoreText(keyboard.controls.isRunning ? livePressScore(keyboard.snapshot.latest) : null)} />
-    <Metric compact label="판정 가능 비율" value={percentText(totals.coverage)} />
-    <Metric compact label="판정한 입력" value={`${totals.valid}회`} />
+    <MetricTile label="현재 점수" value={score === null ? null : score.toFixed(1)} unit="점" />
+    <MetricTile label="판정 가능 비율" value={totals.coverage === null ? null : totals.coverage.toFixed(1)} unit="%" />
+    <MetricTile label="판정한 입력" value={String(totals.valid)} unit="회" />
   </div></LiveCard>;
 }
