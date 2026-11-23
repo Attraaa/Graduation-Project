@@ -22,7 +22,6 @@ const THEMES: Record<Theme, { name: string; page: string; card: string; line: st
 const FREQUENCIES = [{ id: '0', name: '발생 시' }, { id: '5', name: '5분' }, { id: '10', name: '10분' }, { id: '30', name: '30분' }];
 const SOUNDS = [{ id: 'soft', name: '끄기' }, { id: 'normal', name: '켜기' }];
 const EYE_SENSITIVITIES: { id: EyeSensitivity; name: string }[] = [{ id: 'low', name: '낮음' }, { id: 'normal', name: '보통' }, { id: 'high', name: '높음' }];
-const NEXT_SESSION = '다음 측정부터 적용';
 const MODE_DOTS = ['bg-mode-upper', 'bg-mode-keyboard'];
 const keep = (key: string, value: string) => {
   localStorage.setItem(`postureAI.${key}`, value);
@@ -183,7 +182,7 @@ const Settings = () => {
           <p className="text-xs text-muted">다른 앱 사용 중 또는 오버레이 모드에서 알림을 받아요.</p>
           <button type="button" disabled={!window.motiNotifications || !notificationsEnabled || testingNotification}
             onClick={handleNotificationTest} className={`${BUTTON} w-full`}>{testingNotification ? '알림 보내는 중…' : '알림 테스트'}</button>
-          <p role="status" className="text-xs text-muted">{!window.motiNotifications ? 'Windows 데스크톱 앱에서 사용할 수 있어요.' : deliveryStatus || notificationStatus}</p>
+          {window.motiNotifications && <p role="status" className="text-xs text-muted">{deliveryStatus || notificationStatus}</p>}
         </SettingsCard>
 
         <SettingsCard title="상체 · 자세 기준" icon={<Activity size={18} />} iconClass="bg-mode-upper-soft text-mode-upper">
@@ -196,7 +195,6 @@ const Settings = () => {
           <Slider id="settings-base-cva" label="기준 CVA" valueText={`${baseCva}°`}
             min={BASE_CVA.min} max={BASE_CVA.max} minLabel={`${BASE_CVA.min}°`} maxLabel={`${BASE_CVA.max}°`} value={baseCva}
             onChange={value => { setBaseCva(value); writeBaseCva(value); }} />
-          <p className="mt-auto text-xs text-muted">{`민감도는 ${NEXT_SESSION}`}</p>
         </SettingsCard>
 
         <SettingsCard title="안구 · 깜빡임 기준" icon={<Eye size={18} />} iconClass="bg-mode-eye-soft text-mode-eye">
@@ -204,7 +202,6 @@ const Settings = () => {
             <Segmented label="깜빡임 민감도" options={EYE_SENSITIVITIES} value={eyeSensitivity}
               onChange={value => { setEyeSensitivity(value); writeEyeSensitivity(value); }} />
           </Field>
-          <p className="mt-auto text-xs text-muted">{NEXT_SESSION}</p>
         </SettingsCard>
 
         <KeyboardSettings className="lg:col-span-2" />

@@ -35,8 +35,8 @@ export function KeyboardCard({ className }: { className?: string }) {
   const { keyboard } = useMonitoring();
   const totals = keyboardSummary(keyboard.snapshot.counts);
   return <LiveCard modeId="keyboard" className={className}><div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-    <Metric compact label="현재 점수" value={scoreText(keyboard.controls.isRunning ? livePressScore(keyboard.snapshot.latest) : null)} detail={`세션 평균 ${scoreText(totals.score)}`} />
-    <Metric compact label="판정 가능 비율" value={percentText(totals.coverage)} detail={`보류 ${totals.unknown}회`} />
-    <Metric compact label="판정한 입력" value={`${totals.valid}회`} detail={`확인한 입력 ${keyboard.snapshot.detectedPresses}회`} />
+    <Metric compact label="현재 점수" value={scoreText(keyboard.controls.isRunning ? livePressScore(keyboard.snapshot.latest) : null)} />
+    <Metric compact label="판정 가능 비율" value={percentText(totals.coverage)} />
+    <Metric compact label="판정한 입력" value={`${totals.valid}회`} />
   </div></LiveCard>;
 }

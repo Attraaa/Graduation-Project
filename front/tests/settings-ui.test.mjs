@@ -54,7 +54,8 @@ test('settings page shows the eight cards with defaults when nothing is stored',
   assert.match(out, /aria-pressed="true"[^>]*>10분</);
   assert.match(out, /aria-label="알림 소리"[^]*?aria-pressed="true"[^>]*>켜기</);
   assert.match(out, /<button[^>]*disabled=""[^>]*>알림 테스트<\/button>/);
-  assert.match(out, /Windows 데스크톱 앱에서 사용할 수 있어요/);
+  // No small footnotes under the cards (user request 2026-11-23).
+  assert.doesNotMatch(out, /Windows 데스크톱 앱에서 사용할 수 있어요|다음 측정부터 적용|화면을 이동해도 관찰은 계속돼요/);
   assert.match(out, /id="settings-posture-sensitivity" type="range" min="10" max="100" step="10"[^>]*value="50"/);
   assert.match(out, />50%</);
   assert.match(out, /aria-label="깜빡임 민감도"[^]*?aria-pressed="true"[^>]*>보통</);

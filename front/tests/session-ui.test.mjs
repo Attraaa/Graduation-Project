@@ -10,6 +10,7 @@ const bundle = await build({ stdin: { contents: [
   "export { default as KeyboardGuidance } from './src/features/session/KeyboardGuidance.tsx';",
   "export { default as CameraGuidance } from './src/features/posture/CameraGuidance.tsx';",
   "export { MonitoringContext } from './src/features/session/monitoringContext.ts';",
+  "export { KeyboardCard } from './src/features/dashboard/ModeCards.tsx';",
   "export { createMonitorSnapshot } from './src/features/posture/monitorTypes.ts';",
   "export { emptyEyeSnapshot } from './src/features/eye/measurement.ts';",
 ].join('\n'), resolveDir: process.cwd() }, bundle: true, write: false, platform: 'node', format: 'cjs', jsx: 'automatic', external: ['react', 'react-dom'] });
@@ -88,4 +89,16 @@ test('the upper camera view carries calibration countdown, the three failure rea
   assert.equal(band(), '');
   current.upper.snapshot.phase = 'error';
   assert.match(band(), /role="alert"[^>]*>[^]*카메라·분석 연결을 확인한 뒤 중지하고 다시 시작/);
+});
+
+test('the home keyboard card shows only its three numbers, without small captions underneath', () => {
+  const base = state(true), camera = { connected: true, runtime: { current: { canvas: null, overlay: null } }, open() {} };
+  const row = (code, finger, verdict, reason, count) => ({ date: '2026-11-23', code, context: 'plain', finger, verdict, reason, count });
+  const keyboard = { ...base.keyboard, camera, trend: [], controls: { ...base.keyboard.controls, elapsedSeconds: 30, failed: false },
+    snapshot: { phase: 'ready', message: null, detectedPresses: 12, latest: null, recent: [], observationStatus: 'observing',
+      counts: [row('KeyF', 'left:index', 'preferred', 'preferred-finger', 10), row('KeyJ', null, 'unknown', 'no-reliable-candidate', 2)] } };
+  const out = render(app.KeyboardCard, { upper: { ...base.upper, camera }, keyboard });
+  for (const label of ['현재 점수', '판정 가능 비율', '판정한 입력']) assert.match(out, new RegExp(label));
+  assert.match(out, />10<span[^>]*>회</);
+  assert.doesNotMatch(out, /세션 평균|보류 \d|확인한 입력/);
 });
