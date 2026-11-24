@@ -13,8 +13,9 @@ export default function OverlayButton() {
     catch (reason) { setError(reason instanceof Error ? reason.message : '오버레이를 열지 못했습니다.'); }
     finally { pending.current = false; setBusy(false); }
   };
-  return <div className="mb-2">
-    <button type="button" disabled={busy} onClick={() => { void open(); }} className="flex min-h-10 w-full items-center justify-center gap-2 rounded-xl border border-border bg-surface px-2 text-sm font-bold text-heading disabled:opacity-50"><PanelsTopLeft size={17} />{busy ? '여는 중…' : '오버레이'}</button>
-    {error && <p role="alert" className="mt-1 text-xs text-danger">{error}</p>}
+  // One item of the sidebar rail: icon with the name underneath.
+  return <div className="w-[60px]">
+    <button type="button" disabled={busy} onClick={() => { void open(); }} className="flex min-h-14 w-full flex-col items-center justify-center gap-1 rounded-xl text-[11px] font-bold text-muted transition-colors hover:bg-nav-active hover:text-heading disabled:opacity-50"><PanelsTopLeft size={20} /><span className="leading-tight">{busy ? '여는 중…' : '오버레이'}</span></button>
+    {error && <p role="alert" className="mt-1 text-[10px] leading-tight text-danger">{error}</p>}
   </div>;
 }

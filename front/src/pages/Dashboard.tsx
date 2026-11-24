@@ -4,23 +4,17 @@ import LiveScoreChart from '../features/session/LiveScoreChart';
 import { useMonitoring } from '../features/session/monitoringContext';
 
 /**
- * 학습: the two monitoring cards, each with its live score trend underneath. Past scores are in 통계
- * (daily and hourly charts, deviation hours) and the day's records in 학습이력.
+ * 학습(시안 27): 상체·키보드를 두 열로 나누고 열마다 지금 점수, 카메라 화면, 최근 5분 그래프를 모읍니다.
+ * 지난 점수는 통계(날짜별·시간대별, 이탈 시간대), 하루 기록은 학습이력에 있습니다.
  */
 const Dashboard = () => {
   const { upper, keyboard } = useMonitoring();
   return (
-    <div className="space-y-4 pb-4">
-      <header>
-        <h1 className="text-2xl font-extrabold text-heading">무엇을 모니터링 할까요?</h1>
-      </header>
-
-      {/* Each card is followed by its trend; on wide screens the cards share the first row and the trends the second. */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <UpperCard className="lg:order-1" />
-        <div className="min-w-0 lg:order-3"><LiveScoreChart points={upper.trend} /></div>
-        <KeyboardCard className="lg:order-2" />
-        <div className="min-w-0 lg:order-4"><LiveScoreChart points={keyboard.trend} keyboard /></div>
+    <div className="space-y-3">
+      <h1 className="sr-only">학습</h1>
+      <div className="grid grid-cols-1 items-start gap-3.5 lg:grid-cols-2">
+        <UpperCard chart={<LiveScoreChart points={upper.trend} />} />
+        <KeyboardCard chart={<LiveScoreChart points={keyboard.trend} keyboard />} />
       </div>
       <RecordingStatus />
     </div>

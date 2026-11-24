@@ -1,0 +1,36 @@
+{
+ "knots_load_pct": [
+  -60,
+  -30,
+  0,
+  15,
+  30,
+  45,
+  60,
+  80,
+  100,
+  125,
+  150,
+  175,
+  200,
+  250
+ ],
+ "dcva_deg": [
+  -10.88,
+  -3.91,
+  -0.0,
+  5.41,
+  10.41,
+  15.11,
+  17.25,
+  23.08,
+  28.28,
+  34.2,
+  40.11,
+  52.24,
+  52.24,
+  52.24
+ ],
+ "default_upright_cva_deg": 63.6,
+ "note": "dCVA = upright CVA - CVA (gravity-referenced, clinical definition), from photo labels S02-S04 (isotonic); validated on S01. Reference only, not a diagnosis."
+}

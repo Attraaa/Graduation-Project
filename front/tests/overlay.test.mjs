@@ -80,7 +80,7 @@ test('overlay numbers turn red at or below the alert score as shown, and guidanc
   assert.equal(overlaySnapshot(monitoring(), 'o', 1, 'light', false, 90).upper_body.metrics[1].low, true);
   assert.equal(overlaySnapshot(monitoring({ keyboard: { counts: counts(7, 3) } }), 'o', 1, 'light', false, 70).keyboard.metrics[0].low, true);
 
-  const calibrating = neckModel => monitoring({ upper: { phase: 'calibrating', neckModel: { step: 'prep', secondsLeft: null, failure: null, angleDropDeg: null, ...neckModel } }, keyboard: { observationStatus: 'excluded' } });
+  const calibrating = neckModel => monitoring({ upper: { phase: 'calibrating', neckModel: { step: 'prep', secondsLeft: null, failure: null, ...neckModel } }, keyboard: { observationStatus: 'excluded' } });
   const guided = overlaySnapshot(calibrating({ secondsLeft: 3 }), 'o', 1, 'light', false, 70);
   assert.deepEqual([guided.upper_body.metrics, guided.upper_body.detail], [[], '편하게 바르게 앉아 화면 가운데를 보세요 · 3초 뒤 기록']);
   assert.equal(overlaySnapshot(calibrating({ step: 'collect', secondsLeft: 4 }), 'o', 1, 'light', false, 70).upper_body.detail, '그대로 유지해 주세요 · 4초 남음');
@@ -146,6 +146,16 @@ test('failed overlay readiness leaves the owner available; display changes keep 
   const h = harness(); h.call('desktop:publish', snapshot()); const open = h.controller.open();
   context.mock.timers.tick(8000); await assert.rejects(open, /준비/); assert.equal(h.owner.minimized, false); assert.equal(h.children[0].destroyed, true);
   assert.deepEqual(fitOverlay({ x: 5000, y: -100, width: 360, height: 320 }, { x: -1280, y: 100, width: 1280, height: 800 }), { x: -360, y: 100, width: 360, height: 320 });
+  h.controller.shutdown();
+});
+
+test('a display change puts a shrunken bar back to its fixed size and keeps its place', async () => {
+  const h = harness(); h.call('desktop:publish', snapshot()); const open = h.controller.open(); h.childCall('overlay:ready'); await open;
+  const w = h.children[0];
+  assert.deepEqual([w.bounds.minWidth, w.bounds.maxWidth, w.bounds.minHeight, w.bounds.maxHeight], [340, 340, 118, 118]);
+  w.bounds = { x: 325, y: 474, width: 276, height: 86 };  // what Windows reported after a long session
+  h.screen.emit('display-metrics-changed');
+  assert.deepEqual(w.getBounds(), { x: 325, y: 474, width: 340, height: 118 });
   h.controller.shutdown();
 });
 

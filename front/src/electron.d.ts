@@ -24,6 +24,8 @@ declare global {
       onPresentation: (listener: (value: { overlay: boolean; automaticAllowed: boolean }) => void) => () => void
     }
     motiWindow?: { setTheme: (theme: 'light' | 'dark') => Promise<void> }
+    /** Diagnostics log (electron/diagnostics.ts): a one-minute sample and unhandled errors. Main window only. */
+    motiDiagnostics?: { sample: (value: unknown) => void; error: (value: unknown) => void }
     motiKeyboard?: {
       start: (external?: boolean) => Promise<{ origin: string; token: string }>
       stop: () => Promise<void>

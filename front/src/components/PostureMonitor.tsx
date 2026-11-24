@@ -81,16 +81,14 @@ const PostureMonitor = ({ isRunning, paused = false, referenceRequest = 0, devic
     let flow: NeckFlow | null = null;
     let flowToken = 0, calibrating = false, inferring = false;
     let lastInferAt = -Infinity, neckInterruptedAt = -Infinity;
-    let angleDropDeg: number | null = null;
     let neckClock = startNeckClock();
     const loadFilter = createOneEuro(NECK_ONE_EURO.minCutoff, NECK_ONE_EURO.beta, NECK_ONE_EURO.dCutoff);
-    const angleFilter = createOneEuro(NECK_ONE_EURO.minCutoff, NECK_ONE_EURO.beta, NECK_ONE_EURO.dCutoff);
     const restartNeck = () => {
       flow = null; flowToken++; model?.clear(); calibration = createCalibration();
-      loadFilter.reset(); angleFilter.reset(); angleDropDeg = null; lastInferAt = -Infinity; neckClock = startNeckClock();
+      loadFilter.reset(); lastInferAt = -Infinity; neckClock = startNeckClock();
     };
     // Older E19 results (still running) must not overwrite a later interruption.
-    const interruptNeck = (at: number) => { neckInterruptedAt = at; angleDropDeg = null; neckClock = breakNeckClock(neckClock); neck = interruptEvaluation(neck); };
+    const interruptNeck = (at: number) => { neckInterruptedAt = at; neckClock = breakNeckClock(neckClock); neck = interruptEvaluation(neck); };
     const fail = () => {
       if (abort.signal.aborted) return;
       interruptNeck(performance.now());
@@ -127,7 +125,7 @@ const PostureMonitor = ({ isRunning, paused = false, referenceRequest = 0, devic
       void result.then(info => {
         if (abort.signal.aborted || token !== flowToken) return;
         flow = finishNeckFlow(performance.now(), info);
-        if (info.ok) { loadFilter.reset(); angleFilter.reset(); }
+        if (info.ok) loadFilter.reset();
         else calibration = createCalibration();
       }, fail).finally(() => { calibrating = false; });
     };
@@ -140,7 +138,6 @@ const PostureMonitor = ({ isRunning, paused = false, referenceRequest = 0, devic
         else {
           neckClock = tickNeckClock(neckClock, at);
           const score = neckScore(loadFilter.filter(result.scoreLoad, at));
-          angleDropDeg = angleFilter.filter(result.scoreNeck, at) * model!.config.delta_ref_deg / 100;
           neck = advanceEvaluation(neck, { observedSeconds: neckClock.seconds }, turtleScorePolicy, habit, { score, deviation: neckDeviation(score) });
         }
         recording[0]?.sample(at, neck);
@@ -232,7 +229,7 @@ const PostureMonitor = ({ isRunning, paused = false, referenceRequest = 0, devic
           recording = beginRecord(capturedAtMs);
           neck = createEvaluation(turtleScorePolicy, habit);
           shoulder = createEvaluation(shoulderScorePolicy, habit);
-          neckInterruptedAt = capturedAtMs; angleDropDeg = null; neckClock = startNeckClock();
+          neckInterruptedAt = capturedAtMs; neckClock = startNeckClock();
         }
         recordedReference = referenceKey;
         shoulder = advanceEvaluation(shoulder, observation, shoulderScorePolicy, habit);
@@ -248,7 +245,7 @@ const PostureMonitor = ({ isRunning, paused = false, referenceRequest = 0, devic
           observedSeconds: observation.observedSeconds,
           delta: observation.delta,
           neck, shoulder,
-          neckModel: { step: current.step, secondsLeft: neckSecondsLeft(current, capturedAtMs, collectMs), failure: current.failure, angleDropDeg: ready ? angleDropDeg : null },
+          neckModel: { step: current.step, secondsLeft: neckSecondsLeft(current, capturedAtMs, collectMs), failure: current.failure },
         };
         if (receivedAtMs - lastUiAt >= 200 || (observation.delta === null && latest.current.delta !== null)) {
           lastUiAt = receivedAtMs;
@@ -280,8 +277,7 @@ const PostureMonitor = ({ isRunning, paused = false, referenceRequest = 0, devic
               observation = interruptObservation(observation);
               interruptNeck(performance.now());
               shoulder = interruptEvaluation(shoulder);
-              publish({ ...latest.current, phase: 'unavailable', reason: 'interrupted', delta: null, neck, shoulder,
-                neckModel: { ...latest.current.neckModel, angleDropDeg: null } });
+              publish({ ...latest.current, phase: 'unavailable', reason: 'interrupted', delta: null, neck, shoulder });
             }
           }, 500);
         }
@@ -307,8 +303,7 @@ const PostureMonitor = ({ isRunning, paused = false, referenceRequest = 0, devic
     if (!isRunning && latest.current.phase !== 'loading') {
       publish({ ...latest.current, delta: null,
         neck: { ...latest.current.neck, currentScore: null, currentDeviation: null, continuousMs: 0, deviationState: 'unknown', protection: 'none' },
-        shoulder: { ...latest.current.shoulder, currentScore: null, currentDeviation: null, continuousMs: 0, deviationState: 'unknown', protection: 'none' },
-        neckModel: { ...latest.current.neckModel, angleDropDeg: null } });
+        shoulder: { ...latest.current.shoulder, currentScore: null, currentDeviation: null, continuousMs: 0, deviationState: 'unknown', protection: 'none' } });
     }
   }, [isRunning, publish]);
 
@@ -316,8 +311,7 @@ const PostureMonitor = ({ isRunning, paused = false, referenceRequest = 0, devic
     if (isRunning && (aiError || webcamError)) {
       publish({ ...latest.current, phase: 'error', delta: null,
         neck: { ...latest.current.neck, currentScore: null, currentDeviation: null, continuousMs: 0, deviationState: 'unknown', protection: 'none' },
-        shoulder: { ...latest.current.shoulder, currentScore: null, currentDeviation: null, continuousMs: 0, deviationState: 'unknown', protection: 'none' },
-        neckModel: { ...latest.current.neckModel, angleDropDeg: null } });
+        shoulder: { ...latest.current.shoulder, currentScore: null, currentDeviation: null, continuousMs: 0, deviationState: 'unknown', protection: 'none' } });
       stopWebcam();
       detach();
       void stopProcessing();

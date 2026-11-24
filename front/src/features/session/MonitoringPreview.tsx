@@ -28,7 +28,7 @@ export default function MonitoringPreview({ modeId, children }: { modeId: Monito
     frame = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(frame);
   }, [runtime]);
-  return <div className="relative aspect-video w-full overflow-hidden rounded-xl bg-slate-950">
+  return <div className="relative aspect-video w-full overflow-hidden bg-slate-950">
     <canvas ref={canvas} aria-label={`${modeId === 'upper_body' ? '상체' : '키보드'} 카메라 미리보기`} className="absolute inset-0 h-full w-full object-contain" />
     {!isRunning && <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-3 text-center text-sm text-slate-300"><CameraOff size={28} /><span>시작하면 카메라가 켜집니다</span></div>}
     {isRunning && isPaused && <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-slate-950/60 text-sm font-bold text-white"><Pause size={24} />일시정지 · 마지막 화면</div>}

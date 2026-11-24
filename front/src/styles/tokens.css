@@ -33,6 +33,12 @@
   --color-mode-eye-soft: #ffe3e3;
   --color-track: #eef0f3;
   --color-nav-active: #eef1f6;
+
+  /* Calm session buttons (home 시안 27): tinted start/resume and a red-text stop instead of solid fills. */
+  --color-primary-soft: #eaf8dc;
+  --color-primary-soft-text: #2f6b06;
+  --color-primary-soft-border: #9fd26c;
+  --color-danger-text: #c62828;
 }
 
 .dark-theme {
@@ -51,4 +57,8 @@
   --color-mode-eye-soft: #3d1a1c;
   --color-track: #252b36;
   --color-nav-active: #222835;
+  --color-primary-soft: #203a12;
+  --color-primary-soft-text: #c8f0a4;
+  --color-primary-soft-border: #3f6e22;
+  --color-danger-text: #ff8a8a;
 }
