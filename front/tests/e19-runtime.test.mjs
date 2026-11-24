@@ -7,7 +7,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { createNeckModel } from '../src/features/posture/e19/model.ts';
 import { advanceNeckFlow, breakNeckClock, createOneEuro, finishNeckFlow, NECK_FLOW, neckSecondsLeft, referenceFailure, startNeckClock, startNeckFlow, tickNeckClock } from '../src/features/posture/e19/flow.ts';
 import { createFaceBuffer, neckFrame } from '../src/features/posture/e19/frame.ts';
-import { appNeckConfig, BASE_CVA, estimatedCva, NECK_MAX_YAW_DEG, neckDeviation, neckScore, turtleScorePolicy } from '../src/features/posture/modes/turtle.ts';
+import { appNeckConfig, BASE_CVA, estimatedCva, NECK_MAX_YAW_DEG, neckDeviation, neckLoadPct, neckScore, turtleScorePolicy } from '../src/features/posture/modes/turtle.ts';
 import { HABIT_POLICY } from '../src/features/posture/evaluation.ts';
 
 const config = JSON.parse(readFileSync(new URL('../public/models/fhp-e19/config.json', import.meta.url), 'utf8'));
@@ -160,10 +160,14 @@ test('the model input keeps pose 0–12 and the face nearest the pose nose with 
   assert.deepEqual([neckFrame(5, pose, null, 640, 480).face, neckFrame(5, undefined, face, 640, 480).pose], [null, null]);
 });
 
-test('neck policy: score = 100 − load score, deviation from 70 points at the default sensitivity, CVA = base − angle drop', () => {
+test('neck policy: score = 100 − load score, deviation from 70 points at the default sensitivity, CVA = base − table(load × 1.5)', () => {
   assert.equal(neckScore(15), 85);
   close(neckDeviation(70), HABIT_POLICY.enterDelta); close(neckDeviation(80), HABIT_POLICY.exitDelta);
-  assert.equal(estimatedCva(BASE_CVA.default, 6), 44);
+  // Handoff section 5 check values (base 50°), given to one decimal.
+  for (const [loadPct, cva] of [[0, 50], [30, 39.6], [60, 32.8], [100, 21.7], [150, 9.9]]) assert.equal(estimatedCva(BASE_CVA.default, loadPct).toFixed(1), cva.toFixed(1));
+  close(estimatedCva(55, 30), 44.59);
+  // L′ = (100 − neck score) × 1.5, never below 0.
+  assert.deepEqual([100, 80, 0, 101].map(neckLoadPct), [0, 30, 150, 0]);
   assert.deepEqual([BASE_CVA.min, BASE_CVA.default, BASE_CVA.max], [40, 50, 60]);
   assert.match(turtleScorePolicy.version, /^upper-body-neck-e19-v1-[0-9a-z]+$/);
   assert.ok(turtleScorePolicy.version.length <= 120);

@@ -18,13 +18,15 @@ test('two dials and a half gauge show only the current neck score with estimated
   const snapshot = createMonitorSnapshot();
   snapshot.neck = { ...snapshot.neck, currentScore: 0, averageScore: 40 };
   snapshot.shoulder = { ...snapshot.shoulder, currentScore: 84.6, averageScore: 90.5 };
-  snapshot.neckModel = { ...snapshot.neckModel, angleDropDeg: 6.2 };
   const eye = { ...emptyEyeSnapshot(), recentBlinksPerMinute: 0, blinksPerMinute: 12.3 };
   const shown = text(render(snapshot, eye));
   // Each dial reads its value (inside the ring) before its name; the blink gauge reads its 0–30 scale first.
-  for (const value of ['0점목 점수추정 CVA 44°', '85점어깨 점수', '0.0회/분깜빡임 빈도']) assert.ok(shown.includes(value), value);
+  // Neck score 0 = load 150 % → CVA 50 − 40.11 = 9.89°.
+  for (const value of ['0점목 점수추정 CVA 10°', '85점어깨 점수', '0.0회/분깜빡임 빈도']) assert.ok(shown.includes(value), value);
   assert.doesNotMatch(shown, /세션 평균|안구 점수|종합 점수|거북목|정상|진단/);
-  assert.ok(text(render(snapshot, eye, true, 55)).includes('추정 CVA 49°'));
+  assert.ok(text(render(snapshot, eye, true, 55)).includes('추정 CVA 15°'));
+  // Neck score 60 = load 60 % → 50 − 17.25 = 32.75°.
+  assert.ok(text(render({ ...snapshot, neck: { ...snapshot.neck, currentScore: 60 } }, eye)).includes('60점목 점수추정 CVA 33°'));
   assert.equal((render(snapshot, eye, false).match(/>—</g) ?? []).length, 4);
 });
 

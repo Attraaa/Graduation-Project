@@ -22,7 +22,7 @@ flowchart TD
 
 | 작업 | 담당 경로 | 검증 |
 | --- | --- | --- |
-| 목 점수(거북목 모델 E19) | 정책 `front/src/features/posture/modes/turtle.ts`, 모델 실행·보정 `front/src/features/posture/e19/`, 모델 패키지 `front/public/models/fhp-e19`(숫자 변경 금지) | `e19-runtime.test.mjs`, `fhp-e19-parity.test.mjs`(fixtures는 Git 제외) |
+| 목 점수(거북목 모델 E19) | 정책 `front/src/features/posture/modes/turtle.ts`, 모델 실행·보정 `front/src/features/posture/e19/`, 모델 패키지 `front/public/models/fhp-e19`와 CVA 환산표 `front/src/features/posture/e19/cva_map.json`(둘 다 숫자 변경 금지) | `e19-runtime.test.mjs`, `fhp-e19-parity.test.mjs`(fixtures는 Git 제외) |
 | 어깨 점수 지표·감점 기준 | `front/src/features/posture/modes/shoulder.ts` | 같은 테스트의 어깨 모드·격리 사례 |
 | 모든 상체 점수에 공통인 산식 | `front/src/features/posture/scoring.ts` | 양 모드 경계·누락·재현성 |
 | 기준 수집·좌표 정의 | `front/src/features/posture/calibration.ts`, `observation.ts` | 수집/관측 회귀 검사, 실제 촬영 검증 |

@@ -11,14 +11,12 @@ export type EvaluationSummary = Pick<EvaluationState, 'scorePolicyVersion' | 'ha
   | 'currentScore' | 'currentDeviation' | 'averageScore' | 'validMs' | 'continuousMs'
   | 'longestContinuousMs' | 'deviationEpisodeCount' | 'deviationMs' | 'deviationState' | 'protection'>;
 
-/** 측정 시작 때의 기준 자세 보정(3초 준비 → 5초 기록 → 실패면 이유 안내 후 다시)과 화면 CVA용 값. */
+/** 측정 시작 때의 기준 자세 보정(3초 준비 → 5초 기록 → 실패면 이유 안내 후 다시). */
 export interface NeckModelView {
   step: NeckStep;
   /** 준비·기록·실패 안내의 남은 초. */
   secondsLeft: number | null;
   failure: NeckFailure | null;
-  /** 보정 자세보다 줄어든 목 각도(0–40°, One Euro 필터). 화면의 추정 CVA = 기준 CVA − 이 값. 측정 불가면 null. */
-  angleDropDeg: number | null;
 }
 
 /** Camera-independent view contract. Null is unavailable; a measured zero is still a score. */
@@ -38,6 +36,6 @@ export function createMonitorSnapshot(): MonitorSnapshot {
     phase: 'loading', progress: 0, reason: null, observedSeconds: 0, delta: null,
     neck: createEvaluation(turtleScorePolicy),
     shoulder: createEvaluation(shoulderScorePolicy),
-    neckModel: { step: 'prep', secondsLeft: null, failure: null, angleDropDeg: null },
+    neckModel: { step: 'prep', secondsLeft: null, failure: null },
   };
 }

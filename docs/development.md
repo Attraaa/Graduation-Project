@@ -492,3 +492,13 @@ macOS `bash scripts/moti.sh check`에서 타입·린트, 프론트 264개(상세
 - **멈춤 원인:** 남은 자료가 없었습니다(앱 로그·충돌 파일 없음, Windows 이벤트 로그에 Moti 응답 없음·오류·화면 드라이버 재시작 없음). 코드에서 끝없이 쌓이는 배열은 찾지 못했습니다(추이·얼굴 버퍼·깜빡임 목록은 크기 제한 있음). 그래서 `electron/diagnostics.ts`로 진단 기록을 남깁니다([구조](architecture.md)). 다음에 멈추면 `%APPDATA%\Moti\logs`의 그날 파일에서 화면 프로세스 종료 이유(`render-process-gone`의 `oom`/`crashed`), GPU 프로세스 종료, 응답 없음, 화면 장치 변화·절전 직후인지, 메모리가 계속 늘었는지, 마지막 `sample`의 `renderer`가 언제부터 `null`인지를 봅니다.
 
 `moti.cmd check` 통과(프론트 타입·린트와 288개 테스트, 서버 87개 중 76개 통과·실제 MySQL 11개 skip, Python 16개 테스트·키보드 모델 확인). 개발 실행(`npm run dev`)으로 본창을 띄워 `app-start`·`gpu`(NVIDIA RTX 4060 Ti, ANGLE D3D11, 합성·WebGL 사용)·1분 `sample`(로그인 전이라 `renderer: null`)이 쓰이는 것을 확인했습니다. `app.getGPUFeatureStatus()`는 GPU 정보를 다 받기 전에는 모두 `disabled_software`로 나와서, 시작 줄 대신 정보를 받은 뒤 `gpu` 줄로 남깁니다(2026-11-24 20:36 첫 확인 실행 줄의 gpu 값은 이 때문에 틀림). 로그인 뒤 측정 중 표본, 실제 오버레이 창 크기 복구, 멈춤 재현은 확인하지 못했습니다.
+
+## 2026-11-25 추정 CVA를 목 부하 기준으로
+
+연구 인계 문서의 2026-11-24 변경에 맞춰 화면 추정 CVA 산식만 바꿨습니다. [결정](product-decisions.md#2026-11-24-후속-결정--추정-cva를-목-부하-기준으로)
+
+- `modes/turtle.ts`: `neckLoadPct`(L′ = (100 − 목 점수) × 1.5, 0보다 작으면 0)와 `estimatedCva`(기준 CVA − 환산표 선형 보간, 표 양 끝 밖은 끝값)입니다. 환산표는 인계 `runtime/cva_map.json`을 `features/posture/e19/cva_map.json`으로 그대로 복사했습니다(SHA-256 `e65a5dc6…8e78`, 원본과 같음).
+- 추정 CVA는 이제 목 다이얼과 같은 현재 목 점수에서 계산합니다. CVA만을 위해 목 전진 출력을 따로 거르던 필터와 `NeckModelView.angleDropDeg`는 없앴습니다. 목 점수, 점수 정책 ID, 기준 CVA 설정, 저장은 그대로입니다.
+- 시험: `e19-runtime.test.mjs`는 인계 문서 5절 값(L′ 0/30/60/100/150 % → 50/39.6/32.8/21.7/9.9°, 소수 첫째 자리까지)과 기준 CVA 55°, L′ 0 미만을 확인합니다. `posture-metrics.test.mjs`는 목 점수 0 → 10°(기준 55°면 15°)와 60 → 33°를 확인합니다.
+
+`moti.cmd check` 통과(프론트 타입·린트와 288개 테스트, 서버 87개 중 76개 통과·실제 MySQL 11개 skip, Python 16개 테스트·키보드 모델 확인). 실제 웹캠에서 인계 문서 6절 값(평소 50°, 목 내밀기 40/31/23° 근처)과 비슷한지는 확인하지 않았습니다.

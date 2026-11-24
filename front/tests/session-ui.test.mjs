@@ -68,7 +68,7 @@ test('the upper camera view carries calibration countdown, the three failure rea
   assert.equal(band(), '');
   current.upper.controls.isPaused = false;
   assert.match(text(), /카메라와 상체 분석을 준비/);
-  const neck = model => { current.upper.snapshot = { ...app.createMonitorSnapshot(), phase: 'calibrating', progress: 0.4, neckModel: { step: 'prep', secondsLeft: 3, failure: null, angleDropDeg: null, ...model } }; };
+  const neck = model => { current.upper.snapshot = { ...app.createMonitorSnapshot(), phase: 'calibrating', progress: 0.4, neckModel: { step: 'prep', secondsLeft: 3, failure: null, ...model } }; };
   neck();
   assert.match(text(), /3편하게 바르게 앉아 화면 가운데를 보세요\. 3초 뒤 기준 자세를 기록해요\./);
   assert.match(text(), /깜빡임 보정/);
