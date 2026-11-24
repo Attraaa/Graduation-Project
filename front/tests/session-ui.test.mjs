@@ -26,16 +26,13 @@ function state(isRunning, isPaused = false) {
   };
 }
 
-test('both modes keep three distinct action slots and enable only valid actions', () => {
+test('both modes show only the actions that apply: start when stopped, pause or resume and stop while running', () => {
   for (const [modeId, name] of [['upper_body', '상체'], ['keyboard', '키보드']]) {
     for (const [running, paused] of [[false, false], [true, false], [true, true]]) {
       const html = render(app.SessionActions, state(running, paused), modeId);
-      const buttons = [...html.matchAll(/<button\b[^>]+>/g)].map(match => match[0]);
-      assert.equal(buttons.length, 3);
-      assert.ok(buttons[0].includes(`aria-label="${name} 시작"`));
-      assert.ok(buttons[1].includes(`aria-label="${name} ${paused ? '재개' : '일시정지'}"`));
-      assert.ok(buttons[2].includes(`aria-label="${name} 중지"`));
-      assert.deepEqual(buttons.map(button => button.includes('disabled=""')), [running, !running, !running]);
+      const labels = [...html.matchAll(/<button\b[^>]*aria-label="([^"]+)"/g)].map(match => match[1]);
+      assert.deepEqual(labels, running ? [`${name} ${paused ? '재개' : '일시정지'}`, `${name} 중지`] : [`${name} 시작`]);
+      assert.doesNotMatch(html, /disabled=""/);
     }
   }
 });

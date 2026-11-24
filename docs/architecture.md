@@ -51,15 +51,15 @@ Electron 개발 앱의 키보드 모드는 로컬 Python 프로세스를 자동 
 | `front/src/components/layout/WindowTitleBar.tsx`, `front/electron/windowAppearance.ts` | 테마 제목 표시줄과 Windows 기본 창 버튼 overlay. 브라우저에는 자체 표시줄을 추가하지 않음 |
 | `front/src/components/layout/AppLayout.tsx` | 사이드바와 공통 화면 틀/Outlet |
 | `front/src/styles/tokens.css` | 공통 색상, 의미별 CSS 변수, 다크 테마, 대시보드 모드 색(`mode-*`)·`track`·`nav-active` |
-| `front/src/components/Button.tsx`, `Sidebar.tsx` | 공유 UI. 새 화면은 공통 토큰과 컴포넌트부터 사용 |
-| `front/src/pages/Dashboard.tsx`, `front/src/features/dashboard/` | 학습(홈) 화면. 상체·키보드 카드(`ModeCards.tsx`)와 각 카드 아래 최근 5분 실시간 점수 추이(`session/LiveScoreChart`). 2026-11-21부터 기록을 불러오지 않음(7일 그래프는 통계 날짜별 점수와 겹쳐 지우고, 오늘 타임라인은 학습이력과 겹쳐 지우고, 이탈 시간대는 통계 상체 탭으로 옮김). [최초 설계](superpowers/specs/2026-10-06-dashboard-redesign-design.md). `summary.ts`는 통계·학습이력이 쓰는 순수 함수(날짜 helper·정책 묶음·날짜별 값·기록 줄·이탈 시간대), `useDashboardData.ts`는 로그인 안내 문구와 조회 상태 helper만 둠. 통계·학습이력은 `format.ts`, `DayDetail`, `ScoreRing`, `SourceState`도 가져다 씀 |
+| `front/src/components/Button.tsx`, `Sidebar.tsx` | 공유 UI. 새 화면은 공통 토큰과 컴포넌트부터 사용. `Sidebar`는 넓은 화면에서 아이콘 아래 이름을 둔 76px 세로 줄, 좁은 화면에서 아래 막대(2026-11-24) |
+| `front/src/pages/Dashboard.tsx`, `front/src/features/dashboard/` | 학습(홈) 화면. 2026-11-24부터 시안 27: 상체·키보드 두 열(`ModeCards.tsx`)이 각각 머리(이름·상태·측정 제어·카메라 설정) → 지금 점수 → 카메라 화면 → 최근 5분 점수 추이(`session/LiveScoreChart`) 순서이고, 기본 창 1100×800에 스크롤 없이 들어감. 2026-11-21부터 기록을 불러오지 않음(7일 그래프는 통계 날짜별 점수와 겹쳐 지우고, 오늘 타임라인은 학습이력과 겹쳐 지우고, 이탈 시간대는 통계 상체 탭으로 옮김). [최초 설계](superpowers/specs/2026-10-06-dashboard-redesign-design.md). `summary.ts`는 통계·학습이력이 쓰는 순수 함수(날짜 helper·정책 묶음·날짜별 값·기록 줄·이탈 시간대), `useDashboardData.ts`는 로그인 안내 문구와 조회 상태 helper만 둠. 통계·학습이력은 `format.ts`, `DayDetail`, `ScoreRing`, `SourceState`도 가져다 씀 |
 | `front/src/components/AppDialog.tsx`, `components/dialog/ModalFrame.tsx` | 라우터 내부의 대화상자 FIFO 큐와 네이티브 모달 표시. 화면 이동/Provider 해제 때 대기 요청을 취소하고 이전 화면의 늦은 호출을 무시 |
 | `front/src/components/dialog/dialogContext.ts`, `useDialog.ts` | 대화상자 타입/상태 계약과 호출 훅 |
 | `features/session/MonitoringProvider.tsx` | 공통 모니터링 런타임. AppLayout에 유지해 홈 시작·화면 이동·독립 일시정지·다른 카메라 동시 실행을 연결하고, 카메라 설정 창의 모드·카메라 선택과 기준/위치 다시 잡기를 제공. 모드별 상세 화면(`/learn/:modeId`)은 2026-11-21에 없앴고 예전 주소는 홈으로 연결. [흐름](monitoring.md) |
 | `front/src/features/session/` | 두 모드의 지속 런타임·시작/일시정지/재개/중지·활성 시간·캔버스 복사 미리보기·실시간 그래프·공통 상세 틀. 장치 선택은 카메라 설정 창에 저장 |
 | `front/src/features/session/analysisFrame.ts` | 네이티브 앱의 카메라 변환·자세/안구 분석 예약. Windows 최소화에서 RAF가 느려져도 취소 가능한 30ms 타이머로 새 영상만 처리하며, 브라우저는 기존 RAF 사용. 캡처 시각·중복 프레임·단일 추론·자원 해제 계약 유지 |
 | `front/src/features/camera/`, `front/electron/cameraWindow.ts` | 모드·실제 카메라별 구도 자동 저장, 확대·이동까지 공통 변환 영상으로 분석, 동일 스트림의 별도 설정 창, 수동 키보드 외곽/방향 UI. [계약](camera-settings.md) |
-| `front/src/features/posture/PostureMetrics.tsx` | 목 점수·추정 CVA·어깨 점수·깜빡임 빈도의 지금 값 4칸(세션 평균은 통계). 추정 CVA = 설정의 기준 CVA − 줄어든 목 각도. 점수 산식·임계값을 소유하지 않음. 칸은 키보드 카드와 같은 `features/session/MetricTile.tsx` |
+| `front/src/features/posture/PostureMetrics.tsx` | 목 점수(아래에 추정 CVA)·어깨 점수 다이얼(`features/session/ScoreDial.tsx`)과 깜빡임 빈도 반원 계기(`RateGauge.tsx`, 끝값 30은 그림 눈금일 뿐 기준이 아님)의 지금 값(세션 평균은 통계). 추정 CVA = 설정의 기준 CVA − 줄어든 목 각도. 점수 산식·임계값을 소유하지 않음. 키보드 열은 같은 다이얼과 `MetricTile`(판정 가능 비율·판정한 입력) |
 | `front/src/features/posture/e19/` | 거북목 모델 E19(`public/models/fhp-e19`) 실행. `model.ts` 보정·추론(연구 런타임의 E19 부분), `flow.ts` 3초 준비·5초 기록·실패 안내 후 재시도와 One Euro, `frame.ts` 같은 영상 프레임의 포즈·얼굴 짝짓기, `load.ts` 앱 안의 모델·ORT wasm 로딩(CDN 없음). [보정 계약](calibration.md#거북목-모델-e19-보정-2026-11-23) |
 | `front/src/features/posture/CameraGuidance.tsx`, `guidance.ts`, `features/session/GuidanceBand.tsx`, `KeyboardGuidance.tsx` | 카메라 화면 아래쪽 안내 띠(상체: 보정·깜빡임 보정·관찰 불가·오류, 키보드: 준비·위치 인식·오류·미승인 앱). 2026-11-23부터 별도 회색 안내 칸 없음 |
 | `front/src/features/posture/monitorTypes.ts` | 카메라와 독립된 상태·점수·습관 표시 계약 |
