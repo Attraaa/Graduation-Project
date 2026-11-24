@@ -61,9 +61,11 @@ export class OverlayWindow {
     ipc.handle('overlay:command', (event, input: unknown) => { this.trusted(event); return this.command(parseOverlayCommand(input)); });
     ipc.handle('overlay:back', event => { this.trusted(event); this.back(); });
     const heartbeat = setInterval(() => this.push(), 1000); heartbeat.unref();
+    // The bar has one fixed size. Feeding getBounds() back made the frameless window lose 16×8 px on every display
+    // change on Windows (a user's bar was 276×86 after a long session), so only the position is taken from it.
     const reposition = () => {
       if (!this.window || this.window.isDestroyed()) return;
-      const bounds = this.window.getBounds(); this.window.setBounds(fitOverlay(bounds, deps.screen.getDisplayMatching(bounds).workArea));
+      const bounds = this.window.getBounds(); this.window.setBounds(fitOverlay({ ...bounds, ...OVERLAY_SIZE }, deps.screen.getDisplayMatching(bounds).workArea));
     };
     deps.screen.on('display-removed', reposition);
     deps.screen.on('display-metrics-changed', reposition);
@@ -106,6 +108,7 @@ export class OverlayWindow {
     const saved = this.deps.readPosition();
     const initial = fitOverlay(saved ? { ...saved, ...OVERLAY_SIZE } : { ...OVERLAY_SIZE, x: area.x + area.width - OVERLAY_SIZE.width - 20, y: area.y + 80 }, area);
     const w = this.deps.create({ ...initial, frame: false, transparent: false, resizable: false, maximizable: false, minimizable: false,
+      minWidth: OVERLAY_SIZE.width, maxWidth: OVERLAY_SIZE.width, minHeight: OVERLAY_SIZE.height, maxHeight: OVERLAY_SIZE.height,
       alwaysOnTop: true, skipTaskbar: true, show: false, backgroundColor: '#f3f5f8', title: 'Moti · 오버레이',
       webPreferences: { preload: this.deps.preload, additionalArguments: ['--moti-overlay'], partition: 'moti-overlay', contextIsolation: true, nodeIntegration: false, backgroundThrottling: false } });
     this.window = w;

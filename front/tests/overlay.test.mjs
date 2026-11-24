@@ -149,6 +149,16 @@ test('failed overlay readiness leaves the owner available; display changes keep 
   h.controller.shutdown();
 });
 
+test('a display change puts a shrunken bar back to its fixed size and keeps its place', async () => {
+  const h = harness(); h.call('desktop:publish', snapshot()); const open = h.controller.open(); h.childCall('overlay:ready'); await open;
+  const w = h.children[0];
+  assert.deepEqual([w.bounds.minWidth, w.bounds.maxWidth, w.bounds.minHeight, w.bounds.maxHeight], [340, 340, 118, 118]);
+  w.bounds = { x: 325, y: 474, width: 276, height: 86 };  // what Windows reported after a long session
+  h.screen.emit('display-metrics-changed');
+  assert.deepEqual(w.getBounds(), { x: 325, y: 474, width: 340, height: 118 });
+  h.controller.shutdown();
+});
+
 test('issue delivery is per incident, suppressed delivery consumes no episode, and recovery cancels late acknowledgements', () => {
   const q = createIssueQueue(); q.set({ key: 'upper', id: '1', code: 'upper-analysis' }, 0);
   const first = q.next(0); q.acknowledge(first, { ok: false, status: 'suppressed' }, 0); assert.equal(q.next(500), null); assert.equal(q.next(1000), first);

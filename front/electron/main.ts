@@ -12,6 +12,7 @@ import { isKakaoPlaceUrl } from './externalLinks'
 import { windowAppearance } from './windowAppearance'
 import { registerNotificationHandlers } from './notificationHandlers'
 import { OverlayWindow } from './overlayWindow'
+import { createDiagnosticLog, watchDiagnostics } from './diagnostics'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -34,6 +35,8 @@ const notificationAppId = app.isPackaged ? 'com.graduation.moti' : 'com.graduati
 if (process.platform === 'win32') app.setAppUserModelId(notificationAppId)
 const ownsInstance = app.requestSingleInstanceLock()
 if (!ownsInstance) app.quit()
+// %APPDATA%\Moti\logs — see electron/diagnostics.ts for what is (and is never) written.
+const diagnostics = createDiagnosticLog(path.join(app.getPath('userData'), 'logs'))
 
 let allowClose = false
 let closingTimer: ReturnType<typeof setTimeout> | undefined
@@ -74,7 +77,10 @@ const completeClose = async (saved: boolean) => {
 }
 ipcMain.on('records:close-ready', (event, saved: unknown) => {
   if (win && event.sender === win.webContents && event.senderFrame === win.webContents.mainFrame
-    && trustedRecordUrl(event.senderFrame.url, recordsPageUrl)) void completeClose(saved === true)
+    && trustedRecordUrl(event.senderFrame.url, recordsPageUrl)) {
+    if (closingTimer) diagnostics.write('close-reply', { saved: saved === true })
+    void completeClose(saved === true)
+  }
 })
 
 const getFreeLocalPort = () => new Promise<number>((resolve, reject) => {
@@ -280,7 +286,8 @@ function createWindow() {
     overlay?.back()
     event.preventDefault()
     if (!closingTimer) {
-      closingTimer = setTimeout(() => { void completeClose(false) }, 5000)
+      // No answer in 5 s means the screen could not save; the log tells a frozen screen from a failed upload.
+      closingTimer = setTimeout(() => { diagnostics.write('close-timeout'); void completeClose(false) }, 5000)
       win?.webContents.send('records:closing')
     }
   })
@@ -321,6 +328,7 @@ app.on('activate', () => {
 })
 
 if (ownsInstance) app.whenReady().then(() => {
+  watchDiagnostics(diagnostics, { app, screen, powerMonitor, ipc: ipcMain, mainWindow: () => win })
   const positionPath = path.join(app.getPath('userData'), 'overlay-window.json')
   overlay = new OverlayWindow(ipcMain, {
     owner: () => win, trustedOwner: trustedAppWindow, create: options => new BrowserWindow(options), screen,

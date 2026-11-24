@@ -44,7 +44,8 @@ Electron 개발 앱의 키보드 모드는 로컬 Python 프로세스를 자동 
 | `scripts/package-keyboard.ps1`, `keyboard-detect/packaging/` | Windows x64 Python 분석기·모델·네이티브 라이브러리 묶음 생성. 실행 검사를 통과한 전체 폴더를 Electron `extraResources`의 `keyboard/`에 동봉 |
 | `front/electron/main.ts` | 준비된 주 창 표시, Python 키보드 프로세스, 신뢰 창 IPC·종료 전 기록 flush 요청. 화면이 여는 새 창(window.open)은 카메라 설정 창만 허용하고, 카카오맵 장소 링크(`externalLinks.ts`)는 기본 브라우저로 엶 |
 | `front/electron/preload.ts` | 키보드 시작·중지, motiRecords 종료 flush 및 주 창 전용 테마 IPC 경계 |
-| `front/electron/overlayWindow.ts`, `front/overlay.html`, `front/src/features/overlay/` | 독립 미니 바 창(340×118)·준비 확인·위치 보정·복귀, 검증된 요약/명령 계약. `snapshot.ts`가 큰 숫자와 경고 점수 이하 표시(목·어깨는 설정의 경고 점수, 키보드는 70점)를 만듦. 측정은 기존 본창 Provider가 계속 소유하며 작은 창은 별도 메모리 partition에서 제한된 API만 사용 |
+| `front/electron/diagnostics.ts`, `front/src/features/diagnostics/` | 진단 기록(2026-11-24). `%APPDATA%\Moti\logs\moti-YYYY-MM-DD.log`에 JSON 한 줄씩: 시작 정보, GPU 상태(GPU 정보를 다 받은 뒤. 시작 직후 값은 준비 전이라 쓰지 않음), 화면·GPU 프로세스 종료, 창 응답 없음, 화면 장치 변화, 절전·잠금, 종료 때 저장 응답/5초 초과, 1분마다 프로세스 메모리·CPU와 본창이 보낸 JS 메모리·두 측정 상태, 처리되지 않은 화면 오류(분당 20개). 영상·랜드마크·점수는 적지 않고 14일 지난 파일은 지움 |
+| `front/electron/overlayWindow.ts`, `front/overlay.html`, `front/src/features/overlay/` | 독립 미니 바 창(340×118 고정, 화면 장치가 바뀌어도 크기를 되돌림)·준비 확인·위치 보정·복귀, 검증된 요약/명령 계약. `snapshot.ts`가 큰 숫자와 경고 점수 이하 표시(목·어깨는 설정의 경고 점수, 키보드는 70점)를 만듦. 측정은 기존 본창 Provider가 계속 소유하며 작은 창은 별도 메모리 partition에서 제한된 API만 사용 |
 | `front/electron/notificationHandlers.ts`, `front/src/features/notifications/` | main의 포커스/오버레이/잠금 검사, 고정 문구 Windows 알림, 자세 확인·키보드 최근 20회 평균·기존 깜빡임 15초 신호와 전달 ACK, 운영 오류별 사건 큐. 키보드 입력은 이벤트마다 처리하고 경고별 반복 제한을 독립 관리. 점수·기록 정책과 분리 |
 | `front/vite.config.ts` | UI와 Electron 빌드, CommonJS preload 출력, 브라우저 검증 모드 |
 | `front/src/App.tsx` | 라우트 정의와 네이티브 제목 표시줄 테마 동기화. 인증 보호 라우트는 아직 없음 |

@@ -45,6 +45,12 @@ contextBridge.exposeInMainWorld('motiWindow', {
   setTheme: (theme: 'light' | 'dark') => ipcRenderer.invoke('window:set-theme', theme),
 })
 
+// Diagnostics log (electron/diagnostics.ts): memory and session state once a minute, and unhandled errors.
+contextBridge.exposeInMainWorld('motiDiagnostics', {
+  sample: (value: unknown) => ipcRenderer.send('diagnostics:sample', value),
+  error: (value: unknown) => ipcRenderer.send('diagnostics:error', value),
+})
+
 // --------- Expose some API to the Renderer process ---------
 contextBridge.exposeInMainWorld('motiKeyboard', {
   start: (external = false) => ipcRenderer.invoke('keyboard-service:start', external),
