@@ -1,5 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { build } from 'esbuild';
+import { createRequire } from 'node:module';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { defaultQuad, normalizeProfile, readProfile, resolveProfile, validQuad, writeProfile } from '../src/features/camera/profile.ts';
 import { automaticQuad, gridPolygons, projector } from '../src/features/camera/grid.ts';
 import { canOpenCameraSettings } from '../electron/cameraWindow.ts';
@@ -53,6 +57,31 @@ test('camera window allowlist rejects other pages, frame names and appended para
     for (const target of [url + '?extra=1', url + '#other', 'about:blank', 'https://example.com', base]) assert.equal(canOpenCameraSettings(target, 'moti-camera-settings', base), false);
     assert.equal(canOpenCameraSettings(url, '_blank', base), false);
   }
+});
+test('the keyboard area section says when it is finding the keyboard, found it, or switched to manual after failing', async () => {
+  globalThis.window ??= {};  // the title bar reads window.motiWindow
+  const bundle = await build({ stdin: { contents: [
+    "export { default as Panel } from './src/features/camera/CameraSettingsPanel.tsx';",
+    "export { CameraContext } from './src/features/camera/context.ts';",
+  ].join('\n'), resolveDir: process.cwd() }, bundle: true, write: false, platform: 'node', format: 'cjs', jsx: 'automatic', external: ['react', 'react-dom'], loader: { '.css': 'empty' } });
+  const compiled = { exports: {} };
+  new Function('module', 'exports', 'require', bundle.outputFiles[0].text)(compiled, compiled.exports, createRequire(import.meta.url));
+  const { Panel, CameraContext } = compiled.exports;
+  const render = (keyboardStatus, source = 'automatic') => {
+    const profile = normalizeProfile({ grid: { source } }, 'keyboard');
+    const camera = { modeId: 'keyboard', cameraLabel: '손 카메라', profile, connected: true, runtime: { current: { profile, editing: false, manualPending: false, invalidate: null } },
+      update() {}, setGrid() {}, setEditing() {}, reportMetrics() {}, setInvalidator() {}, setManualPending() {}, async connect() {}, detach() {}, open() {}, exposureError: null };
+    return renderToStaticMarkup(createElement(CameraContext.Provider, { value: camera }, createElement(Panel, { keyboardStatus })));
+  };
+  assert.match(render(undefined), /<p class="camera-hint">자동 인식이 어려우면 바로 직접 맞출 수 있어요/);
+  const trying = render({ recognition: 'trying', message: '키보드 전체와 네 모서리 키가 화면에 보이도록 카메라를 조절해 주세요.' });
+  assert.match(trying, /<button aria-pressed="true"><svg[^]*?<\/svg>찾는 중<\/button>/);
+  assert.match(trying, /<p role="status" class="camera-status is-trying">[^]*네 모서리 키가 화면에 보이도록/);
+  assert.match(render({ recognition: 'found', message: null }), /<p role="status" class="camera-status is-found">[^]*키보드를 자동으로 찾았어요/);
+  const waiting = render({ recognition: 'waiting', message: null }, 'manual');
+  assert.match(waiting, /<p role="alert" class="camera-status is-waiting">[^]*직접 맞추기로 바꿨어요/);
+  assert.match(waiting, /<button aria-pressed="true">직접 맞추기<\/button>/);
+  assert.match(render({ recognition: 'manual', message: null }, 'manual'), /<p class="camera-hint">네 모서리를 맞추고/);
 });
 test('manual mapping uses validated geometry and genuine finger confidence; all timing and candidate gates remain', () => {
   const payload = { key_event: { code: 'KeyQ', key: 'q', sequence: 1 }, pressed_key: 'q', frame_delta_ms: 10,

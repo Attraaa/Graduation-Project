@@ -11,9 +11,10 @@ export default function MonitoringDesktopBridge() {
   const current = useRef(all), sequence = useRef(0);
   useLayoutEffect(() => { current.current = all; });
   const publish = useCallback(() => {
-    // The alert score is read each time, so a change in the settings shows on the next update.
+    // The alert scores are read each time, so a change in the settings shows on the next update.
+    const settings = readNotificationPreferences();
     window.motiDesktop?.publish(overlaySnapshot(current.current, owner, ++sequence.current, document.documentElement.classList.contains('dark-theme') ? 'dark' : 'light',
-      recordingFailedForCurrentOwner(), readNotificationPreferences().scoreThreshold));
+      recordingFailedForCurrentOwner(), { posture: settings.scoreThreshold, keyboard: settings.keyboardThreshold }));
   }, [owner]);
   useEffect(() => {
     const bridge = window.motiDesktop;

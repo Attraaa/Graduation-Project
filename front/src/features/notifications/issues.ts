@@ -6,7 +6,7 @@ export function systemIssue(key: string, id: string, code: IssueCode | null, act
   if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') window.dispatchEvent(new CustomEvent<IssueEvent>(SYSTEM_ISSUE_EVENT, { detail: { key, id, code, active } }));
 }
 type Incident = { key: string; id: string; code: IssueCode; at: number; sent: boolean; attempts: number; retryAt: number; active: boolean };
-const priority: Record<IssueCode, number> = { auth: 0, storage: 1, 'upper-analysis': 2, 'keyboard-analysis': 2, 'eye-analysis': 3, tracking: 4 };
+const priority: Record<IssueCode, number> = { auth: 0, storage: 1, 'upper-analysis': 2, 'keyboard-analysis': 2, 'keyboard-area': 3, 'eye-analysis': 3, tracking: 4 };
 export function createIssueQueue() {
   const incidents = new Map<string, Incident>();
   return {

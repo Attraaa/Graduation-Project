@@ -18,7 +18,7 @@ export default function CameraProvider({ modeId, deviceId, cameraLabel, children
   const [exposureError, setExposureError] = useState<string | null>(null);
   const [activeLabel, setActiveLabel] = useState(cameraLabel);
   const { portal, open: openWindow, error: windowError } = useCameraWindow();
-  const runtime = useRef<CameraRuntime>({ profile, canvas: null, overlay: null, track: null, video: null, stream: null, paused, deviceId, editing: false, generation: 0, frameAt: null, videoTime: -1, metrics: null, invalidate: null });
+  const runtime = useRef<CameraRuntime>({ profile, canvas: null, overlay: null, track: null, video: null, stream: null, paused, deviceId, editing: false, generation: 0, frameAt: null, videoTime: -1, metrics: null, invalidate: null, manualPending: false });
   useEffect(() => { runtime.current.paused = paused; }, [paused]);
   const animation = useRef<(() => void) | null>(null);
   const removeEnded = useRef<() => void>(() => {});
@@ -54,6 +54,7 @@ export default function CameraProvider({ modeId, deviceId, cameraLabel, children
   const setEditing = useCallback((editing: boolean) => { const state = runtime.current; if (state.editing !== editing) { state.editing = editing; state.invalidate?.(); } }, []);
   const reportMetrics = useCallback((metrics: CameraRuntime['metrics']) => { runtime.current.metrics = metrics; }, []);
   const setInvalidator = useCallback((callback: (() => void) | null) => { runtime.current.invalidate = callback; }, []);
+  const setManualPending = useCallback((pending: boolean) => { runtime.current.manualPending = pending; }, []);
   const detach = useCallback(() => {
     animation.current?.();
     removeEnded.current(); removeEnded.current = () => {};
@@ -61,7 +62,7 @@ export default function CameraProvider({ modeId, deviceId, cameraLabel, children
     state.generation++;
     if (state.canvas) { state.canvas.width = 0; state.canvas.height = 0; }
     if (state.overlay) { state.overlay.width = 0; state.overlay.height = 0; }
-    state.canvas = null; state.overlay = null; state.track = null; state.video = null; state.stream = null; state.editing = false; state.metrics = null; state.frameAt = null; state.videoTime = -1;
+    state.canvas = null; state.overlay = null; state.track = null; state.video = null; state.stream = null; state.editing = false; state.metrics = null; state.frameAt = null; state.videoTime = -1; state.manualPending = false;
     setConnected(false);
   }, []);
   const connect = useCallback(async (video: HTMLVideoElement, stream: MediaStream, canvas: HTMLCanvasElement, overlay?: HTMLCanvasElement | null) => {
@@ -120,6 +121,6 @@ export default function CameraProvider({ modeId, deviceId, cameraLabel, children
     if (onOpen) onOpen(modeId, ratio); else openWindow(ratio);
   }, [onOpen, modeId, openWindow]);
   useEffect(() => () => animation.current?.(), []);
-  const value = { modeId, cameraLabel: activeLabel, profile, connected, runtime, update, setGrid, setEditing, reportMetrics, setInvalidator, connect, detach, open, exposureError: exposureError ?? windowError };
+  const value = { modeId, cameraLabel: activeLabel, profile, connected, runtime, update, setGrid, setEditing, reportMetrics, setInvalidator, setManualPending, connect, detach, open, exposureError: exposureError ?? windowError };
   return <CameraContext.Provider value={value}>{children}{portal && createPortal(<CameraSettingsPanel />, portal)}</CameraContext.Provider>;
 }

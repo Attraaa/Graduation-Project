@@ -2,11 +2,13 @@ import type { MonitorSnapshot } from '../posture/monitorTypes.ts';
 import type { NotificationPreferences } from './preferences.ts';
 import type { PostureAlertPart, SystemNotificationRequest } from './contract.ts';
 
-export const LOW_SCORE_DURATION_MS = 3000;
 // "발생 시" sends once per episode; even repeated recoveries cannot flood Windows.
 export const MIN_ALERT_INTERVAL_MS = 10_000;
 
-/** Alert timing is separate from scoring/habit policies and never changes stored measurements. */
+/**
+ * A neck or shoulder score at or below the alert score for the chosen seconds of observed time alerts (Settings).
+ * Alert timing is separate from scoring/habit policies and never changes stored measurements.
+ */
 export function createPostureAlerts() {
   const empty = () => ({ elapsed: 0, continuous: null as number | null });
   let low = { neck: empty(), shoulder: empty() };
@@ -31,8 +33,7 @@ export function createPostureAlerts() {
         const summary = snapshot[part];
         if (summary.currentScore === null || summary.protection !== 'none') { low[part] = empty(); continue; }
         const below = summary.currentScore <= settings.scoreThreshold;
-        const away = summary.deviationState === 'away';
-        candidate ||= below || away;
+        candidate ||= below;
         if (below) {
           const previous = low[part];
           const delta = previous.continuous !== null && summary.continuousMs >= previous.continuous
@@ -42,7 +43,7 @@ export function createPostureAlerts() {
             continuous: summary.continuousMs,
           };
         } else low[part] = empty();
-        if (away || low[part].elapsed >= LOW_SCORE_DURATION_MS) parts.push({ part, score: summary.currentScore, away });
+        if (below && low[part].elapsed >= settings.postureSeconds * 1000) parts.push({ part, score: summary.currentScore });
       }
       if (!candidate) { if (candidateActive) generation++; notifiedEpisode = false; }
       candidateActive = candidate;

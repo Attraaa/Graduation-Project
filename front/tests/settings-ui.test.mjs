@@ -59,7 +59,13 @@ test('settings page shows the eight cards with defaults when nothing is stored',
   assert.match(out, /id="settings-posture-sensitivity" type="range" min="10" max="100" step="10"[^>]*value="50"/);
   assert.match(out, />50%</);
   assert.match(out, /aria-label="깜빡임 민감도"[^]*?aria-pressed="true"[^>]*>보통</);
-  assert.match(out, />70점 이하</);
+  // Alerts: "N점 이하 N초 유지 시" per mode in the alert card (2026-11-25), not a score slider in the upper-body card.
+  for (const [name, score, seconds] of [['상체', 70, 3], ['키보드', 70, 3]]) {
+    assert.match(out, new RegExp(`aria-label="${name} 알림 점수"[^]*?>${score}(<!-- -->)?점<`));
+    assert.match(out, new RegExp(`aria-label="${name} 알림 시간"[^]*?>${seconds}(<!-- -->)?초<`));
+  }
+  assert.match(out, /<section aria-label="알림"[^]*?>상체<[^]*?이하[^]*?유지 시[^]*?>키보드<[^]*?<section aria-label="상체 · 자세 기준"/);
+  assert.doesNotMatch(out, /경고 점수 기준/);
   assert.match(out, /id="settings-base-cva" type="range" min="40" max="60" step="1"[^>]*value="50"/);
   assert.match(out, />50°</);
   assert.match(out, /승인 앱 설정은 데스크톱 앱에서 사용할 수 있습니다/);
@@ -71,7 +77,8 @@ test('settings page reflects the stored account, theme, alert and sensitivity va
   const out = page({
     'moti.session': JSON.stringify({ token: 't', user: { id: '7', username: 'moti_user', nickname: '정섭' } }),
     'postureAI.theme': 'dark', 'postureAI.notifications': 'off', 'postureAI.alertFrequency': '30',
-    'postureAI.alertStrength': 'strong', 'postureAI.scoreThreshold': '85',
+    'postureAI.alertStrength': 'strong', 'postureAI.scoreThreshold': '85', 'postureAI.alertSeconds': '10',
+    'postureAI.keyboardThreshold': '90', 'postureAI.keyboardAlertSeconds': '30',
     'moti.settings.postureSensitivity': '80', 'moti.settings.eyeSensitivity': 'high', 'moti.settings.baseCva': '52',
   });
   assert.match(out, />52°</);
@@ -82,7 +89,10 @@ test('settings page reflects the stored account, theme, alert and sensitivity va
   assert.match(out, /role="switch" aria-checked="false"/);
   assert.match(out, /aria-pressed="true"[^>]*>30분</);
   assert.match(out, /aria-label="알림 소리"[^]*?aria-pressed="true"[^>]*>켜기</);
-  assert.match(out, />85점 이하</);
+  for (const [name, score, seconds] of [['상체', 85, 10], ['키보드', 90, 30]]) {
+    assert.match(out, new RegExp(`aria-label="${name} 알림 점수"[^]*?>${score}(<!-- -->)?점<`));
+    assert.match(out, new RegExp(`aria-label="${name} 알림 시간"[^]*?>${seconds}(<!-- -->)?초<`));
+  }
   assert.match(out, />80%</);
   assert.match(out, /aria-label="깜빡임 민감도"[^]*?aria-pressed="true"[^>]*>높음</);
 });

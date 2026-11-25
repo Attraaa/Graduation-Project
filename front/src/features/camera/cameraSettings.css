@@ -21,7 +21,7 @@
 .camera-corner { cursor: crosshair; }
 .camera-off { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: #cbd5e1; background: #080e18; }
 .camera-off p { font-size: 13px; }
-.camera-settings-controls { overflow-y: auto; overflow-x: hidden; padding: 0 20px 12px; background: var(--color-surface); border-left: 1px solid var(--color-border); scrollbar-width: thin; scrollbar-color: var(--color-border-strong) var(--color-surface); }
+.camera-settings-controls { overflow-y: auto; overflow-x: hidden; padding: 0 20px 12px; background: var(--color-surface); border-left: 1px solid var(--color-border); }
 .camera-settings-controls section { padding: 20px 0; border-bottom: 1px solid var(--color-border); }
 .camera-settings-controls h2 { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 900; margin: 0 0 14px; }
 .camera-settings-controls h3 { font-size: 12px; font-weight: 800; margin: 18px 0 8px; color: var(--color-muted); }
@@ -32,6 +32,15 @@
 .camera-settings-app .camera-recapture { width: 100%; margin-top: 16px; }
 .camera-choice, .camera-button-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
 .camera-hint { color: var(--color-muted); font-size: 12px; line-height: 1.65; margin: 10px 0 0; }
+/* Finding the keyboard (trying / found / switched to manual), in place of the hint above. */
+.camera-status { display: flex; align-items: flex-start; gap: 8px; margin: 10px 0 0; padding: 10px 12px; border-radius: 10px; font-size: 13px; font-weight: 700; line-height: 1.5; background: var(--color-surface-muted); color: var(--color-heading); }
+.camera-status svg { flex-shrink: 0; margin-top: 2px; }
+.camera-status.is-trying svg { color: var(--color-secondary); }
+.camera-status.is-found svg { color: var(--color-primary); }
+.camera-status.is-waiting { background: var(--color-mode-shoulder-soft); }
+.camera-status.is-waiting svg { color: var(--color-warning-border); }
+.camera-spin { animation: camera-spin 1s linear infinite; }
+@keyframes camera-spin { to { transform: rotate(360deg); } }
 .camera-settings-app .camera-reset { background: transparent; border: 0; color: var(--color-muted); padding: 8px 0 0; font-size: 11px; }
 .camera-range { display: block; margin-top: 16px; font-size: 12px; font-weight: 700; }
 .camera-range span { display: flex; justify-content: space-between; }

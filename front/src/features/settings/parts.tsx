@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { X } from 'lucide-react';
+import { Minus, Plus, X } from 'lucide-react';
 import ModalFrame from '../../components/dialog/ModalFrame';
 
 export const INPUT = 'h-10 w-full rounded-xl border border-border bg-surface-muted px-3 text-sm text-heading placeholder:text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-secondary/40';
@@ -83,6 +83,24 @@ export function Switch({ label, checked, onChange }: { label: string; checked: b
       className={`flex h-7 w-12 shrink-0 items-center rounded-full p-0.5 transition-colors ${checked ? 'bg-primary' : 'bg-border-strong'}`}>
       <span aria-hidden="true" className={`h-6 w-6 rounded-full bg-[#fff] shadow transition-transform ${checked ? 'translate-x-5' : ''}`} />
     </button>
+  );
+}
+
+/** − value +: moves to the next of `steps` below or above the value (a value between steps moves to the nearest one). */
+export function Stepper({ label, value, steps, unit, onChange }: {
+  label: string; value: number; steps: readonly number[]; unit: string; onChange: (value: number) => void;
+}) {
+  const lower = steps.filter(step => step < value).at(-1);
+  const higher = steps.find(step => step > value);
+  const button = 'flex h-full w-8 items-center justify-center text-muted transition hover:text-heading disabled:cursor-default disabled:opacity-30';
+  return (
+    <div role="group" aria-label={label} className="inline-flex h-9 shrink-0 items-center rounded-xl border border-border bg-surface-muted">
+      <button type="button" aria-label={`${label} 낮추기`} disabled={lower === undefined} onClick={() => { if (lower !== undefined) onChange(lower); }}
+        className={`${button} rounded-l-xl`}><Minus size={14} /></button>
+      <output aria-live="polite" className="min-w-11 text-center text-sm font-bold tabular-nums text-heading">{value}{unit}</output>
+      <button type="button" aria-label={`${label} 높이기`} disabled={higher === undefined} onClick={() => { if (higher !== undefined) onChange(higher); }}
+        className={`${button} rounded-r-xl`}><Plus size={14} /></button>
+    </div>
   );
 }
 

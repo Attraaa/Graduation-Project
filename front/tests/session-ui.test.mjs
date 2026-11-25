@@ -45,6 +45,9 @@ test('the keyboard camera view carries mapping, unapproved-app and error guidanc
   assert.equal(band(), '');
   current.keyboard.controls.isPaused = false;
   assert.match(band(), /키보드 측정 안내[^]*키보드 위치를 찾고/);
+  // Automatic recognition failed and switched to manual: a warning until the area is fitted in the camera settings.
+  current.keyboard.snapshot = { phase: 'mapping', recognition: 'waiting', message: '키보드를 자동으로 찾지 못해 직접 맞추기로 바꿨어요. 카메라 설정에서 키보드 영역을 맞춰 주세요.' };
+  assert.match(band(), /bg-amber-500\/90[^]*직접 맞추기로 바꿨어요/);
   current.keyboard.snapshot = { phase: 'ready', message: '키보드 위치를 잡았습니다. 이 화면에서 타이핑해 보세요.', observationStatus: 'observing', latest: null, detectedPresses: 0 };
   assert.match(band(), /이 화면에서 타이핑해 보세요/);
   current.keyboard.snapshot = { ...current.keyboard.snapshot, detectedPresses: 1, message: '입력과 가장 가까운 카메라 프레임으로 손가락을 판정했습니다.' };
@@ -92,10 +95,12 @@ test('the home keyboard card shows only its three numbers, without small caption
   const base = state(true), camera = { connected: true, runtime: { current: { canvas: null, overlay: null } }, open() {} };
   const row = (code, finger, verdict, reason, count) => ({ date: '2026-11-23', code, context: 'plain', finger, verdict, reason, count });
   const keyboard = { ...base.keyboard, camera, trend: [], controls: { ...base.keyboard.controls, elapsedSeconds: 30, failed: false },
-    snapshot: { phase: 'ready', message: null, detectedPresses: 12, latest: null, recent: [], observationStatus: 'observing',
+    snapshot: { phase: 'ready', message: null, detectedPresses: 12, latest: null, recent: [], scores: [100, 100, 70], observationStatus: 'observing',
       counts: [row('KeyF', 'left:index', 'preferred', 'preferred-finger', 10), row('KeyJ', null, 'unknown', 'no-reliable-candidate', 2)] } };
   const out = render(app.KeyboardCard, { upper: { ...base.upper, camera }, keyboard });
   for (const label of ['현재 점수', '판정 가능 비율', '판정한 입력']) assert.match(out, new RegExp(label));
+  // The dial is the whole-number average of the last judged presses (100, 100, 70), not the latest press.
+  assert.match(out, />90<small[^>]*>점</);
   assert.match(out, />10<span[^>]*>회</);
   assert.doesNotMatch(out, /세션 평균|보류 \d|확인한 입력/);
 });

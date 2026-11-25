@@ -1,10 +1,9 @@
 import type { EyeUpdate } from '../eye/EyeMonitor';
-import { livePressScore } from '../keyboard/liveScore.ts';
+import { LIVE_SCORE_WINDOW, liveAverage, livePressScore } from '../keyboard/liveScore.ts';
 import type { KeyboardMonitorSnapshot } from '../keyboard/monitorTypes';
 import type { SystemNotificationRequest } from './contract';
 import type { NotificationPreferences } from './preferences';
 import { MIN_ALERT_INTERVAL_MS } from './postureAlerts.ts';
-import { KEYBOARD_ALERT_THRESHOLD, KEYBOARD_ALERT_WINDOW } from './activityPolicy.ts';
 
 export type ActivityNotificationRequest = Extract<SystemNotificationRequest, { kind: 'keyboard' | 'blink' }>;
 const FRESH_OBSERVATION_MS = 2000;
@@ -33,10 +32,14 @@ function createEpisode() {
   };
 }
 
+/**
+ * The keyboard score the home card shows (average of the last 50 judged presses) at or below the alert score
+ * for the chosen seconds alerts, once 50 presses were judged and while typing goes on.
+ */
 export function createKeyboardAlerts() {
   const episode = createEpisode();
-  let scores: number[] = [], lastId = -1, seenAt: number | null = null;
-  const interrupt = () => { scores = []; seenAt = null; episode.interrupt(); };
+  let average: number | null = null, lastId = -1, seenAt: number | null = null, belowSince: number | null = null;
+  const interrupt = () => { average = null; seenAt = null; belowSince = null; episode.interrupt(); };
   return {
     ...episode,
     interrupt,
@@ -50,16 +53,17 @@ export function createKeyboardAlerts() {
       }
       if (!press || !Number.isSafeInteger(press.id) || press.id <= lastId) return;
       lastId = press.id;
-      const score = livePressScore(press);
-      if (score === null) return;
-      scores.push(score); if (scores.length > KEYBOARD_ALERT_WINDOW) scores.shift();
+      if (livePressScore(press) === null) return;
+      average = snapshot.scores.length >= LIVE_SCORE_WINDOW ? liveAverage(snapshot.scores) : null;
       seenAt = now;
-      episode.setActive(scores.length === KEYBOARD_ALERT_WINDOW && scores.reduce((sum, value) => sum + value, 0) / scores.length <= KEYBOARD_ALERT_THRESHOLD);
     },
     sample(settings: NotificationPreferences, now: number): ActivityNotificationRequest | null {
       if (!settings.enabled) { interrupt(); return null; }
-      if (seenAt === null || now - seenAt > FRESH_OBSERVATION_MS || scores.length < KEYBOARD_ALERT_WINDOW) return null;
-      return episode.propose({ kind: 'keyboard', silent: settings.silent, score: scores.reduce((sum, value) => sum + value, 0) / scores.length }, settings, now);
+      const below = average !== null && seenAt !== null && average <= settings.keyboardThreshold;
+      belowSince = below ? belowSince ?? seenAt : null;
+      episode.setActive(below);
+      if (!below || belowSince === null || now - seenAt! > FRESH_OBSERVATION_MS || now - belowSince < settings.keyboardSeconds * 1000) return null;
+      return episode.propose({ kind: 'keyboard', silent: settings.silent, score: average! }, settings, now);
     },
   };
 }

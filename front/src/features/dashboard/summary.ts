@@ -128,7 +128,7 @@ export function scoreFloor(scores: number[]) {
   return scores.length ? Math.min(90, Math.max(0, Math.floor(Math.min(...scores) / 10) * 10)) : 0;
 }
 
-/** Rows that started on `date`, in start order: one per upper session, keyboard and eye record, of every policy. */
+/** Rows that started on `date`, newest first: one per upper session, keyboard and eye record, of every policy. */
 export function dayEntries(history: HistoryRecord[], keyboard: KeyboardStored[], date: string): TimelineEntry[] {
   const startsOnDate = (record: { startedAt: number; offsetMinutes: number }) =>
     localDateKey(record.startedAt, record.offsetMinutes) === date;
@@ -164,7 +164,7 @@ export function dayEntries(history: HistoryRecord[], keyboard: KeyboardStored[],
       score: keyboardSummary(stored.counts, stored.record.nearbyCredit).score, rate: null,
       interrupted: stored.record.status === 'interrupted', source: { mode: 'keyboard', stored } });
   }
-  return entries.sort((a, b) => a.startedAt - b.startedAt);
+  return entries.sort((a, b) => b.startedAt - a.startedAt);
 }
 
 /** Neck + shoulder deviation episodes per hour, from the first to the last hour with upper-body rows. */

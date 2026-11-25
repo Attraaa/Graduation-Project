@@ -1,7 +1,7 @@
 import type { MonitoringState } from '../session/monitoringContext';
 import { sessionLabel } from '../session/presentation';
 import { keyboardSummary } from '../../../../database/keyboard';
-import { KEYBOARD_ALERT_THRESHOLD } from '../notifications/activityPolicy';
+import { liveAverage } from '../keyboard/liveScore';
 import { overlayCalibrationText } from '../posture/guidance';
 import type { OverlayMetric, OverlaySession, OverlaySnapshot } from './contract';
 
@@ -13,11 +13,12 @@ const metric = (label: string, value: number | null, threshold: number): Overlay
 };
 
 /**
- * The overlay's view of both runtimes. postureThreshold is the posture alert score from the notification settings.
- * Keyboard shows the session average, because a single press jumps between 0, 70 and 100, against the keyboard
- * alert score. While guidance is needed the row shows it instead of numbers.
+ * The overlay's view of both runtimes, against the alert scores of the notification settings (upper body, keyboard).
+ * Keyboard shows the same score as the home card, the average of the last 50 judged presses.
+ * While guidance is needed the row shows it instead of numbers.
  */
-export function overlaySnapshot(all: MonitoringState, owner: string, sequence: number, theme: 'light' | 'dark', savingFailed: boolean, postureThreshold: number): OverlaySnapshot {
+export function overlaySnapshot(all: MonitoringState, owner: string, sequence: number, theme: 'light' | 'dark', savingFailed: boolean,
+  thresholds: { posture: number; keyboard: number }): OverlaySnapshot {
   const session = (mode: 'upper' | 'keyboard', detail: string, metrics: OverlayMetric[], note: string): OverlaySession => {
     const { controls: c, snapshot: s } = all[mode];
     return { run: c.run, running: c.isRunning, paused: c.isPaused, seconds: c.elapsedSeconds, status: sessionLabel(c, s.phase),
@@ -39,18 +40,18 @@ export function overlaySnapshot(all: MonitoringState, owner: string, sequence: n
     } else if (upper.eye.phase === 'error') { detail += ' · 깜빡임 분석 연결 확인'; note = '깜빡임 확인 필요'; }
     else if (rate !== null) { detail += ` · 깜빡임 ${rate.toFixed(1)}회/분`; note = `깜빡임 ${rate.toFixed(1)}`; }
   }
-  const upperMetrics = guidance ? [] : [metric('목', neck, postureThreshold), metric('어깨', shoulder, postureThreshold)];
+  const upperMetrics = guidance ? [] : [metric('목', neck, thresholds.posture), metric('어깨', shoulder, thresholds.posture)];
 
   const counts = keyboardSummary(keyboard.snapshot.counts);
-  const average = keyboard.controls.isRunning ? counts.score : null;
+  const average = keyboard.controls.isRunning ? liveAverage(keyboard.snapshot.scores) : null;
   const excluded = keyboard.snapshot.observationStatus === 'excluded';
   const keyboardGuidance = keyboard.controls.failed || excluded;
   const keyboardDetail = keyboard.controls.failed ? '카메라·분석기 확인 후 다시 시작해 주세요.' : excluded ? '미승인 앱 · 이 앱의 입력은 관찰하지 않습니다.'
-    : `평균 ${score(average)} · 판정한 입력 ${counts.valid}회`;
+    : `최근 평균 ${score(average)} · 판정한 입력 ${counts.valid}회`;
   return {
     owner, sequence, theme, savingFailed,
     upper_body: session('upper', detail, upperMetrics, note),
-    keyboard: session('keyboard', keyboardDetail, keyboardGuidance ? [] : [metric('키보드 평균', average, KEYBOARD_ALERT_THRESHOLD)],
+    keyboard: session('keyboard', keyboardDetail, keyboardGuidance ? [] : [metric('키보드', average, thresholds.keyboard)],
       keyboardGuidance || !keyboard.controls.isRunning ? '' : `판정 ${counts.valid}회`),
   };
 }

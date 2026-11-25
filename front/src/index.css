@@ -10,6 +10,19 @@ body {
   overflow-x: hidden;
 }
 
+/* Scrollbars in both themes: a plain gray bar with round ends and a small triangle button at each end.
+   Setting scrollbar-color or scrollbar-width on an element turns these rules off for it in Chromium. */
+::-webkit-scrollbar { width: 12px; height: 12px; background: transparent; }
+::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
+::-webkit-scrollbar-thumb { min-height: 32px; min-width: 32px; border: 3px solid transparent; border-radius: 999px; background: var(--color-scrollbar) padding-box; }
+::-webkit-scrollbar-thumb:hover, ::-webkit-scrollbar-thumb:active { background-color: var(--color-scrollbar-hover); }
+::-webkit-scrollbar-button:single-button { width: 12px; height: 12px; border-radius: 4px; background-color: transparent; background-position: center; background-repeat: no-repeat; background-size: 8px 8px; }
+::-webkit-scrollbar-button:single-button:hover { background-color: var(--color-scrollbar-button-hover); }
+::-webkit-scrollbar-button:single-button:vertical:decrement { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 8'%3E%3Cpath d='M4 2.25 7 6H1z' fill='%238b93a1'/%3E%3C/svg%3E"); }
+::-webkit-scrollbar-button:single-button:vertical:increment { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 8'%3E%3Cpath d='M4 5.75 1 2h6z' fill='%238b93a1'/%3E%3C/svg%3E"); }
+::-webkit-scrollbar-button:single-button:horizontal:decrement { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 8'%3E%3Cpath d='M2.25 4 6 1v6z' fill='%238b93a1'/%3E%3C/svg%3E"); }
+::-webkit-scrollbar-button:single-button:horizontal:increment { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 8'%3E%3Cpath d='M5.75 4 2 7V1z' fill='%238b93a1'/%3E%3C/svg%3E"); }
+
 /* Duolingo style button base */
 .btn-duo {
   @apply relative rounded-2xl font-bold uppercase tracking-wider transition-all active:translate-y-1 active:border-b-0;
