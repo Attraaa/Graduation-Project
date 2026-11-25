@@ -53,15 +53,15 @@ test('the loaded range adds a week on each side but never passes today, and movi
   assert.deepEqual(datesBetween('2026-09-29', '2026-10-02'), ['2026-09-29', '2026-09-30', '2026-10-01', '2026-10-02']);
 });
 
-test('rows: one line per upper session with keyboard and eye in start order, every policy kept', () => {
+test('rows: one line per upper session with keyboard and eye, newest first, every policy kept', () => {
   const old = posture({ id: 'old:turtle', scorePolicyVersion: 'reference-similarity-turtle-v1',
     startedAt: at('2026-10-02T00:00:00Z'), updatedAt: at('2026-10-02T00:05:00Z'),
     runMs: 5 * 60_000, validMs: 5 * 60_000, scoreTimeSum: 5 * 60_000 * 60 });
   const byDate = entriesByDate([eye({ status: 'running' }), shoulder(), posture(), old],
     [keyboard({ status: 'interrupted' })], datesBetween('2026-10-01', '2026-10-03'));
   const rows = byDate.get('2026-10-02');
-  assert.deepEqual(rows.map(row => [row.mode, row.id]), [['upper', 'old'], ['upper', 's1'], ['keyboard', 'k1'], ['eye', 'e1']]);
-  const [legacy, upper, typing, blink] = rows;
+  assert.deepEqual(rows.map(row => [row.mode, row.id]), [['eye', 'e1'], ['keyboard', 'k1'], ['upper', 's1'], ['upper', 'old']]);
+  const [blink, typing, upper, legacy] = rows;
   assert.equal(legacy.legacy, true);
   assert.equal(legacy.shoulder, null);
   assert.equal(upper.legacy, false);
@@ -79,7 +79,7 @@ test('a keyboard entry in mixed history is not read as an upper record or shown 
   const stored = keyboard();
   const mixed = { ...stored.record, mode: 'keyboard', summary: { score: 100, coverage: 80, valid: 8 } };
   const rows = entriesByDate([mixed, posture()], [stored], ['2026-10-02']).get('2026-10-02');
-  assert.deepEqual(rows.map(row => [row.mode, row.id]), [['upper', 's1'], ['keyboard', 'k1']]);
+  assert.deepEqual(rows.map(row => [row.mode, row.id]), [['keyboard', 'k1'], ['upper', 's1']]);
 });
 
 test('legacy marks any policy that differs from what the app writes today', () => {
@@ -88,7 +88,7 @@ test('legacy marks any policy that differs from what the app writes today', () =
     [keyboard({ recognitionVersion: 'hands-label-distance-v1' }), keyboard({ id: 'k2', policyVersion: 'ansi-qwerty-touch:1.0.0' }), keyboard({ id: 'k3' })],
     ['2026-10-02']);
   assert.deepEqual(byDate.get('2026-10-02').map(row => [row.id, row.legacy]),
-    [['s1', true], ['k1', true], ['k2', true], ['k3', false], ['e1', true]]);
+    [['e1', true], ['k1', true], ['k2', true], ['k3', false], ['s1', true]]);
 });
 
 test('a record measured with another posture sensitivity is still a current standard', () => {

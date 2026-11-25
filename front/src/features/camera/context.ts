@@ -16,6 +16,8 @@ export interface CameraRuntime {
   videoTime: number;
   metrics: { encodingMs: number; roundTripMs: number; inferenceMs: number; resultAgeMs: number } | null;
   invalidate: (() => void) | null;
+  /** Keyboard: automatic recognition failed and switched to manual; nothing is judged until the user fits the area. */
+  manualPending: boolean;
 }
 export interface CameraContextValue {
   modeId: string; cameraLabel: string; profile: CameraProfile; connected: boolean;
@@ -25,6 +27,7 @@ export interface CameraContextValue {
   setEditing: (editing: boolean) => void;
   reportMetrics: (metrics: CameraRuntime['metrics']) => void;
   setInvalidator: (callback: (() => void) | null) => void;
+  setManualPending: (pending: boolean) => void;
   connect: (video: HTMLVideoElement, stream: MediaStream, canvas: HTMLCanvasElement, overlay?: HTMLCanvasElement | null) => Promise<void>;
   detach: () => void;
   open: () => void;

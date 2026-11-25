@@ -195,7 +195,10 @@ export function advanceEvaluation(
   }
   // 처음부터 움직여 유지할 점수도 없거나, 연속 구간이 없으면 평균에는 아직 넣지 않습니다.
   if (next.currentScore === null) return next;
+  // 유지·감점은 소수 그대로 이어 갑니다(lastScore). 프레임마다 반올림하면 한 번에 0.5점 미만인 감점이 멈춥니다.
+  // 화면·알림·평균·기록에는 정수 점수를 씁니다(2026-11-25).
   next.lastScore = next.currentScore;
+  next.currentScore = Math.round(next.currentScore);
   if (!connected) return next;
 
   // 평균 = "구간 양 끝 점수의 평균 × 구간 시간"의 합 / 전체 유효 시간.

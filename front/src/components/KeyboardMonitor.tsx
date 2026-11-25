@@ -15,6 +15,7 @@ import { useCameraSettings } from '../features/camera/context'
 import { imageSignature, validQuad } from '../features/camera/profile'
 import { analysisGrid, automaticQuad, displayedGrid } from '../features/camera/grid'
 import { beginKeyboardRecording } from '../features/keyboard/recording'
+import { addLiveScore } from '../features/keyboard/liveScore'
 import { keyboardCountKey } from '../../../database/keyboard'
 import type { KeyboardCount } from '../../../database/keyboard'
 import { localDateKey } from '../../../database/contracts'
@@ -50,6 +51,10 @@ const mappingMessage = (reason?: string | null) => ({
   bad_keyboard_aspect: '키보드를 정면에 가깝게 비추도록 카메라 각도를 조절해 주세요.',
   mapped_keys_out_of_frame: '키보드 전체가 화면 안에 들어오도록 카메라를 조절해 주세요.',
 }[reason ?? ''] ?? '키보드 위치를 아직 확정하지 못했습니다. 카메라 위치를 조절해 주세요.')
+
+// Automatic recognition gives up after this long without finding the keyboard and switches to manual.
+const AUTOMATIC_LIMIT_MS = 10_000
+const WAITING_MESSAGE = '키보드를 자동으로 찾지 못해 직접 맞추기로 바꿨어요. 카메라 설정에서 키보드 영역을 맞춰 주세요.'
 
 const errorMessage = (error: unknown) => {
   const message = error instanceof Error ? error.message : String(error)
@@ -110,7 +115,7 @@ export default function KeyboardMonitor({ isRunning, paused = false, deviceId, r
   const { videoRef, startWebcam, stopWebcam, webcamError } = useWebcam()
   const overlayRef = useRef<HTMLCanvasElement>(null)
   const previewRef = useRef<HTMLCanvasElement>(null)
-  const { connect, detach, runtime, setGrid, reportMetrics, setInvalidator } = useCameraSettings()
+  const { connect, detach, runtime, setGrid, reportMetrics, setInvalidator, setManualPending } = useCameraSettings()
   const mappingRef = useRef<RuntimeKeyboardMapping | null>(null)
   const fingersRef = useRef<RuntimeFingerPoint[]>([])
   const latestRef = useRef<KeyboardLiveResult | null>(null)
@@ -148,24 +153,43 @@ export default function KeyboardMonitor({ isRunning, paused = false, deviceId, r
     let sink: ReturnType<typeof beginKeyboardRecording> | null = null
     let revision = 0
     let removeHaltListener = () => {}
+    // Automatic recognition of this mapping round: when its first attempt went out and whether one has failed yet.
+    let automaticSince: number | null = null
+    let automaticFailed = false
     const counts = new Map<string, KeyboardCount>()
     const shifts = new Set<string>()
 
     const fail = (message: string) => {
       if (!abort.signal.aborted) {
-        publish({ phase: 'error', message, latest: null, recent: [] }); mapped = false
+        publish({ phase: 'error', message, recognition: 'off', latest: null, recent: [] }); mapped = false
         clearInterval(frameTimer); clearInterval(mappingTimer); clearInterval(settingsTimer); socket?.disconnect()
         sink?.finish(); stopWebcam(); detach(); void window.motiKeyboard?.stop()
       }
     }
 
+    // No keyboard found for 10 s: switch to manual. The flag goes first, so the re-mapping this switch causes
+    // waits for the user's area instead of judging with an area that was never fitted.
+    const giveUpAutomatic = () => {
+      automaticSince = null; automaticFailed = false
+      setManualPending(true)
+      setGrid({ ...displayedGrid(runtime.current.profile), source: 'manual' })
+    }
+
     const requestMapping = () => {
       if (pausedRef.current || !socket?.connected || mappingInFlight || bufferedFrames < 2 || runtime.current.editing) return
+      const manual = runtime.current.profile.grid.source === 'manual'
+      if (manual && runtime.current.manualPending) return
+      if (!manual) {
+        const now = performance.now()
+        automaticSince ??= now
+        if (now - automaticSince >= AUTOMATIC_LIMIT_MS) { giveUpAutomatic(); return }
+      }
       mappingInFlight = true
       const requestedRevision = revision
       mapped = false
-      const manual = runtime.current.profile.grid.source === 'manual'
-      publish({ phase: 'mapping', message: manual ? '직접 맞춘 키보드 영역을 적용하고 있습니다.' : '키보드 위치를 인식하고 있습니다. 손을 잠시 키보드 밖으로 빼 주세요.' })
+      // Keep the last reason on screen between automatic attempts instead of flashing the first message again.
+      if (manual) publish({ phase: 'mapping', recognition: 'manual', message: '직접 맞춘 키보드 영역을 적용하고 있습니다.' })
+      else if (!automaticFailed) publish({ phase: 'mapping', recognition: 'trying', message: '키보드를 자동으로 찾는 중이에요. 손을 잠시 키보드 밖으로 빼 주세요.' })
       socket.timeout(12_000).emit(manual ? 'manual_keyboard' : 'calibrate_keyboard', { token, grid: analysisGrid(runtime.current.profile) }, (timeoutError: Error | null, response?: MappingResponse) => {
         if (abort.signal.aborted || requestedRevision !== revision) return
         mappingInFlight = false
@@ -174,25 +198,28 @@ export default function KeyboardMonitor({ isRunning, paused = false, deviceId, r
           return
         }
         if (!response.ok || !response.mapping) {
+          automaticFailed = !manual
           publish({ phase: 'mapping', message: mappingMessage(response.error) })
           return
         }
-        mapped = true
+        mapped = true; automaticSince = null; automaticFailed = false
         mappingRef.current = response.mapping
         if (!manual && response.mapping.size) {
           const quad = automaticQuad(response.mapping.keys, ...response.mapping.size)
           if (validQuad(quad)) setGrid({ ...runtime.current.profile.grid, quad })
         }
         drawOverlay(overlayRef.current, response.mapping, fingersRef.current, latestRef.current)
-        publish({ phase: 'ready', message: manual ? '직접 맞춘 영역으로 입력을 확인합니다. 키 이름이 실제 키 위치와 맞는지 확인해 주세요.' : '키보드 위치를 잡았습니다. 이 화면에서 타이핑해 보세요.' })
+        publish({ phase: 'ready', recognition: manual ? 'manual' : 'found', message: manual ? '직접 맞춘 영역으로 입력을 확인합니다. 키 이름이 실제 키 위치와 맞는지 확인해 주세요.' : '키보드 위치를 잡았습니다. 이 화면에서 타이핑해 보세요.' })
       })
     }
     remapRef.current = () => {
       if (!socket?.connected) return
-      revision += 1; mapped = false; bufferedFrames = 0; mappingInFlight = false
+      revision += 1; mapped = false; bufferedFrames = 0; mappingInFlight = false; automaticSince = null; automaticFailed = false
       mappingRef.current = null; latestRef.current = null; fingersRef.current = []
       drawOverlay(overlayRef.current, null, [], null)
-      publish({ phase: 'mapping', latest: null, recent: [], message: runtime.current.editing ? '키보드 영역 조정 중 · 입력 판정은 잠시 쉽니다.' : '카메라 설정에 맞춰 키보드 영역을 준비하고 있습니다.' })
+      const state = runtime.current, manual = state.profile.grid.source === 'manual', waiting = manual && state.manualPending
+      publish({ phase: 'mapping', latest: null, recent: [], recognition: waiting ? 'waiting' : manual ? 'manual' : 'trying',
+        message: waiting ? WAITING_MESSAGE : state.editing ? '키보드 영역 조정 중 · 입력 판정은 잠시 쉽니다.' : '카메라 설정에 맞춰 키보드 영역을 준비하고 있습니다.' })
       socket?.emit('reset_analysis', { token })
     }
     setInvalidator(() => remapRef.current())
@@ -300,7 +327,7 @@ export default function KeyboardMonitor({ isRunning, paused = false, deviceId, r
       })
       socket.on('connect', () => {
         if (abort.signal.aborted) return
-        publish({ phase: 'mapping', message: '카메라가 연결되었습니다. 키보드 위치를 찾고 있습니다.' })
+        publish({ phase: 'mapping', recognition: runtime.current.profile.grid.source === 'manual' ? 'manual' : 'trying', message: '카메라가 연결되었습니다. 키보드 위치를 찾고 있습니다.' })
         frameTimer = setInterval(sendFrame, 50)
         mappingTimer = setInterval(() => { if (!mapped) requestMapping() }, 500)
         settingsTimer = setInterval(() => {
@@ -338,6 +365,7 @@ export default function KeyboardMonitor({ isRunning, paused = false, deviceId, r
           message: '입력과 가장 가까운 카메라 프레임으로 손가락을 판정했습니다.',
           latest: result,
           recent,
+          scores: addLiveScore(snapshotRef.current.scores, result),
           detectedPresses: snapshotRef.current.detectedPresses + 1,
           counts: [...counts.values()],
         })
@@ -375,14 +403,14 @@ export default function KeyboardMonitor({ isRunning, paused = false, deviceId, r
       detach()
       void window.motiKeyboard?.stop()
     }
-  }, [isRunning, deviceId, external, onUpdate, publish, startWebcam, stopWebcam, videoRef, connect, detach, runtime, setGrid, reportMetrics, setInvalidator])
+  }, [isRunning, deviceId, external, onUpdate, publish, startWebcam, stopWebcam, videoRef, connect, detach, runtime, setGrid, reportMetrics, setInvalidator, setManualPending])
 
   const previousRemap = useRef(remapRequest)
   useEffect(() => {
     if (previousRemap.current === remapRequest) return
     previousRemap.current = remapRequest
-    if (isRunning) { setGrid({ ...displayedGrid(runtime.current.profile), source: 'automatic', flipX: false, flipY: false, turns: 0 }); remapRef.current() }
-  }, [isRunning, remapRequest, runtime, setGrid])
+    if (isRunning) { setManualPending(false); setGrid({ ...displayedGrid(runtime.current.profile), source: 'automatic', flipX: false, flipY: false, turns: 0 }); remapRef.current() }
+  }, [isRunning, remapRequest, runtime, setGrid, setManualPending])
 
   useEffect(() => {
     if (isRunning && webcamError) publish({ phase: 'error', message: webcamError })

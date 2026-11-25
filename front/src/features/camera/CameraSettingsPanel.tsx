@@ -1,15 +1,23 @@
 import { useEffect, useId, useRef, useState, type CSSProperties, type PointerEvent, type ReactNode } from 'react';
-import { CameraOff, FlipHorizontal2, FlipVertical2, RotateCw, RotateCcw, ScanLine, Hand, MousePointer2, Maximize } from 'lucide-react';
+import { CameraOff, CircleCheck, FlipHorizontal2, FlipVertical2, LoaderCircle, RotateCw, RotateCcw, ScanLine, Hand, MousePointer2, Maximize, TriangleAlert } from 'lucide-react';
 import { getLearningMode } from '../../data/modes';
 import { useCameraSettings } from './context';
 import { defaultQuad, validQuad, type GridSettings, type Point, type Quad } from './profile';
 import { displayedGrid, gridPolygons } from './grid';
 import WindowTitleBar from '../../components/layout/WindowTitleBar';
 import { normalizeFraming, unframePoint, zoomFraming, type CameraFraming } from './framing';
+import type { KeyboardRecognition } from '../keyboard/monitorTypes';
 
-export default function CameraSettingsPanel({ selection }: { selection?: ReactNode }) {
+/** How finding the keyboard goes, while the keyboard runs; the home card's message says what to change. */
+export interface KeyboardAreaStatus { recognition: KeyboardRecognition; message: string | null }
+const AREA_ICON = { trying: <LoaderCircle size={16} className="camera-spin" />, found: <CircleCheck size={16} />, waiting: <TriangleAlert size={16} /> };
+const areaText = ({ recognition, message }: KeyboardAreaStatus) => recognition === 'found' ? '키보드를 자동으로 찾았어요.'
+  : recognition === 'waiting' ? '자동으로 찾지 못해 직접 맞추기로 바꿨어요. 모서리를 끌어 영역을 맞추면 판정을 시작해요.'
+    : message || '키보드를 자동으로 찾는 중이에요.';
+
+export default function CameraSettingsPanel({ selection, keyboardStatus }: { selection?: ReactNode; keyboardStatus?: KeyboardAreaStatus }) {
   const camera = useCameraSettings();
-  const { profile, runtime, connected, update, setGrid } = camera;
+  const { profile, runtime, connected, update, setGrid, setManualPending } = camera;
   const canvas = useRef<HTMLCanvasElement>(null);
   const drag = useRef<{ corner: number | null; start: Point; quad: Quad } | null>(null);
   const [ratio, setRatio] = useState(16 / 9);
@@ -91,7 +99,21 @@ export default function CameraSettingsPanel({ selection }: { selection?: ReactNo
   };
   const grid = displayedGrid(profile);
   const polygons = gridPolygons(grid);
-  const changeGrid = (change: Partial<GridSettings>) => { setGrid({ ...grid, ...change, source: 'manual' }); setMenu(null); };
+  // Any area edit is the user's area: judging starts after a failed automatic recognition, too.
+  const changeGrid = (change: Partial<GridSettings>) => { setManualPending(false); setGrid({ ...grid, ...change, source: 'manual' }); setMenu(null); };
+  // 자동 인식 tries again at once, also when it is already chosen.
+  const tryAutomatic = () => {
+    setManualPending(false);
+    setGrid({ ...grid, source: 'automatic', flipX: false, flipY: false, turns: 0 });
+    if (grid.source === 'automatic') runtime.current.invalidate?.();
+  };
+  // 직접 맞추기 keeps the area as it is; after a failed automatic recognition it starts judging with it.
+  const chooseManual = () => {
+    const waiting = runtime.current.manualPending;
+    changeGrid({});
+    if (waiting && grid.source === 'manual') runtime.current.invalidate?.();
+  };
+  const areaStatus = keyboardStatus && keyboardStatus.recognition !== 'off' && keyboardStatus.recognition !== 'manual' ? keyboardStatus : null;
   const point = (event: PointerEvent<SVGSVGElement>): Point => {
     const rect = event.currentTarget.getBoundingClientRect();
     return [Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)), Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height))];
@@ -152,7 +174,9 @@ export default function CameraSettingsPanel({ selection }: { selection?: ReactNo
       </section>
       <aside className="camera-settings-controls">
         {selection}
-        {camera.modeId === 'keyboard' && <section><h2><ScanLine size={18} />키보드 영역</h2><div className="camera-choice"><button aria-pressed={grid.source === 'automatic'} onClick={() => setGrid({ ...grid, source: 'automatic', flipX: false, flipY: false, turns: 0 })}>자동 인식</button><button aria-pressed={grid.source === 'manual'} onClick={() => changeGrid({})}>직접 맞추기</button></div><p className="camera-hint">{grid.source === 'manual' ? '네 모서리를 맞추고, 내부를 드래그해 이동하세요.' : '자동 인식이 어려우면 바로 직접 맞출 수 있어요.'}</p><h3>영역 방향</h3><div className="camera-button-grid">{gridDirections}</div><button className="camera-reset" onClick={() => changeGrid({ quad: defaultQuad(), flipX: false, flipY: false, turns: 0 })}><RotateCcw size={15} />영역 초기화</button></section>}
+        {camera.modeId === 'keyboard' && <section><h2><ScanLine size={18} />키보드 영역</h2><div className="camera-choice"><button aria-pressed={grid.source === 'automatic'} onClick={tryAutomatic}>{areaStatus?.recognition === 'trying' ? <><LoaderCircle size={15} className="camera-spin" />찾는 중</> : '자동 인식'}</button><button aria-pressed={grid.source === 'manual'} onClick={chooseManual}>직접 맞추기</button></div>
+          {areaStatus ? <p role={areaStatus.recognition === 'waiting' ? 'alert' : 'status'} className={`camera-status is-${areaStatus.recognition}`}>{AREA_ICON[areaStatus.recognition as keyof typeof AREA_ICON]}<span>{areaText(areaStatus)}</span></p>
+            : <p className="camera-hint">{grid.source === 'manual' ? '네 모서리를 맞추고, 내부를 드래그해 이동하세요.' : '자동 인식이 어려우면 바로 직접 맞출 수 있어요.'}</p>}<h3>영역 방향</h3><div className="camera-button-grid">{gridDirections}</div><button className="camera-reset" onClick={() => changeGrid({ quad: defaultQuad(), flipX: false, flipY: false, turns: 0 })}><RotateCcw size={15} />영역 초기화</button></section>}
         <section><h2>영상 방향</h2><div className="camera-button-grid"><button aria-pressed={profile.flipX} onClick={() => update({ flipX: !profile.flipX })}><FlipHorizontal2 size={17} />좌우 반전</button><button aria-pressed={profile.flipY} onClick={() => update({ flipY: !profile.flipY })}><FlipVertical2 size={17} />상하 반전</button><button onClick={() => update({ angle: ((profile.angle + 270) % 360) - 180 })}><RotateCw size={17} />90° 회전</button><button onClick={() => update({ angle: ((profile.angle + 360) % 360) - 180 })}><RotateCw size={17} />180° 회전</button></div><Range label="기울기" value={profile.angle} min={-180} max={180} suffix="°" onChange={angle => update({ angle })} /></section>
         <section><h2>영상 조정</h2><Range label="밝기" value={profile.brightness} min={50} max={150} suffix="%" onChange={brightness => update({ brightness })} /><Range label="대비" value={profile.contrast} min={50} max={150} suffix="%" onChange={contrast => update({ contrast })} /><label className="camera-field">해상도<select value={profile.resolution} onChange={event => update({ resolution: Number(event.target.value) })}><option value={640}>640 · 가볍게</option><option value={1280}>1280 · 기본</option><option value={1920}>1920 · 선명하게</option></select></label>{settings.width && <p className="camera-hint">현재 영상 {settings.width} × {settings.height}</p>}<button className="camera-reset" onClick={() => update({ left: 0, top: 0, width: 1, height: 1, angle: 0, brightness: 100, contrast: 100, flipX: camera.modeId !== 'keyboard', flipY: false, zoom: 1, panX: 0, panY: 0 })}><RotateCcw size={15} />영상 조정 초기화</button></section>
         <section><h2>카메라 노출</h2>{!connected ? <p className="camera-hint">카메라 연결 후 지원 여부를 확인합니다.</p> : caps?.exposureMode?.length ? <><label className="camera-field">노출 방식<select value={profile.exposureMode || settings.exposureMode || caps.exposureMode[0]} onChange={event => update({ exposureMode: event.target.value })}>{caps.exposureMode.map(mode => <option key={mode} value={mode}>{mode === 'manual' ? '수동' : mode === 'continuous' ? '자동' : mode}</option>)}</select></label>{profile.exposureMode === 'manual' && caps.exposureTime && <Range label="노출 시간" value={profile.exposure ?? settings.exposureTime ?? caps.exposureTime.min} min={caps.exposureTime.min} max={caps.exposureTime.max} step={caps.exposureTime.step || 1} onChange={exposure => update({ exposure })} />}{settings.exposureTime !== undefined && <p className="camera-hint">현재 노출 시간 {settings.exposureTime}</p>}</> : <p className="camera-hint">이 카메라에서는 앱의 노출 조정을 지원하지 않습니다.</p>}</section>

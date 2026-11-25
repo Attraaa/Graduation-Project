@@ -502,3 +502,18 @@ macOS `bash scripts/moti.sh check`에서 타입·린트, 프론트 264개(상세
 - 시험: `e19-runtime.test.mjs`는 인계 문서 5절 값(L′ 0/30/60/100/150 % → 50/39.6/32.8/21.7/9.9°, 소수 첫째 자리까지)과 기준 CVA 55°, L′ 0 미만을 확인합니다. `posture-metrics.test.mjs`는 목 점수 0 → 10°(기준 55°면 15°)와 60 → 33°를 확인합니다.
 
 `moti.cmd check` 통과(프론트 타입·린트와 288개 테스트, 서버 87개 중 76개 통과·실제 MySQL 11개 skip, Python 16개 테스트·키보드 모델 확인). 실제 웹캠에서 인계 문서 6절 값(평소 50°, 목 내밀기 40/31/23° 근처)과 비슷한지는 확인하지 않았습니다.
+
+## 2026-11-25 정수 점수·키보드 50회 평균·모드별 알림 기준·자동 인식 안내
+
+사용자가 정한 수정 6가지입니다. [결정](product-decisions.md#2026-11-25-후속-결정--정수-점수-키보드-50회-평균-모드별-알림-기준-키보드-자동-인식)
+
+- 스크롤바: `index.css`의 `::-webkit-scrollbar` 규칙(색은 `tokens.css`의 `scrollbar*`)으로 두 테마 모두 투명한 바탕에 둥근 회색 막대와 위아래 작은 삼각형 버튼. 카메라 설정 창의 `scrollbar-width`/`scrollbar-color`는 이 규칙을 끄므로 지웠습니다.
+- 정수 점수: `evaluation.ts`가 `currentScore`를 반올림하고 감점·유지 진행은 소수 `lastScore`로 이어 갑니다. 기록기(`database/recorder.ts`)와 DB는 그대로입니다.
+- 키보드 50회 평균: `features/keyboard/liveScore.ts`(`addLiveScore`, `liveAverage`), `KeyboardMonitorSnapshot.scores`. 홈 다이얼·그래프·오버레이·키보드 알림이 같은 값을 씁니다.
+- 알림 기준: `notifications/preferences.ts`(`postureSeconds`, `keyboardThreshold`, `keyboardSeconds`), `activityPolicy.ts`(단계·기본값), 설정 알림 카드의 `Stepper` 두 줄. `postureAlerts.ts`는 기준 이탈 조건을 빼고 유지 시간을 설정에서 읽으며, `activityAlerts.ts`는 50회 평균이 N초 이어질 때 알립니다. 알림 요청의 `away` 필드는 없앴고 운영 알림 `keyboard-area`를 더했습니다.
+- 자동 인식: `KeyboardMonitor`가 `recognition`을 내보내고 10초 뒤 직접 맞추기로 바꾸며 카메라 런타임의 `manualPending`이 풀릴 때까지 맵을 적용하지 않습니다. `CameraSettingsPanel`은 자동 인식 버튼을 누르면 바로 다시 찾고(`invalidate`), 찾는 중·찾음·실패 상태를 보여 줍니다.
+- 학습이력: `dashboard/summary.ts`의 `dayEntries`가 최신순으로 정렬합니다.
+
+시험을 고치거나 더했습니다(`posture-evaluation`, `posture-notifications`, `activity-notifications`, `overlay`, `settings-ui`, `session-ui`, `camera-settings`, `keyboard-policy`, `dashboard-summary`, `history-calendar`). `moti.cmd check` 통과(프론트 타입·린트와 291개 테스트, 서버 87개 중 76개 통과·실제 MySQL 11개 skip, Python 16개 테스트·키보드 모델 확인).
+
+화면 확인: 사용자가 원격 제어 중이라 브라우저 패널 대신 프로젝트의 Electron 41로 데모 페이지를 화면 밖 창에서 열어 캡처했습니다. 설정 알림 카드(1100×800, 다크·라이트), 스크롤바 확대, 학습이력 최신순(11월 24일 21:20 → 14:11 → 09:48), 키보드 찾는 중·찾음·실패 후 대기·직접 맞춘 영역·자동 인식 재시도, 목·어깨 툴팁 정수(목 96·어깨 94), 키보드 툴팁 정수, 오버레이 키보드 평균을 확인했습니다. 실제 카메라·키보드 분석기로 10초 전환과 판정 대기는 확인하지 않았습니다.

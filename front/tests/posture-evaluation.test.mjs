@@ -38,7 +38,8 @@ test('grace period of static deviation is protected and subsequent penalty is gr
   close(boundary.currentScore,100); close(boundary.averageScore,100);
   assert.equal(boundary.protection,'grace');
   const after=step(boundary,MOTION_PROTECTION.graceMs + 200,1);
-  close(after.currentScore, 100 - MOTION_PROTECTION.penaltyPointsPerSecond * 0.1); assert.equal(after.protection,'none');
+  close(after.lastScore, 100 - MOTION_PROTECTION.penaltyPointsPerSecond * 0.1); assert.equal(after.protection,'none');
+  assert.equal(after.currentScore, Math.round(after.lastScore));
   const settled=depart(MOTION_PROTECTION.graceMs + 6000);
   close(settled.currentScore,0); assert.ok(settled.averageScore > 0);
   const zero=step({ ...createEvaluation(policy), ...settled, validMs: 0, scoreTimeSum: 0 },MOTION_PROTECTION.graceMs + 6200,1);
@@ -60,7 +61,20 @@ test('a ten second stretch freezes the previous score and restarts grace when mo
   for(let at=11300; at<=11200 + MOTION_PROTECTION.graceMs; at+=100) state=step(state,at,1);
   close(state.currentScore,100);
   state=step(state,11200 + MOTION_PROTECTION.graceMs + 100,1);
-  close(state.currentScore, 100 - MOTION_PROTECTION.penaltyPointsPerSecond * 0.1);
+  close(state.lastScore, 100 - MOTION_PROTECTION.penaltyPointsPerSecond * 0.1);
+  assert.equal(state.currentScore, Math.round(state.lastScore));
+});
+test('shown scores are whole numbers, and a gradual penalty below half a point per frame still goes down', () => {
+  // 10 ms frames lose 0.35 points each; rounding the held score every frame would stop it at 100.
+  let state=depart(MOTION_PROTECTION.graceMs, 1, 10);
+  for(let at=100 + MOTION_PROTECTION.graceMs + 10; at<=100 + MOTION_PROTECTION.graceMs + 1000; at+=10) {
+    const previous=state;
+    state=step(state,at,1);
+    assert.ok(Number.isInteger(state.currentScore), `${state.currentScore}`);
+    // The score-time sum (stored per minute) grows by the shown whole numbers, not by the held fractions.
+    close(state.scoreTimeSum - previous.scoreTimeSum, (previous.currentScore + state.currentScore) / 2 * (state.validMs - previous.validMs));
+  }
+  assert.equal(state.currentScore, 100 - MOTION_PROTECTION.penaltyPointsPerSecond);
 });
 test('motion holds an already lowered score instead of replacing it with a perfect score', () => {
   const lowered=depart(MOTION_PROTECTION.graceMs + 1000);
@@ -96,10 +110,11 @@ test('missing data resets grace and continuity but preserves completed totals', 
   assert.equal(interrupted.currentScore,null); assert.equal(interrupted.protection,'none');
   close(interrupted.averageScore,before.averageScore);
 });
-test('time weighted protected averages do not depend on frame density', () => {
+test('time weighted protected averages do not depend on frame density beyond whole-number scores', () => {
   const dense=depart(3000,1,100), sparse=depart(3000,1,500);
   assert.ok(dense.currentScore>0 && dense.currentScore<100);
-  close(dense.currentScore,sparse.currentScore); close(dense.validMs,sparse.validMs); close(dense.averageScore,sparse.averageScore);
+  close(dense.currentScore,sparse.currentScore); close(dense.validMs,sparse.validMs);
+  assert.ok(Math.abs(dense.averageScore - sparse.averageScore) < 0.5, `${dense.averageScore} != ${sparse.averageScore}`);
 });
 test('invalid intervals and policy changes cannot bridge earlier totals', () => {
   const before=run(1000);

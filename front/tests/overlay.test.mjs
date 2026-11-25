@@ -63,33 +63,41 @@ const counts = (preferred, mismatch) => [
   { date: '2026-11-21', code: 'KeyA', context: 'plain', finger: 'left:ring', verdict: 'mismatch', reason: 'other-finger', count: mismatch },
 ];
 const controls = (over = {}) => ({ run: 3, isRunning: true, isPaused: false, elapsedSeconds: 42, failed: false, ...over });
+// The last judged press scores the home card averages (100 for each preferred, 0 for each mismatch here).
+const scores = (preferred, mismatch) => [...Array(preferred).fill(100), ...Array(mismatch).fill(0)];
 const monitoring = ({ upper = {}, upperControls = {}, eye = {}, keyboard = {}, keyboardControls = {} } = {}) => ({
   upper: { controls: controls(upperControls), snapshot: { phase: 'observing', neck: { currentScore: 70.4 }, shoulder: { currentScore: 88 }, ...upper },
     eye: { phase: 'observing', measurement: { recentBlinksPerMinute: 14.2, calibrationPhase: null, calibrationBlinks: 0 }, ...eye } },
-  keyboard: { controls: controls(keyboardControls), snapshot: { phase: 'ready', observationStatus: 'observing', counts: counts(8, 2), latest: null, ...keyboard } },
+  keyboard: { controls: controls(keyboardControls), snapshot: { phase: 'ready', observationStatus: 'observing', counts: counts(8, 2), scores: scores(8, 2), latest: null, ...keyboard } },
 });
+const alertScores = (posture = 70, keyboard = 70) => ({ posture, keyboard });
 
 test('overlay numbers turn red at or below the alert score as shown, and guidance replaces them', () => {
-  const s = overlaySnapshot(monitoring(), 'owner-1', 1, 'light', false, 70);
+  const s = overlaySnapshot(monitoring(), 'owner-1', 1, 'light', false, alertScores());
   assert.deepEqual(parseOverlaySnapshot(s), s);
   assert.deepEqual(s.upper_body.metrics, [{ label: '목', value: '70', low: true }, { label: '어깨', value: '88', low: false }]);
   assert.equal(s.upper_body.note, '깜빡임 14.2');
   assert.match(s.upper_body.detail, /목 70점 · 어깨 88점 · 깜빡임 14.2회\/분/);
-  assert.deepEqual(s.keyboard.metrics, [{ label: '키보드 평균', value: '80', low: false }]);  // (8 x 100 + 2 x 0) / 10
+  // The same last-50 average as the home card: (8 x 100 + 2 x 0) / 10.
+  assert.deepEqual(s.keyboard.metrics, [{ label: '키보드', value: '80', low: false }]);
+  assert.match(s.keyboard.detail, /최근 평균 80점 · 판정한 입력 10회/);
   assert.equal(s.keyboard.note, '판정 10회');
-  assert.equal(overlaySnapshot(monitoring(), 'o', 1, 'light', false, 90).upper_body.metrics[1].low, true);
-  assert.equal(overlaySnapshot(monitoring({ keyboard: { counts: counts(7, 3) } }), 'o', 1, 'light', false, 70).keyboard.metrics[0].low, true);
+  assert.equal(overlaySnapshot(monitoring(), 'o', 1, 'light', false, alertScores(90)).upper_body.metrics[1].low, true);
+  assert.equal(overlaySnapshot(monitoring({ keyboard: { counts: counts(7, 3), scores: scores(7, 3) } }), 'o', 1, 'light', false, alertScores()).keyboard.metrics[0].low, true);
+  // Each mode has its own alert score.
+  assert.deepEqual(overlaySnapshot(monitoring(), 'o', 1, 'light', false, alertScores(70, 85)).keyboard.metrics[0].low, true);
+  assert.deepEqual(overlaySnapshot(monitoring(), 'o', 1, 'light', false, alertScores(95, 70)).keyboard.metrics[0].low, false);
 
   const calibrating = neckModel => monitoring({ upper: { phase: 'calibrating', neckModel: { step: 'prep', secondsLeft: null, failure: null, ...neckModel } }, keyboard: { observationStatus: 'excluded' } });
-  const guided = overlaySnapshot(calibrating({ secondsLeft: 3 }), 'o', 1, 'light', false, 70);
+  const guided = overlaySnapshot(calibrating({ secondsLeft: 3 }), 'o', 1, 'light', false, alertScores());
   assert.deepEqual([guided.upper_body.metrics, guided.upper_body.detail], [[], '편하게 바르게 앉아 화면 가운데를 보세요 · 3초 뒤 기록']);
-  assert.equal(overlaySnapshot(calibrating({ step: 'collect', secondsLeft: 4 }), 'o', 1, 'light', false, 70).upper_body.detail, '그대로 유지해 주세요 · 4초 남음');
+  assert.equal(overlaySnapshot(calibrating({ step: 'collect', secondsLeft: 4 }), 'o', 1, 'light', false, alertScores()).upper_body.detail, '그대로 유지해 주세요 · 4초 남음');
   for (const [failure, text] of [['too_few_frames', '얼굴과 양쪽 어깨가 보이게 앉아 주세요'], ['unstable', '움직임이 있었어요. 그대로 앉아 계세요'], ['not_upright', '고개를 들어 화면 가운데를 봐 주세요']])
-    assert.equal(overlaySnapshot(calibrating({ step: 'failed', failure, secondsLeft: 2 }), 'o', 1, 'light', false, 70).upper_body.detail, `${text} · 2초 뒤 다시 시작`);
+    assert.equal(overlaySnapshot(calibrating({ step: 'failed', failure, secondsLeft: 2 }), 'o', 1, 'light', false, alertScores()).upper_body.detail, `${text} · 2초 뒤 다시 시작`);
   assert.deepEqual([guided.keyboard.metrics, guided.keyboard.note], [[], '']);
   assert.match(guided.keyboard.detail, /미승인 앱/);
 
-  const idle = overlaySnapshot(monitoring({ upperControls: { isRunning: false, elapsedSeconds: 0 }, keyboardControls: { isRunning: false, elapsedSeconds: 0 } }), 'o', 1, 'light', false, 70);
+  const idle = overlaySnapshot(monitoring({ upperControls: { isRunning: false, elapsedSeconds: 0 }, keyboardControls: { isRunning: false, elapsedSeconds: 0 } }), 'o', 1, 'light', false, alertScores());
   assert.deepEqual(idle.upper_body.metrics.map(m => [m.value, m.low]), [['—', false], ['—', false]]);
   assert.deepEqual([idle.upper_body.status, idle.upper_body.note, idle.keyboard.metrics[0].value, idle.keyboard.note], ['준비됨', '', '—', '']);
 });

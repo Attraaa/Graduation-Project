@@ -98,6 +98,13 @@ retains the minimum 1.5% area gate; stored small source boundaries survive zoom-
 Manual geometry is explicitly validated, not assigned fabricated AI confidence;
 all hand/timing/distance/ambiguity gates remain. Recognition metadata is
 `hands-camera-manual-v3`; the coaching policy and server schema are unchanged.
+Since 2026-11-25 automatic recognition that finds nothing for 10 s switches the
+area to manual and judges nothing until the user fits the area (`recognition`
+`waiting`, camera runtime `manualPending`); the settings window shows trying /
+found / switched, and its 자동 인식 button retries at once.
+The live score on the home card, its graph, the overlay and the keyboard alert is
+the whole-number average of the last 50 judged presses (`liveScore.ts`); stored
+data stays counts per date/key/finger/verdict.
 Preview RAF is independent of the one-in-flight asynchronous binary JPEG pipeline
 (up to 20Hz opportunities); old fingertips expire after 500ms. See the full
 [camera contract](../../../../docs/camera-settings.md) and its validation limits.

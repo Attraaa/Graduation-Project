@@ -14,7 +14,7 @@ function Tag({ children }: { children: ReactNode }) {
   return <span className="ml-1 rounded bg-track px-1 text-xs font-normal text-muted">{children}</span>;
 }
 
-/** The selected day's rows: one line per upper session, keyboard and eye, in start order. */
+/** The selected day's rows: one line per upper session, keyboard and eye, newest first. */
 export default function DayRecords({ date, entries, selectedKey, onSelect }: {
   date: string; entries: HistoryEntry[]; selectedKey: string | null; onSelect: (key: string) => void;
 }) {

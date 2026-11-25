@@ -3,6 +3,21 @@ import test from 'node:test';
 import { evaluatePress } from '../src/features/keyboard/evaluatePress.ts';
 import { ANSI_QWERTY_TOUCH_POLICY_V1 } from '../src/features/keyboard/fingerPolicy.ts';
 import { adaptRuntimePress } from '../src/features/keyboard/runtime.ts';
+import { addLiveScore, liveAverage, LIVE_SCORE_WINDOW } from '../src/features/keyboard/liveScore.ts';
+
+test('the live keyboard score is the whole-number average of the last 50 judged presses', () => {
+  const press = verdict => ({ evaluation: { verdict } });
+  let scores = [];
+  assert.equal(liveAverage(scores), null);
+  assert.deepEqual(scores = addLiveScore(scores, press('unknown')), []);
+  for (const verdict of ['preferred', 'nearby', 'mismatch']) scores = addLiveScore(scores, press(verdict));
+  assert.deepEqual(scores, [100, 70, 0]);
+  assert.equal(liveAverage(scores), 57);  // 56.7
+  for (let i = 0; i < 60; i++) scores = addLiveScore(scores, press('preferred'));
+  assert.equal(scores.length, LIVE_SCORE_WINDOW);
+  assert.equal(liveAverage(scores), 100);
+  assert.equal(liveAverage(addLiveScore(scores, press('nearby'))), 99);  // (49 x 100 + 70) / 50 = 99.4
+});
 
 const options = {
   minKeyboardConfidence: 0.7,

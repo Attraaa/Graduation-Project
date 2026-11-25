@@ -10,7 +10,7 @@ import KeyboardGuidance from '../session/KeyboardGuidance';
 import MetricTile from '../session/MetricTile';
 import ScoreDial from '../session/ScoreDial';
 import { keyboardSummary } from '../../../../database/keyboard';
-import { livePressScore } from '../keyboard/liveScore';
+import { liveAverage } from '../keyboard/liveScore';
 
 type CardProps = { chart?: ReactNode; className?: string };
 
@@ -46,9 +46,10 @@ export function UpperCard({ chart, className }: CardProps) {
 export function KeyboardCard({ chart, className }: CardProps) {
   const { keyboard } = useMonitoring();
   const totals = keyboardSummary(keyboard.snapshot.counts);
-  const score = keyboard.controls.isRunning ? livePressScore(keyboard.snapshot.latest) : null;
+  // The average of the last 50 judged presses, not the score of a single press.
+  const score = keyboard.controls.isRunning ? liveAverage(keyboard.snapshot.scores) : null;
   return <LiveCard modeId="keyboard" chart={chart} className={className} metrics={<div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)] items-start gap-2">
-    <ScoreDial label="현재 점수" value={score} digits={1} strokeClass="stroke-mode-keyboard" />
+    <ScoreDial label="현재 점수" value={score} strokeClass="stroke-mode-keyboard" />
     <div className="flex h-[104px] flex-col justify-center gap-2 border-l border-border pl-4">
       <MetricTile label="판정 가능 비율" value={totals.coverage === null ? null : totals.coverage.toFixed(1)} unit="%" />
       <MetricTile label="판정한 입력" value={String(totals.valid)} unit="회" />

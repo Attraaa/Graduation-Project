@@ -15,7 +15,7 @@ import { readEyeSensitivity, readPostureSensitivity } from '../settings/preferen
 import { createMonitorSnapshot, type MonitorSnapshot } from '../posture/monitorTypes';
 import { createFaceBuffer, type FaceBuffer } from '../posture/e19/frame';
 import { initialKeyboardSnapshot, type KeyboardMonitorSnapshot } from '../keyboard/monitorTypes';
-import { livePressScore } from '../keyboard/liveScore';
+import { liveAverage, livePressScore } from '../keyboard/liveScore';
 import { useSessionControls } from './useSessionControls';
 import { MonitoringContext, type MonitoringMode, type MonitoringState } from './monitoringContext';
 import { appendTrend, type TrendPoint } from './trend';
@@ -65,11 +65,11 @@ export default function MonitoringProvider({ children }: { children: ReactNode }
     setKeys(value);
     const current = keyboardState();
     if (value.phase === 'error' && current.running) { systemIssue('keyboard', String(current.run), 'keyboard-analysis'); failKeyboard(); }
-    // Plot an input only when a new press was actually judged; no idle synthetic scores.
+    // A newly judged press plots the average of the last 50 judged presses; no idle synthetic scores.
     if (value.latest && value.latest.id !== lastPress.current) {
       lastPress.current = value.latest.id;
       lastInputAt.current = performance.now();
-      setKeyboardTrend(points => appendTrend(points, { at: performance.now(), neck: null, shoulder: null, keyboard: livePressScore(value.latest) }));
+      if (livePressScore(value.latest) !== null) setKeyboardTrend(points => appendTrend(points, { at: performance.now(), neck: null, shoulder: null, keyboard: liveAverage(value.scores) }));
     }
   }, [failKeyboard, keyboardState, observeKeyboard]);
   const onEyeSample = useCallback((at: number, value: EyeSnapshot) => eyeSink.current?.sample(at, value), []);
@@ -107,6 +107,19 @@ export default function MonitoringProvider({ children }: { children: ReactNode }
     }
     trackingIncident.current = null; systemIssue('tracking', '', null);
   }, [snapshot.phase, upper.isRunning, upper.isPaused, upper.run]);
+  // A failed automatic keyboard recognition also goes to Windows while Moti is not in front, until the area is fitted.
+  const areaIncident = useRef<string | null>(null);
+  useEffect(() => {
+    if (!keyboard.isRunning || keyboard.isPaused || keys.recognition !== 'waiting') {
+      if (areaIncident.current) { areaIncident.current = null; systemIssue('keyboard-area', '', null); }
+      return;
+    }
+    const incident = areaIncident.current ??= crypto.randomUUID();
+    const publish = () => systemIssue('keyboard-area', incident, 'keyboard-area');
+    publish();
+    const timer = window.setInterval(publish, 1000);
+    return () => window.clearInterval(timer);
+  }, [keys.recognition, keyboard.isRunning, keyboard.isPaused]);
   useEffect(() => { if (!upper.isRunning) { eyeSink.current?.finish(); eyeSink.current = null; } }, [upper.isRunning]);
   useEffect(() => () => eyeSink.current?.finish(), []);
   useEffect(() => {
@@ -174,6 +187,6 @@ function MonitoringRuntime({ base, children, upperCamera, portal, configMode, se
         onClick={configMode === 'upper_body' ? base.upper.recalibrate : base.keyboard.remap}>
         <RotateCcw size={16} />{configMode === 'upper_body' ? '기준 다시 잡기' : '위치 다시 잡기'}
       </button>
-    </section>} /></CameraContext.Provider>, portal)}
+    </section>} keyboardStatus={configMode === 'keyboard' && keyboard.isRunning && !keyboard.isPaused ? base.keyboard.snapshot : undefined} /></CameraContext.Provider>, portal)}
   </MonitoringContext.Provider>;
 }

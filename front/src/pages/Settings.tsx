@@ -6,10 +6,11 @@ import type { EyeSensitivity } from '../features/eye/eyePolicy';
 import KeyboardSettings from '../features/keyboard/KeyboardSettings';
 import AccountSecurity from '../features/settings/AccountSecurity';
 import { POSTURE_SENSITIVITY } from '../features/posture/evaluation';
-import { BUTTON, BUTTON_DANGER, Field, INPUT, Segmented, SettingsCard, Slider, Switch } from '../features/settings/parts';
+import { BUTTON, BUTTON_DANGER, Field, INPUT, Segmented, SettingsCard, Slider, Stepper, Switch } from '../features/settings/parts';
 import { readBaseCva, readEyeSensitivity, readPostureSensitivity, writeBaseCva, writeEyeSensitivity, writePostureSensitivity } from '../features/settings/preferences';
 import { BASE_CVA } from '../features/posture/modes/turtle';
 import { NOTIFICATION_SETTING_KEYS, NOTIFICATION_SETTINGS_CHANGED, readNotificationPreferences } from '../features/notifications/preferences';
+import { ALERT_SCORE, ALERT_SECONDS } from '../features/notifications/activityPolicy';
 import { useSubmission } from '../hooks/useSubmission';
 import { notificationDeliveryMessage, reportNotificationDelivery, subscribeNotificationDelivery } from '../features/notifications/delivery';
 
@@ -27,6 +28,21 @@ const keep = (key: string, value: string) => {
   localStorage.setItem(`postureAI.${key}`, value);
   if (NOTIFICATION_SETTING_KEYS.includes(key)) window.dispatchEvent(new Event(NOTIFICATION_SETTINGS_CHANGED));
 };
+
+/** One mode's alert rule as a sentence: "상체 [70점] 이하 [3초] 유지 시". Stored under `postureAI.<key>`. */
+function AlertRule({ name, score, seconds, onScore, onSeconds }: {
+  name: string; score: number; seconds: number; onScore: (value: number) => void; onSeconds: (value: number) => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-sm">
+      <span className="w-12 shrink-0 font-semibold text-heading">{name}</span>
+      <Stepper label={`${name} 알림 점수`} value={score} steps={ALERT_SCORE.steps} unit="점" onChange={onScore} />
+      <span className="text-muted">이하</span>
+      <Stepper label={`${name} 알림 시간`} value={seconds} steps={ALERT_SECONDS.steps} unit="초" onChange={onSeconds} />
+      <span className="text-muted">유지 시</span>
+    </div>
+  );
+}
 
 /** A small picture of the dashboard in one theme; the whole tile is the button. */
 function ThemeTile({ theme, selected, onSelect }: { theme: Theme; selected: boolean; onSelect: (theme: Theme) => void }) {
@@ -83,6 +99,9 @@ const Settings = () => {
   const [alertFrequency, setAlertFrequency] = useState(() => String(readNotificationPreferences().intervalMinutes));
   const [alertStrength, setAlertStrength] = useState(() => readNotificationPreferences().silent ? 'soft' : 'normal');
   const [scoreThreshold, setScoreThreshold] = useState(() => readNotificationPreferences().scoreThreshold);
+  const [postureSeconds, setPostureSeconds] = useState(() => readNotificationPreferences().postureSeconds);
+  const [keyboardThreshold, setKeyboardThreshold] = useState(() => readNotificationPreferences().keyboardThreshold);
+  const [keyboardSeconds, setKeyboardSeconds] = useState(() => readNotificationPreferences().keyboardSeconds);
   const [postureSensitivity, setPostureSensitivity] = useState(() => readPostureSensitivity());
   const [baseCva, setBaseCva] = useState(() => readBaseCva());
   const [eyeSensitivity, setEyeSensitivity] = useState(() => readEyeSensitivity());
@@ -171,6 +190,16 @@ const Settings = () => {
             <Switch label="Windows 알림" checked={notificationsEnabled}
               onChange={on => { setNotificationsEnabled(on); keep('notifications', on ? 'on' : 'off'); }} />
           </div>
+          <Field label="알림 기준">
+            <div className="space-y-2">
+              <AlertRule name="상체" score={scoreThreshold} seconds={postureSeconds}
+                onScore={value => { setScoreThreshold(value); keep('scoreThreshold', String(value)); }}
+                onSeconds={value => { setPostureSeconds(value); keep('alertSeconds', String(value)); }} />
+              <AlertRule name="키보드" score={keyboardThreshold} seconds={keyboardSeconds}
+                onScore={value => { setKeyboardThreshold(value); keep('keyboardThreshold', String(value)); }}
+                onSeconds={value => { setKeyboardSeconds(value); keep('keyboardAlertSeconds', String(value)); }} />
+            </div>
+          </Field>
           <Field label="반복 알림 간격">
             <Segmented label="반복 알림 간격" options={FREQUENCIES} value={alertFrequency}
               onChange={value => { setAlertFrequency(value); keep('alertFrequency', value); }} />
@@ -189,9 +218,6 @@ const Settings = () => {
           <Slider id="settings-posture-sensitivity" label="자세 무너짐 민감도" valueText={`${postureSensitivity}%`}
             min={POSTURE_SENSITIVITY.min} max={POSTURE_SENSITIVITY.max} step={POSTURE_SENSITIVITY.step} minLabel="둔감" maxLabel="민감"
             value={postureSensitivity} onChange={value => { setPostureSensitivity(value); writePostureSensitivity(value); }} />
-          <Slider id="settings-score-threshold" label="경고 점수 기준" valueText={`${scoreThreshold}점 이하`}
-            min={40} max={95} minLabel="40점" maxLabel="95점" value={scoreThreshold}
-            onChange={value => { setScoreThreshold(value); keep('scoreThreshold', String(value)); }} />
           <Slider id="settings-base-cva" label="기준 CVA" valueText={`${baseCva}°`}
             min={BASE_CVA.min} max={BASE_CVA.max} minLabel={`${BASE_CVA.min}°`} maxLabel={`${BASE_CVA.max}°`} value={baseCva}
             onChange={value => { setBaseCva(value); writeBaseCva(value); }} />

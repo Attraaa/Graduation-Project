@@ -2,73 +2,98 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createKeyboardAlerts, createBlinkAlerts } from '../src/features/notifications/activityAlerts.ts';
 import { initialKeyboardSnapshot } from '../src/features/keyboard/monitorTypes.ts';
+import { addLiveScore } from '../src/features/keyboard/liveScore.ts';
 import { emptyEyeSnapshot, createEyeMeasurement } from '../src/features/eye/measurement.ts';
 import { notificationContent, notificationTarget } from '../src/features/notifications/contract.ts';
 import { registerNotificationHandlers } from '../electron/notificationHandlers.ts';
 
-const settings = { enabled: true, intervalMinutes: 0, silent: true, scoreThreshold: 95 };
-const input = (id, verdict = 'nearby', extra = {}) => ({ ...initialKeyboardSnapshot, phase: 'ready', observationStatus: 'observing',
-  latest: { id, evaluation: { verdict } }, ...extra });
+// The posture alert score (95) must not apply to the keyboard, whose own is 70 for 3 s here.
+const settings = { enabled: true, intervalMinutes: 0, silent: true, scoreThreshold: 95, postureSeconds: 3, keyboardThreshold: 70, keyboardSeconds: 3 };
+/** Snapshots as KeyboardMonitor publishes them: each new judged press joins the last-50 window shown at home. */
+function typing() {
+  let scores = [], last = 0;
+  return (id, verdict = 'nearby', extra = {}) => {
+    const latest = { id, evaluation: { verdict } };
+    const observing = !extra.phase && !extra.observationStatus;
+    if (observing && id > last) { last = id; scores = addLiveScore(scores, latest); }
+    return { ...initialKeyboardSnapshot, phase: 'ready', observationStatus: 'observing', latest, scores, ...extra };
+  };
+}
 const eye = (openReminder = true, extra = {}) => ({ phase: 'observing', message: '',
   measurement: { ...emptyEyeSnapshot(), calibrated: true, openReminder }, ...extra });
-const fill = (alerts, start = 1, verdict = 'nearby', now = 0) => {
-  for (let id = start; id < start + 20; id++) alerts.observe(input(id, verdict), now);
+/** 50 judged presses at `now`, then one sample so the held time starts there. */
+const fill = (alerts, press, verdict = 'nearby', now = 0, start = 1) => {
+  for (let id = start; id < start + 50; id++) alerts.observe(press(id, verdict), now);
+  return alerts.sample(settings, now);
 };
 
-test('keyboard requires 20 valid judgments, includes exactly 70, and uses the rolling window rather than session average', () => {
-  const alerts = createKeyboardAlerts();
-  for (let id = 1; id <= 19; id++) alerts.observe(input(id), 0);
-  assert.equal(alerts.sample(settings, 0), null);
-  alerts.observe(input(20), 0);
-  assert.deepEqual(alerts.sample(settings, 0), { kind: 'keyboard', silent: true, score: 70 });
-  alerts.observe(input(21, 'preferred'), 1);
-  assert.equal(alerts.sample(settings, 1), null); // 71.5: the posture threshold (95) does not apply.
-  alerts.observe(input(22, 'mismatch'), 2);
-  assert.equal(alerts.sample(settings, 2).score, 68);
+test('keyboard alerts when the last-50 average stays at or below its own alert score for the chosen seconds', () => {
+  const alerts = createKeyboardAlerts(), press = typing();
+  for (let id = 1; id <= 49; id++) alerts.observe(press(id), 0);
+  assert.equal(alerts.sample(settings, 0), null);  // fewer than 50 judged presses
+  alerts.observe(press(50), 0);
+  assert.equal(alerts.sample(settings, 0), null);  // exactly 70 counts, but it has not lasted 3 s yet
+  alerts.observe(press(51), 2999); assert.equal(alerts.sample(settings, 2999), null);
+  alerts.observe(press(52), 3000);
+  assert.deepEqual(alerts.sample(settings, 3000), { kind: 'keyboard', silent: true, score: 70 });
+  alerts.observe(press(53, 'preferred'), 3001);
+  assert.equal(alerts.sample(settings, 3001), null);  // (49 × 70 + 100) / 50 = 70.6 → 71
+  // A stricter keyboard rule: 90 or lower for 10 s.
+  const strict = { ...settings, keyboardThreshold: 90, keyboardSeconds: 10 };
+  alerts.observe(press(54), 4000); assert.equal(alerts.sample(strict, 4000), null);
+  alerts.observe(press(55), 13_999); assert.equal(alerts.sample(strict, 13_999), null);
+  alerts.observe(press(56), 14_000); assert.equal(alerts.sample(strict, 14_000).score, 71);
 });
 
-test('unknown judgments, duplicate and out-of-order ids do not fill or distort the valid denominator', () => {
-  const alerts = createKeyboardAlerts();
-  for (let id = 1; id <= 19; id++) alerts.observe(input(id, 'mismatch'), 0);
-  for (const id of [19, 5, 0]) alerts.observe(input(id, 'preferred'), 1);
-  alerts.observe(input(20, 'unknown'), 1);
+test('unknown judgments, duplicate and out-of-order ids do not fill or distort the window', () => {
+  const alerts = createKeyboardAlerts(), press = typing();
+  for (let id = 1; id <= 49; id++) alerts.observe(press(id, 'mismatch'), 0);
+  for (const id of [49, 5, 0]) alerts.observe(press(id, 'preferred'), 1);
+  alerts.observe(press(50, 'unknown'), 1);
   assert.equal(alerts.sample(settings, 1), null);
-  alerts.observe(input(21, 'mismatch'), 2);
-  assert.equal(alerts.sample(settings, 2).score, 0);
+  alerts.observe(press(51, 'mismatch'), 2); assert.equal(alerts.sample(settings, 2), null);
+  alerts.observe(press(52, 'mismatch'), 3002);
+  assert.equal(alerts.sample(settings, 3002).score, 0);
 });
 
 test('every rapid input is counted even when display snapshots could be batched', () => {
-  const alerts = createKeyboardAlerts();
-  fill(alerts, 1, 'mismatch', 42);
-  assert.equal(alerts.sample(settings, 42).score, 0);
+  const alerts = createKeyboardAlerts(), press = typing();
+  fill(alerts, press, 'mismatch', 42);
+  alerts.observe(press(51, 'mismatch'), 3042);
+  assert.equal(alerts.sample(settings, 3042).score, 0);
 });
 
-test('excluded, off, preparing, mapping and failed snapshots clear the window; retained inputs are not recounted', () => {
+test('excluded, off, preparing, mapping and failed snapshots restart the held time; retained inputs are not recounted', () => {
   for (const extra of [{ observationStatus: 'excluded' }, { observationStatus: 'off' }, { phase: 'starting' }, { phase: 'mapping' }, { phase: 'error' }]) {
-    const alerts = createKeyboardAlerts(); fill(alerts);
-    alerts.observe(input(21, 'nearby', extra), 1);
-    alerts.observe(input(21), 2);
-    for (let id = 22; id <= 40; id++) alerts.observe(input(id), 2);
-    assert.equal(alerts.sample(settings, 2), null);
-    alerts.observe(input(41), 3); assert.ok(alerts.sample(settings, 3));
+    const alerts = createKeyboardAlerts(), press = typing(); fill(alerts, press);
+    alerts.observe(press(51, 'nearby', extra), 2000);
+    alerts.observe(press(51), 2001);
+    assert.equal(alerts.sample(settings, 3000), null);
+    alerts.observe(press(52), 3000); assert.equal(alerts.sample(settings, 3000), null);
+    alerts.observe(press(53), 5999); assert.equal(alerts.sample(settings, 5999), null);
+    alerts.observe(press(54), 6000); assert.ok(alerts.sample(settings, 6000));
   }
 });
 
-test('pause/OFF need a fresh window and do not replay a retained press; new run clears id and cooldown', () => {
-  const alerts = createKeyboardAlerts(); fill(alerts);
-  const first = alerts.sample(settings, 0); alerts.acknowledge(first, 0);
-  alerts.interrupt(); fill(alerts); assert.equal(alerts.sample(settings, 10_000), null);
-  fill(alerts, 21, 'nearby', 10_000); assert.ok(alerts.sample(settings, 10_000));
-  alerts.sample({ ...settings, enabled: false }, 10_001);
-  assert.equal(alerts.sample(settings, 10_001), null);
-  alerts.reset(); fill(alerts); assert.ok(alerts.sample(settings, 0));
+test('pause and OFF restart the held time and do not replay a retained press; a new run clears ids and cooldown', () => {
+  const alerts = createKeyboardAlerts(), press = typing(); fill(alerts, press);
+  alerts.observe(press(51), 3000);
+  const first = alerts.sample(settings, 3000); assert.ok(first); alerts.acknowledge(first, 3000);
+  alerts.interrupt();
+  alerts.observe(press(51), 13_000); assert.equal(alerts.sample(settings, 13_000), null);
+  alerts.observe(press(52), 13_001); assert.equal(alerts.sample(settings, 13_001), null);
+  alerts.observe(press(53), 16_001); assert.ok(alerts.sample(settings, 16_001));
+  alerts.sample({ ...settings, enabled: false }, 16_002);
+  assert.equal(alerts.sample(settings, 16_002), null);
+  alerts.reset(); const next = typing(); fill(alerts, next, 'nearby', 20_000);
+  alerts.observe(next(51), 23_000); assert.ok(alerts.sample(settings, 23_000));
 });
 
-test('idle keyboard results cannot alert later; a new valid input can refresh the last-20 window', () => {
-  const alerts = createKeyboardAlerts(); fill(alerts);
-  assert.equal(alerts.sample(settings, 2001), null);
-  alerts.observe(input(21, 'unknown'), 2002); assert.equal(alerts.sample(settings, 2002), null);
-  alerts.observe(input(22), 2003); assert.ok(alerts.sample(settings, 2003));
+test('idle keyboard results cannot alert later; a new judged input can', () => {
+  const alerts = createKeyboardAlerts(), press = typing(); fill(alerts, press);
+  assert.equal(alerts.sample(settings, 3000), null);
+  alerts.observe(press(51, 'unknown'), 3001); assert.equal(alerts.sample(settings, 3001), null);
+  alerts.observe(press(52), 3002); assert.ok(alerts.sample(settings, 3002));
 });
 
 test('blink uses the calibrated existing reminder and excludes calibration, unavailable, failure and stale updates', () => {
@@ -112,15 +137,15 @@ test('blink pause, OFF and reference/run reset invalidate old proposals and requ
 });
 
 test('separate channels share the configured interval without consuming each other or suppressed/failed proposals', () => {
-  const keyboard = createKeyboardAlerts(), blink = createBlinkAlerts();
+  const keyboard = createKeyboardAlerts(), blink = createBlinkAlerts(), press = typing();
   const repeat = { ...settings, intervalMinutes: 5 };
-  fill(keyboard); blink.observe(eye(), 0);
-  const failed = keyboard.sample(repeat, 0); assert.ok(keyboard.sample(repeat, 1));
-  const shown = blink.sample(repeat, 0); blink.acknowledge(shown, 0);
-  assert.ok(keyboard.sample(repeat, 1)); assert.equal(blink.sample(repeat, 1), null);
-  keyboard.acknowledge(failed, 1); assert.equal(keyboard.sample(repeat, 2), null);
-  fill(keyboard, 21, 'nearby', 300001); blink.observe(eye(), 300001);
-  assert.ok(keyboard.sample(repeat, 300001)); assert.ok(blink.sample(repeat, 300001));
+  fill(keyboard, press); keyboard.observe(press(51), 3000); blink.observe(eye(), 3000);
+  const failed = keyboard.sample(repeat, 3000); assert.ok(keyboard.sample(repeat, 3001));
+  const shown = blink.sample(repeat, 3000); blink.acknowledge(shown, 3000);
+  assert.ok(keyboard.sample(repeat, 3001)); assert.equal(blink.sample(repeat, 3001), null);
+  keyboard.acknowledge(failed, 3001); assert.equal(keyboard.sample(repeat, 3002), null);
+  keyboard.observe(press(52), 303_001); blink.observe(eye(), 303_001);
+  assert.ok(keyboard.sample(repeat, 303_001)); assert.ok(blink.sample(repeat, 303_001));
 });
 
 test('once-per-episode and minimum 10s rate survive quick recovery; late acknowledgements cannot consume a new episode', () => {
@@ -133,9 +158,11 @@ test('once-per-episode and minimum 10s rate survive quick recovery; late acknowl
 });
 
 test('main validates keyboard averages and owns fixed text and navigation for both coaching kinds', () => {
-  for (const score of [null, NaN, Infinity, -1, 70.001, '70']) assert.throws(() => notificationContent({ kind: 'keyboard', score, silent: true }));
+  for (const score of [null, NaN, Infinity, -1, 100.001, '70']) assert.throws(() => notificationContent({ kind: 'keyboard', score, silent: true }));
   const key = { kind: 'keyboard', score: 70, silent: true, body: 'private input' };
-  assert.match(notificationContent(key).body, /20회.*70점/); assert.doesNotMatch(notificationContent(key).body, /private/);
+  assert.match(notificationContent(key).body, /50회.*70점/); assert.doesNotMatch(notificationContent(key).body, /private/);
+  // The keyboard alert score is the user's own (up to 95), so the text takes any average up to 100.
+  assert.match(notificationContent({ kind: 'keyboard', score: 90, silent: true }).body, /90점/);
   assert.match(notificationContent({ kind: 'blink', silent: false }).body, /15초/);
   assert.equal(notificationTarget(key), '/dashboard?mode=keyboard'); assert.equal(notificationTarget({ kind: 'blink', silent: true }), '/dashboard?mode=upper_body');
   assert.equal(notificationTarget({ kind: 'issue', code: 'tracking', silent: true }), '/dashboard?mode=upper_body');

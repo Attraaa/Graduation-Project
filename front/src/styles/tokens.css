@@ -39,6 +39,11 @@
   --color-primary-soft-text: #2f6b06;
   --color-primary-soft-border: #9fd26c;
   --color-danger-text: #c62828;
+
+  /* Scrollbar bar (index.css). */
+  --color-scrollbar: #c4c9d1;
+  --color-scrollbar-hover: #a5acb7;
+  --color-scrollbar-button-hover: #e3e7ee;
 }
 
 .dark-theme {
@@ -61,4 +66,7 @@
   --color-primary-soft-text: #c8f0a4;
   --color-primary-soft-border: #3f6e22;
   --color-danger-text: #ff8a8a;
+  --color-scrollbar: #3b4250;
+  --color-scrollbar-hover: #556070;
+  --color-scrollbar-button-hover: #252b36;
 }

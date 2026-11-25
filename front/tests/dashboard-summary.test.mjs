@@ -127,14 +127,14 @@ const eyeRecord = (over = {}) => ({ id: 'e1', owner: '7', mode: 'eye',
   policyVersion: 'eye-habits-v2', status: 'finished',
   runMs: 40 * 60_000, validMs: 40 * 60_000, blinks: 560, breaks: 2, nearReminders: 0, openReminders: 0, ...over });
 
-test('day entries merge one upper session, keyboard and eye in start order', () => {
+test('day entries merge one upper session, keyboard and eye, newest first', () => {
   const turtle = postureRecord();
   const shoulder = postureRecord({ id: 's1:shoulder', mode: 'shoulder',
     scorePolicyVersion: 'upper-body-shoulder-v3-b', scoreTimeSum: 25 * 60_000 * 89 });
   const yesterday = postureRecord({ id: 's0:turtle', startedAt: at('2026-10-05T00:12:00Z') });
   const entries = dayEntries([eyeRecord({ status: 'interrupted' }), shoulder, turtle, yesterday], [keyboardStored()], TODAY);
-  assert.deepEqual(entries.map(entry => [entry.mode, entry.id]), [['upper', 's1'], ['keyboard', 'k1'], ['eye', 'e1']]);
-  const [upper, keyboard, eye] = entries;
+  assert.deepEqual(entries.map(entry => [entry.mode, entry.id]), [['eye', 'e1'], ['keyboard', 'k1'], ['upper', 's1']]);
+  const [eye, keyboard, upper] = entries;
   assert.equal(upper.turtle, 84);
   assert.equal(upper.shoulder, 89);
   assert.equal(upper.endedAt - upper.startedAt, 25 * 60_000);
