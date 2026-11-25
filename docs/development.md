@@ -533,3 +533,11 @@ macOS `bash scripts/moti.sh check`에서 타입·린트, 프론트 264개(상세
 시험: `posture-balance`(새), `posture-evaluation`·`record-replay`(다시 씀), `stats-history-ui`(상세 패널·안구 분별 빈도), `history-calendar`(오래된 running), `settings-ui`(카드 7개), `record-contracts`(`shoulder` 거부)와 이름이 바뀐 시험들, 서버 `ai`·`review-facts`·`records-repository`. `moti.cmd check` 통과(프론트 타입·린트와 279개 테스트, 서버 87개 중 76개 통과·실제 MySQL 11개 skip, Python 16개 테스트·키보드 모델 확인).
 
 화면 확인: 원격 제어 중이라 Electron 41의 화면 밖 창으로 데모를 캡처했습니다(1100×800). 홈 바른 자세(좌우 균형 95) → 고개 기울임 예시(목 90·좌우 균형 52, 그래프 툴팁 정수), 미니 바 "균형 52", 설정 상체 측정 기준 카드의 깜빡임 민감도, 통계 상체의 "좌우 균형 평균 점수"와 키보드 정수 점수, 학습이력 상체·안구·키보드 상세를 확인했습니다. 실제 카메라의 좌우 균형 각도·끊김과 키보드 끊김 재현은 확인하지 않았습니다. 서버 배포와 DB의 `shoulder` 기록 삭제는 아직 하지 않았습니다.
+
+## 2026-11-25 운영 API 반영(좌우 균형)과 어깨 기록 정리
+
+사용자 요청으로 운영 서버(`moti-api.service`, `/home/ubuntu/moti`, MySQL 8.4.13 `moti_demo`)에 이번 묶음의 서버 변경만 올렸습니다. 운영 서버 소스는 `e3d1c2a`에서 주변 병원 찾기(`app.ts`·`config.ts`의 해당 줄, `routes/hospitals.ts`, `services/hospitals.ts`)만 빠진 상태였고, 사용자가 다른 팀원 기능은 올리지 말자고 해서 그 상태 그대로에 이번 변경(`database/contracts.ts`의 `turtle`·`balance` 모드, AI 총평 입력의 `shoulder` → `balance`)만 더해 빌드했습니다. 같은 방법으로 운영 상태를 다시 빌드한 번들이 실행 중이던 `dist/server.js`와 바이트 단위로 같아, 새 번들과의 차이가 위 두 변경뿐임을 확인했습니다. 서버 `tsc --noEmit`도 통과했습니다. 주변 병원 찾기와 쓰이지 않는 `reviewFacts.ts`는 올리지 않았습니다.
+
+먼저 서버 소스·빌드·환경 파일과 DB 전체(`mysqldump`, 17개 테이블)를 `/home/ubuntu/moti-backups/20261125-155324-before-balance/`에 접근 권한 600으로 남겼습니다. 새 `dist/server.js`와 `database/contracts.ts`, `server/src/services/aiReview.ts`, `server/schema.sql`을 바꾸고 서비스를 재시작했습니다. 바로 이어서 사용자 승인으로 `posture_records`의 `shoulder` 기록 174개(사용자 6명, 2026-10-03~11-25)를 한 트랜잭션에서 지웠고, 연결된 `posture_buckets` 352행과 `posture_batches` 60,489행이 함께 지워졌습니다(ON DELETE CASCADE). 목 기록 174개는 그대로이고 연결이 끊긴 행은 없습니다.
+
+반영 후 서비스는 정상 실행 중이고 서버 안팎에서 `/health`가 `ok`, 로그인 없는 기록 조회가 401로 응답했습니다. 로그인한 계정의 실제 저장·조회와 새 앱의 `balance` 기록 저장은 확인하지 않았습니다. 예전 버전 앱은 이제 상체 기록 저장이 거부되므로 새 버전으로 바꿔야 합니다. 이전 `/api/sessions` 경로의 표(`sessions` 등)는 손대지 않았습니다.
