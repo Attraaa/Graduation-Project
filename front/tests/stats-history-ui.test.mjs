@@ -20,7 +20,23 @@ const KeyboardStatistics = await load('src/features/keyboard/KeyboardStatistics.
 const DayRecords = await load('src/features/history/DayRecords.tsx');
 const EmptyDay = await load('src/features/history/EmptyDay.tsx');
 const RecordDetail = await load('src/features/history/RecordDetail.tsx');
+const KeyboardKeyExploration = await load('src/features/keyboard/KeyboardKeyExploration.tsx');
 const html = (component, props) => renderToStaticMarkup(createElement(component, props));
+
+test('key heatmap colours follow the whole score shown: 90 or more green, 70–89 yellow, below 70 red', () => {
+  const row = (code, verdict, count) => ({ date: '2026-10-02', code, context: 'plain', finger: 'left:index', verdict,
+    reason: { preferred: 'preferred-finger', nearby: 'neighboring-finger', mismatch: 'different-finger' }[verdict], count });
+  const counts = [row('KeyA', 'preferred', 8), row('KeyA', 'nearby', 2),   // 94
+    row('KeyS', 'preferred', 112), row('KeyS', 'mismatch', 13),             // 89.6 → shows 90
+    row('KeyD', 'preferred', 8), row('KeyD', 'mismatch', 2),                // 80
+    row('KeyF', 'preferred', 87), row('KeyF', 'mismatch', 38),              // 69.6 → shows 70
+    row('KeyG', 'preferred', 1), row('KeyG', 'mismatch', 1)];               // 50
+  const out = html(KeyboardKeyExploration, { counts, nearbyCredit: 70, policyVersion: 'ansi-qwerty-touch:2.0.0', selectedKey: 'KeyA', onSelect() {} });
+  for (const [key, shown, band] of [['A', 94, 'high'], ['S', 90, 'high'], ['D', 80, 'middle'], ['F', 70, 'middle'], ['G', 50, 'low']]) {
+    assert.match(out, new RegExp(`aria-label="${key} 키, ${shown}점[^"]*"[^>]*data-band="${band}"`), key);
+  }
+  assert.match(out, />90점 이상<\/span>.*>70~90점 미만<\/span>.*>70점 미만<\/span>/);
+});
 
 test('number tiles keep missing apart from zero and show comparison chips', () => {
   const missing = html(StatTile, { label: '목 평균 점수', value: '—', unit: '점' });

@@ -17,7 +17,9 @@ export default function KeyboardKeyExploration({ counts, nearbyCredit, policyVer
   const keyButton = (code: string) => {
     const key = byKey.get(code);
     const score = key?.score ?? null, count = key?.total ?? 0;
-    const band = metric === 'count' ? count ? 'frequency' : 'empty' : score === null ? 'empty' : score === 100 ? 'high' : score >= 70 ? 'middle' : 'low';
+    // Colours follow the whole number shown on the key: 90 or more green (2026-11-26, was only 100), 70–89 yellow, below 70 red.
+    const shown = score === null ? null : Math.round(score);
+    const band = metric === 'count' ? count ? 'frequency' : 'empty' : shown === null ? 'empty' : shown >= 90 ? 'high' : shown >= 70 ? 'middle' : 'low';
     return <button key={code} type="button" aria-label={`${keyLabel(code)} 키, ${scoreText(score)}, 입력 ${count}회`}
       aria-pressed={selectedKey === code} onClick={() => onSelect(code)} className="keyboard-record-key" data-band={band}
       style={band === 'frequency' ? { backgroundColor: `color-mix(in srgb, var(--color-mode-keyboard) ${Math.round(12 + 46 * count / maximum)}%, var(--color-surface))` } : undefined}>
@@ -36,7 +38,7 @@ export default function KeyboardKeyExploration({ counts, nearbyCredit, policyVer
       </div>
       <div className="keyboard-record-keys">{keyboardRows.map((row, index) => <div key={index} className="keyboard-record-key-row">{row.map(keyButton)}</div>)}</div>
       <div className="mt-5 flex flex-wrap gap-x-4 gap-y-2 text-xs text-muted">
-        {metric === 'score' ? <><span><i className="keyboard-record-dot bg-mode-upper" />100점</span><span><i className="keyboard-record-dot bg-mode-shoulder" />70~100점 미만</span><span><i className="keyboard-record-dot bg-mode-eye" />70점 미만</span><span><i className="keyboard-record-dot bg-track" />판정 자료 없음</span></> : <span>파란색이 진할수록 입력이 많은 키입니다. 보류·제외 입력도 포함합니다.</span>}
+        {metric === 'score' ? <><span><i className="keyboard-record-dot bg-mode-upper" />90점 이상</span><span><i className="keyboard-record-dot bg-mode-shoulder" />70~90점 미만</span><span><i className="keyboard-record-dot bg-mode-eye" />70점 미만</span><span><i className="keyboard-record-dot bg-track" />판정 자료 없음</span></> : <span>파란색이 진할수록 입력이 많은 키입니다. 보류·제외 입력도 포함합니다.</span>}
       </div>
       {extraKeys.length > 0 && <details className="mt-4 border-t border-border pt-3"><summary className="cursor-pointer text-xs text-muted">그 외 입력한 키 ({extraKeys.length}개)</summary><div className="mt-3 flex flex-wrap gap-2">{extraKeys.map(key => keyButton(key.code))}</div></details>}
     </section>
