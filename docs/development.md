@@ -517,3 +517,19 @@ macOS `bash scripts/moti.sh check`에서 타입·린트, 프론트 264개(상세
 시험을 고치거나 더했습니다(`posture-evaluation`, `posture-notifications`, `activity-notifications`, `overlay`, `settings-ui`, `session-ui`, `camera-settings`, `keyboard-policy`, `dashboard-summary`, `history-calendar`). `moti.cmd check` 통과(프론트 타입·린트와 291개 테스트, 서버 87개 중 76개 통과·실제 MySQL 11개 skip, Python 16개 테스트·키보드 모델 확인).
 
 화면 확인: 사용자가 원격 제어 중이라 브라우저 패널 대신 프로젝트의 Electron 41로 데모 페이지를 화면 밖 창에서 열어 캡처했습니다. 설정 알림 카드(1100×800, 다크·라이트), 스크롤바 확대, 학습이력 최신순(11월 24일 21:20 → 14:11 → 09:48), 키보드 찾는 중·찾음·실패 후 대기·직접 맞춘 영역·자동 인식 재시도, 목·어깨 툴팁 정수(목 96·어깨 94), 키보드 툴팁 정수, 오버레이 키보드 평균을 확인했습니다. 실제 카메라·키보드 분석기로 10초 전환과 판정 대기는 확인하지 않았습니다.
+
+## 2026-11-25 좌우 균형 점수·학습이력 상세 정리·키보드 끊김 진단
+
+사용자가 전날 밤 시험에서 찾은 5가지와 이어서 정한 좌우 균형 민감도·기준에서 벗어남 기준입니다. [결정](product-decisions.md#2026-11-25-후속-결정--좌우-균형-점수-학습이력-상세-정리-키보드-끊김-진단)
+
+- 키보드 끊김 진단: `electron/main.ts`가 분석기 시작·종료를 진단 기록에 남기고(예상 밖 종료면 종료 코드·신호·실행 초와 요청 줄을 뺀 마지막 출력 1,500자), `KeyboardMonitor`가 "로컬 분석 연결이 끊어졌습니다"·"영상 분석 응답이 지연…"을 띄울 때 이유(연결 오류, 끊긴 이유, 5초 넘은 프레임 응답)·단계·응답받은 프레임 수·가장 느린 응답을 `motiDiagnostics.error`로 보냅니다. 카메라 없이 같은 부하를 넣어서는 재현되지 않아 원인은 아직 모릅니다.
+- 재시작 뒤 "기록 중": 진단 기록에서 앱이 마지막 저장 없이 꺼진 것(종료 코드 0xC000013A)을 확인했습니다. `dashboard/summary.ts`의 `STALE_RUNNING_MS`(3분)로 마지막 저장이 오래된 `running` 기록을 "중단됨"으로 보여 주고, 키보드 기록기는 실행 중 5초 저장마다 `updatedAt`을 올립니다(`touch`). 저장된 값은 바꾸지 않습니다.
+- 깜빡임 설정: 설정의 안구 카드를 없애고 깜빡임 민감도를 상체 측정 기준 카드 안에 두었습니다(카드 7개: 계정, 비밀번호·이메일, 화면 테마, 알림, 상체 측정 기준, 데이터 관리, 키보드·승인 앱 관찰).
+- 좌우 균형: `posture/modes/balance.ts`(각도·기준·점수), `PostureMonitor`(보정 성공 때 기준, 프레임마다 각도 → 점수 → One Euro → `advanceEvaluation`), 측정한 점수만 받도록 줄인 `evaluation.ts`(보호 규칙 삭제), `database/contracts.ts`의 `RECORD_MODES = ['turtle', 'balance']`, 서버 AI 총평 입력(`aiReview.ts`, `reviewFacts.ts`)의 `balance`. 지운 파일은 `scoring.ts`, `modes/shoulder.ts`, `posture-scoring.test.mjs`, `posture-recovery.test.mjs`입니다. 화면 이름은 "좌우 균형"(미니 바는 "균형"), 색은 기존 노란색 토큰(`mode-shoulder`)입니다.
+- 학습이력 상세: `RecordDetail.tsx`가 세 기록을 같은 틀로 그립니다(`history/detail.ts`의 `detailStats`, `eyeMinutes`). 키보드 히트맵은 `KeyboardRecordDetail.tsx`가 카드 없이(`keyboard-record-plain`) 그립니다. 키보드 점수 표시(`keyboard/labels.ts`의 `scoreText`, 통계 탭의 점수 변화)도 정수로 맞췄습니다. 쓰지 않게 된 `practiceKeys`, `statusText`, `.keyboard-record-summary`/`-secondary` CSS는 지웠습니다.
+- 좌우 균형 민감도(같은 날 추가): 설정의 자세 무너짐 민감도 슬라이더 자리를 좌우 균형 민감도(`settings-balance-sensitivity`, 10–100%)로 바꿨습니다. `modes/balance.ts`의 `balancePolicy`가 두 각도를 바꾸고(50%가 아니면 정책 ID `:s<값>`), `preferences.ts`가 `moti.settings.balanceSensitivity`에 저장하며, `MonitoringProvider`가 상체 시작 때 읽어 `PostureMonitor`의 `balanceSensitivity`로 넘깁니다. `habitPolicy`·`isCurrentHabitPolicy`·`POSTURE_SENSITIVITY`는 지웠습니다.
+- 기준에서 벗어남 = 알림 기준(같은 날 추가): `evaluation.ts`의 `habitRule(점수, 초)`가 알림 카드의 상체 "N점 이하 N초"로 규칙을 만들고(ID `alert-hold-v1:<점수>:<초>`, 기본 70점 3초, 끝은 N + 10점 이상), `MonitoringProvider`가 상체 시작 때 읽어 `PostureMonitor`의 `habitRule`로 넘깁니다. 편차는 알림처럼 화면의 정수 점수로 셉니다(`neckDeviation`, `balanceDeviation`). 통계는 상체를 점수 정책으로만 묶고(`latestPolicyGroups`), 학습이력의 "이전 기준"은 점수 정책만 봅니다(`currentPolicies.ts`).
+
+시험: `posture-balance`(새), `posture-evaluation`·`record-replay`(다시 씀), `stats-history-ui`(상세 패널·안구 분별 빈도), `history-calendar`(오래된 running), `settings-ui`(카드 7개), `record-contracts`(`shoulder` 거부)와 이름이 바뀐 시험들, 서버 `ai`·`review-facts`·`records-repository`. `moti.cmd check` 통과(프론트 타입·린트와 279개 테스트, 서버 87개 중 76개 통과·실제 MySQL 11개 skip, Python 16개 테스트·키보드 모델 확인).
+
+화면 확인: 원격 제어 중이라 Electron 41의 화면 밖 창으로 데모를 캡처했습니다(1100×800). 홈 바른 자세(좌우 균형 95) → 고개 기울임 예시(목 90·좌우 균형 52, 그래프 툴팁 정수), 미니 바 "균형 52", 설정 상체 측정 기준 카드의 깜빡임 민감도, 통계 상체의 "좌우 균형 평균 점수"와 키보드 정수 점수, 학습이력 상체·안구·키보드 상세를 확인했습니다. 실제 카메라의 좌우 균형 각도·끊김과 키보드 끊김 재현은 확인하지 않았습니다. 서버 배포와 DB의 `shoulder` 기록 삭제는 아직 하지 않았습니다.

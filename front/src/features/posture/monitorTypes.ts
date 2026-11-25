@@ -3,13 +3,13 @@ import type { PostureDeltas } from './observation.ts';
 import { createEvaluation } from './evaluation.ts';
 import type { EvaluationState } from './evaluation.ts';
 import { turtleScorePolicy } from './modes/turtle.ts';
-import { shoulderScorePolicy } from './modes/shoulder.ts';
+import { balanceScorePolicy } from './modes/balance.ts';
 import type { NeckFailure } from './e19/model.ts';
 import type { NeckStep } from './e19/flow.ts';
 
 export type EvaluationSummary = Pick<EvaluationState, 'scorePolicyVersion' | 'habitPolicyVersion'
   | 'currentScore' | 'currentDeviation' | 'averageScore' | 'validMs' | 'continuousMs'
-  | 'longestContinuousMs' | 'deviationEpisodeCount' | 'deviationMs' | 'deviationState' | 'protection'>;
+  | 'longestContinuousMs' | 'deviationEpisodeCount' | 'deviationMs' | 'deviationState'>;
 
 /** 측정 시작 때의 기준 자세 보정(3초 준비 → 5초 기록 → 실패면 이유 안내 후 다시). */
 export interface NeckModelView {
@@ -27,7 +27,8 @@ export interface MonitorSnapshot {
   observedSeconds: number;
   delta: PostureDeltas | null;
   neck: EvaluationSummary;
-  shoulder: EvaluationSummary;
+  /** 좌우 균형(2026-11-25, 어깨 점수를 대신함): 고개와 보이면 어깨선이 기준보다 기운 정도. */
+  balance: EvaluationSummary;
   neckModel: NeckModelView;
 }
 
@@ -35,7 +36,7 @@ export function createMonitorSnapshot(): MonitorSnapshot {
   return {
     phase: 'loading', progress: 0, reason: null, observedSeconds: 0, delta: null,
     neck: createEvaluation(turtleScorePolicy),
-    shoulder: createEvaluation(shoulderScorePolicy),
+    balance: createEvaluation(balanceScorePolicy),
     neckModel: { step: 'prep', secondsLeft: null, failure: null },
   };
 }

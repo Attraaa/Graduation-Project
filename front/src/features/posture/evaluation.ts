@@ -1,65 +1,36 @@
+import { ALERT_SCORE, ALERT_SECONDS } from '../notifications/activityPolicy.ts';
 import { DEFAULT_CALIBRATION_OPTIONS } from './calibration.ts';
-import type { ObservationState } from './observation.ts';
-import { scorePosture } from './scoring.ts';
-import type { PostureScore, ScorePolicy } from './scoring.ts';
-import { MOTION_PROTECTION } from './scoreSettings.ts';
 
 /**
- * [역할: 원점수에 시간 규칙을 적용하고 세션 결과를 누적]
- * 어깨는 매 관측마다 scoring.ts를 호출한 뒤 움직임 동결·감점 유예·복귀 확인을 적용합니다.
- * 목은 E19 모델이 계산해 One Euro 필터로 다듬은 점수를 받아(measured) 보호 규칙 없이 그대로 씁니다.
- * 목과 어깨는 이 함수를 각각 호출하고, 각자 별도의 상태와 평균을 가집니다.
- * 실제 DB 쓰기는 이 파일 밖의 기록 모듈이 담당합니다.
+ * [역할: 측정한 점수에 시간 규칙을 적용하고 세션 결과를 누적]
+ * 목(E19)과 좌우 균형은 각자 One Euro 필터로 다듬은 점수(measured)를 매 관측마다 넘기고, 여기서 정수로 만들어
+ * 표시·평균·기록에 씁니다(2026-11-25). 두 점수는 이 함수를 각각 호출하고, 각자 별도의 상태와 평균을 가집니다.
+ * 실제 DB 쓰기는 이 파일 밖의 기록 모듈이 담당합니다. 2026-11-25에 어깨 점수와 그 보호 규칙(움직임 동결·유예·복귀 확인)은 없앴습니다.
  */
-/** 이 파일 밖에서 계산한 점수와 습관 편차. null은 판정 불가입니다. */
-export type MeasuredScore = Pick<PostureScore, 'score' | 'deviation'>;
+/** 이 파일 밖에서 계산한 점수(0–100)와 습관 편차. */
+export interface MeasuredScore { score: number; deviation: number }
 
-// "지속된 기준 이탈" 횟수/시간에만 사용하는 규칙입니다. 점수 감점 유예와 별도입니다.
-// 가중 편차 0.15 이상이 2초 이어지면 1회 확정, 이후 0.10 이하이면 해당 이탈 구간 종료.
-// 진입·종료 기준을 다르게 두어 경계에서 흔들릴 때 횟수가 반복 증가하지 않게 합니다.
-export const HABIT_POLICY = Object.freeze({
-  version: 'weighted-reference-deviation-v3',
-  enterDelta: 0.15,
-  exitDelta: 0.10,
-  minDurationMs: 2000,
-});
 export type HabitPolicy = Readonly<{ version: string; enterDelta: number; exitDelta: number; minDurationMs: number }>;
 
-// 설정 화면의 "자세 무너짐 민감도"입니다. 50%가 위의 기본 규칙이고, 10%p 올릴 때마다 진입·종료 편차 기준이
-// 기본값의 10%씩 낮아져 더 작은 변화도 이탈로 셉니다. 2초 조건과 점수 계산은 바뀌지 않습니다.
-// 예: 70% → 0.15 × 0.8 = 0.12 진입, 0.10 × 0.8 = 0.08 종료. 100% → 0.075/0.05, 10% → 0.21/0.14.
-export const POSTURE_SENSITIVITY = Object.freeze({ min: 10, max: 100, step: 10, default: 50 });
-
-/** 슬라이더 범위와 10% 간격에 맞춘 값입니다. 읽을 수 없는 값은 기본 50%로 봅니다. */
-export function normalizePostureSensitivity(value: unknown) {
-  const { min, max, step } = POSTURE_SENSITIVITY;
-  const number = typeof value === 'number' ? value : typeof value === 'string' && value.trim() ? Number(value) : NaN;
-  return Number.isFinite(number) ? Math.min(max, Math.max(min, Math.round(number / step) * step)) : POSTURE_SENSITIVITY.default;
+/**
+ * "기준에서 벗어남" 횟수/시간 규칙. 2026-11-25부터 설정 알림 카드의 상체 "N점 이하 N초 유지 시"를 그대로 씁니다(사용자 결정).
+ * 화면에 보이는 정수 점수가 N점 이하로 N초 이어지면 1회 확정, 이후 N + 10점 이상이면 그 이탈 구간을 끝냅니다(경계에서 흔들릴 때
+ * 횟수가 반복해 늘지 않게). 편차 = (100 − 점수) / 200이므로 진입 편차 (100 − N) / 200, 종료 편차 (100 − min(100, N + 10)) / 200입니다.
+ * 상체를 시작할 때 읽어 그 실행 동안 고정하고, ID에 값이 들어가 기록마다 당시 기준이 남습니다(지난 기록은 그때 기준 그대로).
+ * 예전 ID: `weighted-reference-deviation-v3`(70점 이하 2초, 80점 이상 종료)와 자세 무너짐 민감도 변형 `…:s<값>`(2026-10-17~11-25).
+ */
+export function habitRule(score: number, seconds: number): HabitPolicy {
+  return Object.freeze({ version: `alert-hold-v1:${score}:${seconds}`, enterDelta: (100 - score) / 200,
+    exitDelta: (100 - Math.min(100, score + 10)) / 200, minDurationMs: seconds * 1000 });
 }
-
-/** 민감도별 습관 규칙입니다. 기본값은 기존 규칙과 ID 그대로이고, 다른 값은 ID에 민감도를 붙여 통계에서 섞이지 않게 합니다. */
-export function habitPolicy(sensitivity: number = POSTURE_SENSITIVITY.default): HabitPolicy {
-  const value = normalizePostureSensitivity(sensitivity);
-  if (value === POSTURE_SENSITIVITY.default) return HABIT_POLICY;
-  const factor = 1 + (POSTURE_SENSITIVITY.default - value) / 100;
-  const scaled = (delta: number) => Math.round(delta * factor * 1e4) / 1e4;
-  return Object.freeze({ version: `${HABIT_POLICY.version}:s${value}`, enterDelta: scaled(HABIT_POLICY.enterDelta),
-    exitDelta: scaled(HABIT_POLICY.exitDelta), minDurationMs: HABIT_POLICY.minDurationMs });
-}
-
-/** 지금 앱이 새 기록에 쓰는 습관 규칙 ID(기본 또는 민감도 변형)인지 확인합니다. */
-export function isCurrentHabitPolicy(version: string) {
-  for (let value = POSTURE_SENSITIVITY.min; value <= POSTURE_SENSITIVITY.max; value += POSTURE_SENSITIVITY.step) {
-    if (habitPolicy(value).version === version) return true;
-  }
-  return false;
-}
+/** 알림 기본값(70점 이하 3초)의 규칙. */
+export const HABIT_POLICY = habitRule(ALERT_SCORE.default, ALERT_SECONDS.default);
 
 export interface EvaluationState {
   // 어떤 점수/습관 규칙으로 계산했는지 구분하는 ID입니다.
   scorePolicyVersion: string;
   habitPolicyVersion: string;
-  // 화면에 표시할 보호 적용 점수, 가중 편차, 세션 평균. null은 판정/평균 불가입니다.
+  // 화면에 표시할 정수 점수, 습관 편차, 세션 평균. null은 판정/평균 불가입니다.
   currentScore: number | null;
   currentDeviation: number | null;
   averageScore: number | null;
@@ -77,22 +48,12 @@ export interface EvaluationState {
   lastObservedSeconds: number;
   // 평균용 누적값 = 점수 × 시간의 합. 이를 validMs로 나누면 averageScore입니다.
   scoreTimeSum: number;
-  // 습관의 "이탈 1회"를 확정하기까지 쌓인 시간. 감점 유예 타이머와 다릅니다.
+  // 습관의 "이탈 1회"를 확정하기까지 쌓인 시간.
   pendingMs: number;
-  // none: 일반 / moving: 움직임 동결 / grace: 감점 유예 / recovering: 100점 복귀 확인.
-  protection: 'none' | 'moving' | 'grace' | 'recovering';
-  // 정지한 상태에서 원점수가 100 미만인 상태가 연속된 시간. 2초 유예에 사용합니다.
-  staticDeviationMs: number;
-  // scoring.ts가 계산한 보호 적용 전 점수.
-  rawScore: number | null;
-  // 판정 불가 구간에도 내부에 남겨 두는 마지막 표시 점수. 그 구간에 표시하거나 평균내지는 않습니다.
-  lastScore: number | null;
-  // 낮아진 점수의 100점 복귀를 인정하기 위해 허용 범위가 연속된 시간.
-  nearReferenceMs: number;
 }
 
 /** 새 세션의 빈 상태입니다. 아직 측정하지 않았으므로 처음부터 100점을 넣지 않습니다. */
-export function createEvaluation(policy: Pick<ScorePolicy, 'version'>, habit: HabitPolicy = HABIT_POLICY): EvaluationState {
+export function createEvaluation(policy: { version: string }, habit: HabitPolicy = HABIT_POLICY): EvaluationState {
   return {
     scorePolicyVersion: policy.version,
     habitPolicyVersion: habit.version,
@@ -108,101 +69,37 @@ export function createEvaluation(policy: Pick<ScorePolicy, 'version'>, habit: Ha
     lastObservedSeconds: 0,
     scoreTimeSum: 0,
     pendingMs: 0,
-    protection: 'none', staticDeviationMs: 0, rawScore: null,
-    lastScore: null, nearReferenceMs: 0,
   };
 }
 
-/** 누락 시 현재 표시와 연속 타이머를 비웁니다. 평균·누적 통계·lastScore는 보존합니다. */
+/** 누락 시 현재 표시와 연속 타이머를 비웁니다. 평균·누적 통계는 보존합니다. */
 export function interruptEvaluation(previous: EvaluationState): EvaluationState {
-  return {
-    ...previous,
-    currentScore: null,
-    currentDeviation: null,
-    continuousMs: 0,
-    deviationState: 'unknown',
-    pendingMs: 0,
-    protection: 'none', staticDeviationMs: 0, rawScore: null, nearReferenceMs: 0,
-  };
+  return { ...previous, currentScore: null, currentDeviation: null, continuousMs: 0, deviationState: 'unknown', pendingMs: 0 };
 }
 
 /**
- * 매 프레임의 observation 결과를 한 번씩 처리합니다. 화면 갱신보다 먼저 계산·누적합니다.
- * measured를 주면 scoring.ts 대신 그 점수를 쓰고 움직임 동결·유예·복귀 확인을 적용하지 않습니다(목, E19).
- * 이때 observation에서는 관찰 시간(observedSeconds)만 읽습니다(목은 E19가 잰 결과로 따로 셉니다).
- * 시간 누적·평균·기준 이탈은 어느 쪽이든 같은 규칙입니다.
+ * 잰 점수 하나를 처리합니다. observedSeconds는 그 점수의 관찰 시계(500ms 넘는 공백은 더하지 않음)입니다.
+ * 표시·평균·기록은 반올림한 정수 점수를 쓰고(화면만이 아니라 저장도 정수, 사용자 결정 2026-11-25),
+ * 평균 = "구간 양 끝 점수의 평균 × 구간 시간"의 합 / 전체 유효 시간입니다.
  */
-export function advanceEvaluation(previous: EvaluationState, observation: ObservationState, policy: ScorePolicy, habit?: HabitPolicy): EvaluationState;
-export function advanceEvaluation(previous: EvaluationState, observation: Pick<ObservationState, 'observedSeconds'>, policy: Pick<ScorePolicy, 'version'>, habit: HabitPolicy, measured: MeasuredScore): EvaluationState;
-export function advanceEvaluation(
-  previous: EvaluationState,
-  observation: Pick<ObservationState, 'observedSeconds'> & Partial<ObservationState>,
-  policy: Pick<ScorePolicy, 'version'>,
-  habit: HabitPolicy = HABIT_POLICY,
-  measured?: MeasuredScore,
-): EvaluationState {
+export function advanceEvaluation(previous: EvaluationState, observation: { observedSeconds: number }, policy: { version: string },
+  habit: HabitPolicy, measured: MeasuredScore): EvaluationState {
   // 규칙 버전이 달라졌으면 새 상태로 시작해 서로 다른 규칙의 평균을 섞지 않습니다.
   const base = previous.scorePolicyVersion === policy.version && previous.habitPolicyVersion === habit.version
     ? previous : createEvaluation(policy, habit);
-  const current = measured ?? scorePosture(observation.delta ?? null, policy as ScorePolicy);
-  // 이번 상태를 만들고 원점수부터 넣습니다. 아래 보호 규칙이 currentScore를 조정할 수 있습니다.
   const next: EvaluationState = {
     ...interruptEvaluation(base),
-    currentScore: current.score,
-    currentDeviation: current.deviation,
-    rawScore: current.score,
+    currentScore: Math.round(measured.score),
+    currentDeviation: measured.deviation,
     lastObservedSeconds: observation.observedSeconds,
   };
   const elapsedMs = (observation.observedSeconds - base.lastObservedSeconds) * 1000;
-  // 소수 시간 계산의 아주 작은 오차 때문에 정확히 500ms/1초/2초인 경계를 넘지 않게 합니다.
+  // 소수 시간 계산의 아주 작은 오차 때문에 정확히 500ms/2초인 경계를 넘지 않게 합니다.
   const roundingMs = Number.EPSILON * Math.max(1, observation.observedSeconds, base.lastObservedSeconds) * 4000;
-  const connected = base.currentScore !== null && current.score !== null && elapsedMs > 0
-    && elapsedMs <= DEFAULT_CALIBRATION_OPTIONS.maxGapMs + roundingMs;
-  // 회전·가림 등 판정 불가이면 현재 점수는 null이며, 이번 시간/평균을 더하지 않고 종료합니다.
-  if (current.score === null) return next;
-  // 유지할 점수는 마지막 표시 점수입니다. 측정 이력이 처음이면 실제 원점수를 사용합니다.
-  const held = base.lastScore ?? current.score;
-  const velocity = observation.velocityPxPerSecond ?? null;
-  const moving = !measured && velocity !== null && velocity > MOTION_PROTECTION.velocityPxPerSecond;
-  if (measured) {
-    // 바깥에서 이미 시간 필터를 적용한 점수입니다. 그대로 표시·누적합니다.
-  } else if (moving) {
-    // 빠르게 움직일 때는 마지막 점수를 유지합니다. 이력이 없으면 null로 기다립니다.
-    next.protection = 'moving';
-    next.currentScore = base.lastScore;
-  } else if (base.lastScore !== null && current.score < 100) {
-    // 멈춘 뒤 이탈이 연속되는지 확인합니다. 움직임·누락 후에는 유예를 새로 셉니다.
-    const wasStaticDeviation = connected && base.protection !== 'moving' && base.rawScore !== null && base.rawScore < 100;
-    next.staticDeviationMs = wasStaticDeviation ? base.staticDeviationMs + elapsedMs : 0;
-    if (next.staticDeviationMs <= MOTION_PROTECTION.graceMs + roundingMs) {
-      // 처음 2초: 잠깐 움직인 것일 수 있으므로 유지합니다.
-      next.protection = 'grace';
-      next.currentScore = held;
-    } else {
-      // 2초를 넘긴 시간만 감점합니다. 원점수보다 더 낮게 깎지는 않습니다.
-      // 예: 마지막 100점, 원점수 60점, 감점 구간 0.1초 → 100 - 35 × 0.1 = 96.5점.
-      const penaltyMs = Math.min(elapsedMs, next.staticDeviationMs - MOTION_PROTECTION.graceMs);
-      next.currentScore = Math.max(current.score, held - MOTION_PROTECTION.penaltyPointsPerSecond * penaltyMs / 1000);
-    }
-  } else if (current.score === 100 && held < 100) {
-    // 원점수가 잠깐 100이 됐다고 바로 회복하지 않습니다. 정면 허용 범위를 1초 확인합니다.
-    const wasNearReference = connected && base.protection !== 'moving' && base.rawScore === 100;
-    next.nearReferenceMs = wasNearReference ? base.nearReferenceMs + elapsedMs : 0;
-    if (next.nearReferenceMs + roundingMs < MOTION_PROTECTION.recoveryMs) {
-      next.protection = 'recovering';
-      next.currentScore = held;
-    }
-  }
-  // 처음부터 움직여 유지할 점수도 없거나, 연속 구간이 없으면 평균에는 아직 넣지 않습니다.
-  if (next.currentScore === null) return next;
-  // 유지·감점은 소수 그대로 이어 갑니다(lastScore). 프레임마다 반올림하면 한 번에 0.5점 미만인 감점이 멈춥니다.
-  // 화면·알림·평균·기록에는 정수 점수를 씁니다(2026-11-25).
-  next.lastScore = next.currentScore;
-  next.currentScore = Math.round(next.currentScore);
+  const connected = base.currentScore !== null && elapsedMs > 0 && elapsedMs <= DEFAULT_CALIBRATION_OPTIONS.maxGapMs + roundingMs;
+  // 첫 점수·누락 뒤 첫 점수는 이을 구간이 없어 평균에 아직 넣지 않습니다.
   if (!connected) return next;
 
-  // 평균 = "구간 양 끝 점수의 평균 × 구간 시간"의 합 / 전체 유효 시간.
-  // 원점수가 아니라 보호를 적용한 표시 점수를 사용합니다. 유효한 움직임/유예 구간도 포함합니다.
   const intervalMs = Math.min(elapsedMs, DEFAULT_CALIBRATION_OPTIONS.maxGapMs);
   next.validMs += intervalMs;
   next.continuousMs = base.continuousMs + intervalMs;
@@ -210,13 +107,12 @@ export function advanceEvaluation(
   next.scoreTimeSum += (base.currentScore! + next.currentScore!) / 2 * intervalMs;
   next.averageScore = next.scoreTimeSum / next.validMs;
 
-  // 아래부터는 점수와 별도의 습관 집계입니다. 움직임을 가로지르는 이탈 구간은 세지 않습니다.
-  if (moving || base.protection === 'moving') return next;
-  if (base.deviationState === 'away' && current.deviation! > habit.exitDelta) {
+  // 아래부터는 점수와 별도의 습관 집계입니다.
+  if (base.deviationState === 'away' && measured.deviation > habit.exitDelta) {
     // 이미 확정한 이탈이 계속되면 확인한 구간 시간만 더합니다.
     next.deviationState = 'away';
     next.deviationMs += intervalMs;
-  } else if (current.deviation! >= habit.enterDelta) {
+  } else if (measured.deviation >= habit.enterDelta) {
     // 이탈 진입 후보가 2초 이어지면 1회로 확정합니다. 대기 2초는 이탈 시간에 소급하지 않습니다.
     next.pendingMs = base.currentDeviation! >= habit.enterDelta ? base.pendingMs + intervalMs : 0;
     next.deviationState = 'pending';

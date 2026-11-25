@@ -33,7 +33,7 @@ export function advanceNeckFlow(flow: NeckFlow, now: number, frame: NeckFrame | 
 }
 
 /**
- * 같은 5초 동안 어깨 점수의 기준(calibration.ts, 3초 이상 안정 구간)이 잡히지 않았을 때 보여 줄 이유.
+ * 같은 5초 동안 포즈 기준(calibration.ts, 3초 이상 안정 구간)이 잡히지 않았을 때 보여 줄 이유.
  * calibration.ts의 마지막 재수집 이유를 E19 보정 실패 세 가지 안내 중 하나로 옮깁니다.
  */
 export function referenceFailure(reason: CalibrationReason | null): NeckFailure {
@@ -67,8 +67,8 @@ export function createOneEuro(minCutoff: number, beta: number, dCutoff = 1.0) {
 }
 
 /**
- * 목 점수의 관찰 시간(초). 목은 어깨의 관측 조건과 따로 E19 자체 검사만 따르므로 시간도 따로 셉니다.
- * E19가 잰 결과끼리 간격이 500ms 이하일 때만 더합니다(어깨 관찰 시간과 같은 규칙).
+ * 목·좌우 균형 점수의 관찰 시간(초). 각자 잰 결과로 따로 셉니다.
+ * 잰 결과끼리 간격이 500ms 이하일 때만 더합니다(포즈 관찰 시간과 같은 규칙).
  */
 export interface NeckClock { seconds: number; lastAt: number | null }
 export const startNeckClock = (): NeckClock => ({ seconds: 0, lastAt: null });

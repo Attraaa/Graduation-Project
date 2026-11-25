@@ -66,7 +66,7 @@ const controls = (over = {}) => ({ run: 3, isRunning: true, isPaused: false, ela
 // The last judged press scores the home card averages (100 for each preferred, 0 for each mismatch here).
 const scores = (preferred, mismatch) => [...Array(preferred).fill(100), ...Array(mismatch).fill(0)];
 const monitoring = ({ upper = {}, upperControls = {}, eye = {}, keyboard = {}, keyboardControls = {} } = {}) => ({
-  upper: { controls: controls(upperControls), snapshot: { phase: 'observing', neck: { currentScore: 70.4 }, shoulder: { currentScore: 88 }, ...upper },
+  upper: { controls: controls(upperControls), snapshot: { phase: 'observing', neck: { currentScore: 70.4 }, balance: { currentScore: 88 }, ...upper },
     eye: { phase: 'observing', measurement: { recentBlinksPerMinute: 14.2, calibrationPhase: null, calibrationBlinks: 0 }, ...eye } },
   keyboard: { controls: controls(keyboardControls), snapshot: { phase: 'ready', observationStatus: 'observing', counts: counts(8, 2), scores: scores(8, 2), latest: null, ...keyboard } },
 });
@@ -75,9 +75,9 @@ const alertScores = (posture = 70, keyboard = 70) => ({ posture, keyboard });
 test('overlay numbers turn red at or below the alert score as shown, and guidance replaces them', () => {
   const s = overlaySnapshot(monitoring(), 'owner-1', 1, 'light', false, alertScores());
   assert.deepEqual(parseOverlaySnapshot(s), s);
-  assert.deepEqual(s.upper_body.metrics, [{ label: '목', value: '70', low: true }, { label: '어깨', value: '88', low: false }]);
+  assert.deepEqual(s.upper_body.metrics, [{ label: '목', value: '70', low: true }, { label: '균형', value: '88', low: false }]);
   assert.equal(s.upper_body.note, '깜빡임 14.2');
-  assert.match(s.upper_body.detail, /목 70점 · 어깨 88점 · 깜빡임 14.2회\/분/);
+  assert.match(s.upper_body.detail, /목 70점 · 좌우 균형 88점 · 깜빡임 14.2회\/분/);
   // The same last-50 average as the home card: (8 x 100 + 2 x 0) / 10.
   assert.deepEqual(s.keyboard.metrics, [{ label: '키보드', value: '80', low: false }]);
   assert.match(s.keyboard.detail, /최근 평균 80점 · 판정한 입력 10회/);

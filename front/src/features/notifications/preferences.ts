@@ -7,7 +7,7 @@ export interface NotificationPreferences {
   enabled: boolean;
   intervalMinutes: 0 | 5 | 10 | 30;
   silent: boolean;
-  /** Upper body: a neck or shoulder score at or below this for `postureSeconds` of observed time alerts. */
+  /** Upper body: a neck or balance score at or below this for `postureSeconds` of observed time alerts. */
   scoreThreshold: number;
   postureSeconds: number;
   /** Keyboard: the average of the last 50 judged presses at or below this for `keyboardSeconds` alerts. */

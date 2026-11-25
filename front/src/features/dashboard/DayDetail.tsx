@@ -21,7 +21,7 @@ export default function DayDetail({ day, hint }: { day: DashboardDay; hint?: str
       <p className="mb-2 font-bold text-heading">{longDate(day.date)}</p>
       <ul className="space-y-1">
         {day.upper.sessions > 0 && (
-          <Row dotClass="bg-mode-upper" name="상체" value={`목 ${scoreText(day.upper.turtle)} · 어깨 ${scoreText(day.upper.shoulder)}`}
+          <Row dotClass="bg-mode-upper" name="상체" value={`목 ${scoreText(day.upper.turtle)} · 좌우 균형 ${scoreText(day.upper.balance)}`}
             extra={sessionText(day.upper.sessions, day.upper.runMs)} />
         )}
         {day.keyboard.present && (

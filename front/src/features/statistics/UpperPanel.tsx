@@ -12,10 +12,10 @@ import { changeChip, percentLabel } from './text';
 
 const LINES = [
   { key: 'turtle', name: '목', color: 'var(--color-mode-upper)' },
-  { key: 'shoulder', name: '어깨', color: 'var(--color-mode-shoulder)' },
+  { key: 'balance', name: '좌우 균형', color: 'var(--color-mode-shoulder)' },
 ];
 
-/** Upper tab: four numbers, the daily neck/shoulder chart, then the two time-of-day cards, quality and records. */
+/** Upper tab: four numbers, the daily neck/balance chart, then the two time-of-day cards, quality and records. */
 export default function UpperPanel({ upper, days, periodDays, floor, today, detail, onSelectDate, onOpenHistory }: {
   upper: UpperPeriod; days: DashboardDay[]; periodDays: PeriodDays; floor: number; today: string;
   detail: (date: string) => ReactNode; onSelectDate: (date: string) => void; onOpenHistory: () => void;
@@ -27,7 +27,7 @@ export default function UpperPanel({ upper, days, periodDays, floor, today, deta
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
         <StatTile label="목 평균 점수" value={scoreText(upper.turtle.current)} unit="점" chip={changeChip(upper.turtle, periodDays)} />
-        <StatTile label="어깨 평균 점수" value={scoreText(upper.shoulder.current)} unit="점" chip={changeChip(upper.shoulder, periodDays)} />
+        <StatTile label="좌우 균형 평균 점수" value={scoreText(upper.balance.current)} unit="점" chip={changeChip(upper.balance, periodDays)} />
         <StatTile label="측정 시간" value={empty ? '—' : minutesText(upper.runMs)} />
         <StatTile label="기준에서 벗어남" value={empty ? '—' : String(upper.deviations)} unit="회"
           detail={upper.deviationRate === null ? undefined : `벗어나 있던 시간 ${percentLabel(upper.deviationRate)}`} />
@@ -35,16 +35,16 @@ export default function UpperPanel({ upper, days, periodDays, floor, today, deta
       <section aria-label="날짜별 점수" className={`${CARD} space-y-3`}>
         <ChartHeader title="날짜별 점수" legend={LINES} />
         {empty ? <EmptyChart /> : (
-          <DailyChart label="날짜별 목·어깨 점수" lines={LINES} today={today} domain={[floor, 100]} ticks={ticks}
+          <DailyChart label="날짜별 목·좌우 균형 점수" lines={LINES} today={today} domain={[floor, 100]} ticks={ticks}
             faded={faded} detail={detail} onSelectDate={onSelectDate}
-            data={days.map(day => ({ date: day.date, turtle: day.upper.turtle, shoulder: day.upper.shoulder }))} />
+            data={days.map(day => ({ date: day.date, turtle: day.upper.turtle, balance: day.upper.balance }))} />
         )}
       </section>
       <div className="grid gap-4 lg:grid-cols-2">
         <section aria-label="시간대별 평균 점수" className={CARD}>
           <CardTitle title="시간대별 평균 점수" />
           {empty ? <Waiting /> : (
-            <HourlyChart label="시간대별 목·어깨 점수" data={upper.hourly} lines={LINES} domain={[upper.hourlyFloor, 100]} unit="점" />
+            <HourlyChart label="시간대별 목·좌우 균형 점수" data={upper.hourly} lines={LINES} domain={[upper.hourlyFloor, 100]} unit="점" />
           )}
         </section>
         <section aria-label="기준 이탈이 잦은 시간" className={CARD}>

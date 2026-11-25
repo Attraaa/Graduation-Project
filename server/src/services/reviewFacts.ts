@@ -100,7 +100,7 @@ function upper(facts: Draft, area: Candidates, input: NonNullable<ReviewInput['u
   const advice = '측정을 시작할 때 기준 자세를 다시 잡아 보세요.';
   const clauses = facts.clauses.length;
   const neckAdvised = score(facts, area, '목 자세 점수', input.neck.current, input.neck.previous, reliable, advice);
-  score(facts, area, '어깨 자세 점수', input.shoulder.current, input.shoulder.previous, reliable, neckAdvised ? '' : advice);
+  score(facts, area, '좌우 균형 점수', input.balance.current, input.balance.previous, reliable, neckAdvised ? '' : advice);
   highlight(facts, `상체 측정 시간 ${duration(input.measuredMinutes)}, 측정 ${input.sessions}회`);
   // Without a score, the plain summary still says how much was measured.
   if (facts.clauses.length === clauses) {

@@ -10,11 +10,11 @@ export type PeriodDays = 7 | 30;
 export interface StatisticsRange { from: string; to: string; dates: string[]; previousDates: string[] }
 export interface ScoreChange { current: number | null; previous: number | null; change: number | null }
 // Type aliases, not interfaces, so the rows fit the charts' index-signature data type.
-export type UpperHour = { hour: number; turtle: number | null; shoulder: number | null };
+export type UpperHour = { hour: number; turtle: number | null; balance: number | null };
 export type EyeHour = { hour: number; rate: number | null };
 export interface UpperPeriod {
   present: boolean;
-  turtle: ScoreChange; shoulder: ScoreChange;
+  turtle: ScoreChange; balance: ScoreChange;
   runMs: number; sessions: number; averageMs: number | null; longestMs: number;
   deviations: number; deviationRate: number | null;
   validRate: number | null; unmeasuredMs: number;
@@ -68,18 +68,18 @@ function scoreChange(current: number | null, previous: number | null): ScoreChan
   return { current, previous, change: current === null || previous === null ? null : Math.round(current) - Math.round(previous) };
 }
 
-function upperPeriod(turtle: StatisticsRow[], shoulder: StatisticsRow[], range: StatisticsRange, days: DashboardDay[]): UpperPeriod {
-  const neck = inDates(turtle, range.dates), side = inDates(shoulder, range.dates);
+function upperPeriod(turtle: StatisticsRow[], balance: StatisticsRow[], range: StatisticsRange, days: DashboardDay[]): UpperPeriod {
+  const neck = inDates(turtle, range.dates), side = inDates(balance, range.dates);
   const both = [...neck, ...side];
   const runMs = sum(days, day => day.upper.runMs);
   const sessions = new Set(both.flatMap(row => row.recordIds).map(sessionIdOf)).size;
   const validRate = share(sum(both, row => row.validMs), sum(both, row => row.runMs));
   const hourly = hourRange(both).map(hour => ({ hour,
-    turtle: weightedScore(atHour(neck, hour)), shoulder: weightedScore(atHour(side, hour)) }));
+    turtle: weightedScore(atHour(neck, hour)), balance: weightedScore(atHour(side, hour)) }));
   return {
     present: both.length > 0,
     turtle: scoreChange(weightedScore(neck), weightedScore(inDates(turtle, range.previousDates))),
-    shoulder: scoreChange(weightedScore(side), weightedScore(inDates(shoulder, range.previousDates))),
+    balance: scoreChange(weightedScore(side), weightedScore(inDates(balance, range.previousDates))),
     runMs, sessions,
     averageMs: sessions ? runMs / sessions : null,
     longestMs: Math.max(0, ...both.map(row => row.longestContinuousMs)),
@@ -88,7 +88,7 @@ function upperPeriod(turtle: StatisticsRow[], shoulder: StatisticsRow[], range: 
     validRate,
     unmeasuredMs: validRate === null ? 0 : runMs * (1 - validRate / 100),
     hourly,
-    hourlyFloor: scoreFloor(present(hourly.flatMap(hour => [hour.turtle, hour.shoulder]))),
+    hourlyFloor: scoreFloor(present(hourly.flatMap(hour => [hour.turtle, hour.balance]))),
     deviationHours: deviationHours(both),
   };
 }
@@ -120,9 +120,9 @@ export function buildStatistics(input: StatisticsInput): StatisticsSummary {
   const days = range.dates.map(date => dayValues(groups, date));
   return {
     range, days,
-    upper: upperPeriod(groups.turtle, groups.shoulder, range, days),
+    upper: upperPeriod(groups.turtle, groups.balance, range, days),
     eye: eyePeriod(groups.eye, range),
-    upperFloor: scoreFloor(present(days.flatMap(day => [day.upper.turtle, day.upper.shoulder]))),
+    upperFloor: scoreFloor(present(days.flatMap(day => [day.upper.turtle, day.upper.balance]))),
     eyeMax: rateCeiling(days.map(day => day.eye.rate)),
   };
 }

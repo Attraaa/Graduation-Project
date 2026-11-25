@@ -5,7 +5,7 @@ import type { HistoryEntry } from './calendar';
 import { MODE_DOT, MODE_NAME } from './labels';
 
 const valueText = (entry: HistoryEntry) => {
-  if (entry.mode === 'upper') return `목 ${scoreText(entry.turtle)} · 어깨 ${scoreText(entry.shoulder)}`;
+  if (entry.mode === 'upper') return `목 ${scoreText(entry.turtle)} · 좌우 균형 ${scoreText(entry.balance)}`;
   if (entry.mode === 'keyboard') return entry.score === null ? '판정 자료 없음' : `${scoreText(entry.score)}점`;
   return rateText(entry.rate);
 };

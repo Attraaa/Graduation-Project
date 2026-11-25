@@ -20,13 +20,6 @@ export function exploreKeys(counts: KeyboardCount[], nearbyCredit: number) {
   });
 }
 export type ExploredKey = ReturnType<typeof exploreKeys>[number];
-/** A coaching list based on observed differences, never on unknown observations. */
-export function practiceKeys(keys: ExploredKey[]) {
-  return keys.filter(key => key.valid >= 10 && key.nearby + key.mismatch > 0)
-    .map(key => ({ ...key, differenceRate: (key.nearby + key.mismatch) / key.valid }))
-    .sort((a, b) => b.differenceRate - a.differenceRate || b.nearby + b.mismatch - a.nearby - a.mismatch || a.code.localeCompare(b.code))
-    .slice(0, 3);
-}
 export function keyRuleFor(policyVersion: string, code: string) {
   const policy = ANSI_QWERTY_TOUCH_POLICY_V1;
   // Do not describe historical/future records with a different policy's baseline.

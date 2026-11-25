@@ -81,11 +81,14 @@ const statuses = (source: EntrySource) =>
   source.mode === 'upper' ? source.records.map(record => record.status)
     : source.mode === 'eye' ? [source.record.status] : [source.stored.record.status];
 
-/** Rows per date with every policy kept: one per upper session, keyboard and eye record, in start order. */
-export function entriesByDate(history: HistoryRecord[], keyboard: KeyboardStored[], dates: string[]) {
+/**
+ * Rows per date with every policy kept: one per upper session, keyboard and eye record, newest first.
+ * A running record that stopped saving minutes before `now` counts as interrupted (summary.ts STALE_RUNNING_MS).
+ */
+export function entriesByDate(history: HistoryRecord[], keyboard: KeyboardStored[], dates: string[], now = Date.now()) {
   const byDate = new Map<string, HistoryEntry[]>();
   for (const date of dates) {
-    byDate.set(date, dayEntries(history, keyboard, date).map((entry): HistoryEntry => ({
+    byDate.set(date, dayEntries(history, keyboard, date, now).map((entry): HistoryEntry => ({
       ...entry,
       legacy: isLegacy(entry.source),
       running: !entry.interrupted && statuses(entry.source).includes('running'),
