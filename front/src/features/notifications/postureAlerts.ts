@@ -6,17 +6,17 @@ import type { PostureAlertPart, SystemNotificationRequest } from './contract.ts'
 export const MIN_ALERT_INTERVAL_MS = 10_000;
 
 /**
- * A neck or shoulder score at or below the alert score for the chosen seconds of observed time alerts (Settings).
+ * A neck or balance score at or below the alert score for the chosen seconds of observed time alerts (Settings).
  * Alert timing is separate from scoring/habit policies and never changes stored measurements.
  */
 export function createPostureAlerts() {
   const empty = () => ({ elapsed: 0, continuous: null as number | null });
-  let low = { neck: empty(), shoulder: empty() };
+  let low = { neck: empty(), balance: empty() };
   let lastAlertAt: number | null = null;
   let notifiedEpisode = false;
   let generation = 0, candidateActive = false;
   const proposals = new WeakMap<SystemNotificationRequest, number>();
-  const interrupt = () => { low = { neck: empty(), shoulder: empty() }; notifiedEpisode = false; candidateActive = false; generation++; };
+  const interrupt = () => { low = { neck: empty(), balance: empty() }; notifiedEpisode = false; candidateActive = false; generation++; };
   return {
     interrupt,
     reset: () => { interrupt(); lastAlertAt = null; },
@@ -29,9 +29,9 @@ export function createPostureAlerts() {
       if (!settings.enabled || snapshot.phase !== 'observing') { interrupt(); return null; }
       const parts: PostureAlertPart[] = [];
       let candidate = false;
-      for (const part of ['neck', 'shoulder'] as const) {
+      for (const part of ['neck', 'balance'] as const) {
         const summary = snapshot[part];
-        if (summary.currentScore === null || summary.protection !== 'none') { low[part] = empty(); continue; }
+        if (summary.currentScore === null) { low[part] = empty(); continue; }
         const below = summary.currentScore <= settings.scoreThreshold;
         candidate ||= below;
         if (below) {

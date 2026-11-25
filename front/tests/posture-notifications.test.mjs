@@ -7,11 +7,11 @@ import { notificationContent } from '../src/features/notifications/contract.ts';
 import { registerNotificationHandlers } from '../electron/notificationHandlers.ts';
 
 const settings = { enabled: true, intervalMinutes: 0, silent: false, scoreThreshold: 70, postureSeconds: 3, keyboardThreshold: 70, keyboardSeconds: 3 };
-const snapshot = (continuousMs, neck = {}, shoulder = {}) => {
+const snapshot = (continuousMs, neck = {}, balance = {}) => {
   const empty = createMonitorSnapshot();
   return { ...empty, phase: 'observing',
-    neck: { ...empty.neck, currentScore: 100, protection: 'none', continuousMs, deviationState: 'near-reference', ...neck },
-    shoulder: { ...empty.shoulder, currentScore: 100, protection: 'none', continuousMs, deviationState: 'near-reference', ...shoulder } };
+    neck: { ...empty.neck, currentScore: 100, continuousMs, deviationState: 'near-reference', ...neck },
+    balance: { ...empty.balance, currentScore: 100, continuousMs, deviationState: 'near-reference', ...balance } };
 };
 
 test('notification preferences validate existing stored values, including legacy strong sound', () => {
@@ -34,7 +34,7 @@ test('low score includes the threshold and zero, requires the chosen observed se
   // A duplicate snapshot contributes no time and does not erase already confirmed time.
   assert.equal(alerts.sample(snapshot(2999, { currentScore: 70 }, { currentScore: 0 }), settings, 2999), null);
   const request = alerts.sample(snapshot(3000, { currentScore: 70 }, { currentScore: 0 }), settings, 3000);
-  assert.deepEqual(request, { kind: 'posture', silent: false, parts: [{ part: 'neck', score: 70 }, { part: 'shoulder', score: 0 }] });
+  assert.deepEqual(request, { kind: 'posture', silent: false, parts: [{ part: 'neck', score: 70 }, { part: 'balance', score: 0 }] });
   alerts.acknowledge(request, 3000);
   assert.equal(alerts.sample(snapshot(60_000, { currentScore: 60 }), settings, 60_000), null);
   // Ten seconds and a higher score, as chosen in the settings.
@@ -69,14 +69,11 @@ test('cooldown applies across recovered episodes; repeat intervals never delay t
   assert.ok(alerts.sample(low(313000), settings, 313000));
 });
 
-test('pause, disabled alerts, unavailable observations, and protected scores cannot accumulate warning time', () => {
+test('pause, disabled alerts and unavailable observations cannot accumulate warning time', () => {
   for (const interrupt of [
     (alerts, t) => alerts.interrupt(),
     (alerts, t) => alerts.sample({ ...snapshot(t), phase: 'unavailable' }, settings, t),
     (alerts, t) => alerts.sample(snapshot(t, { currentScore: 60 }), { ...settings, enabled: false }, t),
-    ...['moving', 'grace', 'recovering'].map(protection => (alerts, t) => {
-      assert.equal(alerts.sample(snapshot(t, { currentScore: 0, deviationState: 'away', protection }), settings, t), null);
-    }),
     (alerts, t) => alerts.sample(snapshot(t, { currentScore: null, deviationState: 'away' }), settings, t),
   ]) {
     const alerts = createPostureAlerts();

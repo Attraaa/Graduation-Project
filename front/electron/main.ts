@@ -161,9 +161,21 @@ const startKeyboardService = async (external: boolean) => {
     }
     keyboardProcess = child
     let processError = ''
+    // The analyzer's last messages without its per-request lines, for the diagnostics log when it stops by itself.
+    let recentOutput = ''
+    const spawnedAt = Date.now()
+    diagnostics.write('keyboard-service-start', { packaged: app.isPackaged, approvedApps: observeApps ? settings.apps.length : 0 })
     child.stdout.resume()
-    child.stderr.on('data', chunk => { processError = `${processError}${String(chunk)}`.slice(-2000) })
-    child.once('exit', () => {
+    child.stderr.on('data', chunk => {
+      processError = `${processError}${String(chunk)}`.slice(-2000)
+      const lines = String(chunk).split(/\r?\n/).filter(line => line.trim() && !/"(GET|POST) \//.test(line))
+      if (lines.length) recentOutput = `${recentOutput}\n${lines.join('\n')}`.slice(-1500)
+    })
+    child.once('exit', (code, signal) => {
+      // stopKeyboardService clears keyboardProcess before it kills the process, so only an exit of its own keeps it set.
+      const expected = keyboardProcess !== child
+      diagnostics.write('keyboard-service-exit', { code, signal, expected, seconds: Math.round((Date.now() - spawnedAt) / 1000),
+        ...(expected ? {} : { output: recentOutput.trim() }) })
       if (keyboardProcess === child) {
         keyboardProcess = null
         keyboardService = null

@@ -13,7 +13,7 @@ const postureRow = (over = {}) => ({ date: TODAY, hour: '9', mode: 'turtle',
   scorePolicyVersion: 'upper-body-neck-v3-a', habitPolicyVersion: 'reference-deviation-v1',
   longestContinuousMs: 0, sessionCount: 1, recordIds: ['s1:turtle'],
   runMs: 60_000, validMs: 60_000, scoreTimeSum: 60_000 * 80, deviationMs: 0, deviationEpisodeCount: 0, ...over });
-const shoulderRow = (over = {}) => postureRow({ mode: 'shoulder', scorePolicyVersion: 'upper-body-shoulder-v3-b', recordIds: ['s1:shoulder'], ...over });
+const balanceRow = (over = {}) => postureRow({ mode: 'balance', scorePolicyVersion: 'upper-body-balance-v3-b', recordIds: ['s1:balance'], ...over });
 const eyeRow = (over = {}) => ({ date: TODAY, hour: '13', policyVersion: 'eye-habits-v2', sessionCount: 1,
   runMs: 600_000, validMs: 600_000, blinks: 140, breaks: 2, nearReminders: 0, openReminders: 0, ...over });
 const keyboardStored = (over = {}) => ({
@@ -39,7 +39,7 @@ test('a seven-day period covers six days back to today across month and year bou
   assert.deepEqual(periodDates('2026-10-06', 7),
     ['2026-09-30', '2026-10-01', '2026-10-02', '2026-10-03', '2026-10-04', '2026-10-05', '2026-10-06']);
   assert.deepEqual(periodDates('2026-01-03', 7).slice(0, 2), ['2025-12-28', '2025-12-29']);
-  assert.equal(sessionIdOf('abc:shoulder'), 'abc');
+  assert.equal(sessionIdOf('abc:balance'), 'abc');
   assert.equal(sessionIdOf('abc:turtle'), 'abc');
 });
 
@@ -47,13 +47,13 @@ test('upper body scores are valid-time weighted and one session counts once', ()
   const today = day({ posture: [
     postureRow({ hour: '9', runMs: 60_000, validMs: 60_000, scoreTimeSum: 60_000 * 90, deviationEpisodeCount: 1 }),
     postureRow({ hour: '10', runMs: 180_000, validMs: 180_000, scoreTimeSum: 180_000 * 70 }),
-    shoulderRow({ hour: '9', runMs: 240_000, validMs: 240_000, scoreTimeSum: 240_000 * 88, deviationEpisodeCount: 2 }),
+    balanceRow({ hour: '9', runMs: 240_000, validMs: 240_000, scoreTimeSum: 240_000 * 88, deviationEpisodeCount: 2 }),
   ] });
   const upper = today.upper;
   assert.equal(upper.turtle, 75);       // (90 x 1분 + 70 x 3분) / 4분
-  assert.equal(upper.shoulder, 88);
-  assert.equal(upper.sessions, 1);      // s1:turtle + s1:shoulder = 세션 1개
-  assert.equal(upper.runMs, 240_000);   // 목·어깨 중 큰 값, 합이 아님
+  assert.equal(upper.balance, 88);
+  assert.equal(upper.sessions, 1);      // s1:turtle + s1:balance = 세션 1개
+  assert.equal(upper.runMs, 240_000);   // 목·좌우 균형 중 큰 값, 합이 아님
   assert.equal(upper.deviations, 3);
   assert.equal(today.totalMs, 240_000);
 });
@@ -78,6 +78,21 @@ test('only the latest policy group of each mode is used', () => {
   assert.equal(on('2026-10-06').eye.present, true);
   assert.equal(on('2026-10-04').keyboard.present, false);
   assert.equal(on('2026-10-06').keyboard.sessions, 1);
+});
+
+test('a changed alert setting (기준에서 벗어남 rule) keeps earlier upper rows; another 좌우 균형 민감도 starts a new group', () => {
+  const selected = groups({ posture: [
+    postureRow({ date: '2026-10-04', habitPolicyVersion: 'alert-hold-v1:70:3', deviationEpisodeCount: 2, scoreTimeSum: 60_000 * 70 }),
+    postureRow({ date: '2026-10-05', habitPolicyVersion: 'alert-hold-v1:60:10', deviationEpisodeCount: 1, scoreTimeSum: 60_000 * 90 }),
+    balanceRow({ date: '2026-10-04', scoreTimeSum: 60_000 * 50 }),
+    balanceRow({ date: '2026-10-05', scorePolicyVersion: 'upper-body-balance-v3-b:s80', scoreTimeSum: 60_000 * 30 }),
+  ] });
+  const on = date => dayValues(selected, date).upper;
+  // Each row keeps the count made with its own rule; both days stay in the statistics.
+  assert.deepEqual([on('2026-10-04').turtle, on('2026-10-05').turtle], [70, 90]);
+  assert.deepEqual([on('2026-10-04').deviations, on('2026-10-05').deviations], [2, 1]);
+  // The score itself changed with the sensitivity, so only the latest sensitivity's balance rows count.
+  assert.deepEqual([on('2026-10-04').balance, on('2026-10-05').balance], [null, 30]);
 });
 
 test('days without records stay empty instead of zero', () => {
@@ -129,14 +144,14 @@ const eyeRecord = (over = {}) => ({ id: 'e1', owner: '7', mode: 'eye',
 
 test('day entries merge one upper session, keyboard and eye, newest first', () => {
   const turtle = postureRecord();
-  const shoulder = postureRecord({ id: 's1:shoulder', mode: 'shoulder',
-    scorePolicyVersion: 'upper-body-shoulder-v3-b', scoreTimeSum: 25 * 60_000 * 89 });
+  const balance = postureRecord({ id: 's1:balance', mode: 'balance',
+    scorePolicyVersion: 'upper-body-balance-v3-b', scoreTimeSum: 25 * 60_000 * 89 });
   const yesterday = postureRecord({ id: 's0:turtle', startedAt: at('2026-10-05T00:12:00Z') });
-  const entries = dayEntries([eyeRecord({ status: 'interrupted' }), shoulder, turtle, yesterday], [keyboardStored()], TODAY);
+  const entries = dayEntries([eyeRecord({ status: 'interrupted' }), balance, turtle, yesterday], [keyboardStored()], TODAY);
   assert.deepEqual(entries.map(entry => [entry.mode, entry.id]), [['eye', 'e1'], ['keyboard', 'k1'], ['upper', 's1']]);
   const [eye, keyboard, upper] = entries;
   assert.equal(upper.turtle, 84);
-  assert.equal(upper.shoulder, 89);
+  assert.equal(upper.balance, 89);
   assert.equal(upper.endedAt - upper.startedAt, 25 * 60_000);
   assert.equal(upper.interrupted, false);
   assert.equal(keyboard.score, keyboardSummary(keyboardStored().counts, 70).score);
@@ -145,10 +160,10 @@ test('day entries merge one upper session, keyboard and eye, newest first', () =
   assert.equal(eye.interrupted, true);
 });
 
-test('deviation hours sum neck and shoulder episodes over the shown hour range', () => {
+test('deviation hours sum neck and balance episodes over the shown hour range', () => {
   const hours = deviationHours([
     postureRow({ hour: '9', deviationEpisodeCount: 1 }),
-    shoulderRow({ hour: '9', deviationEpisodeCount: 2 }),
+    balanceRow({ hour: '9', deviationEpisodeCount: 2 }),
     postureRow({ date: '2026-10-05', hour: '12', deviationEpisodeCount: 4 }),
   ]);
   assert.deepEqual(hours.map(hour => [hour.hour, hour.count, hour.strong]),

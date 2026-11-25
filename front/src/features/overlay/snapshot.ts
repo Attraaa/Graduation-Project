@@ -26,8 +26,8 @@ export function overlaySnapshot(all: MonitoringState, owner: string, sequence: n
   };
   const { upper, keyboard } = all;
   const neck = upper.controls.isRunning ? upper.snapshot.neck.currentScore : null;
-  const shoulder = upper.controls.isRunning ? upper.snapshot.shoulder.currentScore : null;
-  let detail = upper.controls.failed ? '카메라·분석 연결 확인 후 다시 시작해 주세요.' : `목 ${score(neck)} · 어깨 ${score(shoulder)}`;
+  const balance = upper.controls.isRunning ? upper.snapshot.balance.currentScore : null;
+  let detail = upper.controls.failed ? '카메라·분석 연결 확인 후 다시 시작해 주세요.' : `목 ${score(neck)} · 좌우 균형 ${score(balance)}`;
   let guidance = upper.controls.failed, note = '';
   if (upper.controls.isRunning) {
     const rate = upper.eye.measurement.recentBlinksPerMinute;
@@ -40,7 +40,7 @@ export function overlaySnapshot(all: MonitoringState, owner: string, sequence: n
     } else if (upper.eye.phase === 'error') { detail += ' · 깜빡임 분석 연결 확인'; note = '깜빡임 확인 필요'; }
     else if (rate !== null) { detail += ` · 깜빡임 ${rate.toFixed(1)}회/분`; note = `깜빡임 ${rate.toFixed(1)}`; }
   }
-  const upperMetrics = guidance ? [] : [metric('목', neck, thresholds.posture), metric('어깨', shoulder, thresholds.posture)];
+  const upperMetrics = guidance ? [] : [metric('목', neck, thresholds.posture), metric('균형', balance, thresholds.posture)];
 
   const counts = keyboardSummary(keyboard.snapshot.counts);
   const average = keyboard.controls.isRunning ? liveAverage(keyboard.snapshot.scores) : null;

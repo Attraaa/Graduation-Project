@@ -8,7 +8,7 @@ const postureRow = (over = {}) => ({ date: END, hour: '9', mode: 'turtle',
   scorePolicyVersion: 'upper-body-neck-v3-a', habitPolicyVersion: 'weighted-reference-deviation-v3',
   longestContinuousMs: 0, sessionCount: 1, recordIds: ['s1:turtle'],
   runMs: 60_000, validMs: 60_000, scoreTimeSum: 60_000 * 80, deviationMs: 0, deviationEpisodeCount: 0, ...over });
-const shoulderRow = (over = {}) => postureRow({ mode: 'shoulder', scorePolicyVersion: 'upper-body-shoulder-v3-b', recordIds: ['s1:shoulder'], ...over });
+const balanceRow = (over = {}) => postureRow({ mode: 'balance', scorePolicyVersion: 'upper-body-balance-v3-b', recordIds: ['s1:balance'], ...over });
 const eyeRow = (over = {}) => ({ date: END, hour: '13', policyVersion: 'eye-habits-v2', sessionCount: 1,
   runMs: 600_000, validMs: 600_000, blinks: 140, breaks: 2, nearReminders: 1, openReminders: 3, ...over });
 const build = (input = {}) => buildStatistics({ end: END, days: 7, posture: [], eye: [], keyboard: [], ...input });
@@ -33,8 +33,8 @@ test('upper averages are valid-time weighted and compared as the integers shown'
   assert.equal(summary.upper.turtle.current, 75);     // (90 x 1분 + 70 x 3분) / 4분
   assert.equal(summary.upper.turtle.previous, 71.5);
   assert.equal(summary.upper.turtle.change, 3);       // 75 - 72, 보이는 정수끼리
-  assert.equal(summary.upper.shoulder.current, null);
-  assert.equal(summary.upper.shoulder.change, null);
+  assert.equal(summary.upper.balance.current, null);
+  assert.equal(summary.upper.balance.change, null);
 });
 
 test('policy groups never mix, in the current or the previous period', () => {
@@ -48,14 +48,14 @@ test('policy groups never mix, in the current or the previous period', () => {
   assert.equal(summary.days.find(day => day.date === '2026-10-02').upper.turtle, null);
 });
 
-test('sessions count once across neck, shoulder and midnight; time is the daily max of neck and shoulder', () => {
+test('sessions count once across neck, balance and midnight; time is the daily max of neck and balance', () => {
   const upper = build({ posture: [
     postureRow({ date: '2026-10-05', hour: '23', runMs: 120_000, validMs: 90_000, scoreTimeSum: 90_000 * 80,
       longestContinuousMs: 50_000, deviationEpisodeCount: 1, deviationMs: 9_000 }),
     postureRow({ date: '2026-10-06', hour: '0', runMs: 60_000, validMs: 60_000, scoreTimeSum: 60_000 * 80, longestContinuousMs: 50_000 }),
-    shoulderRow({ date: '2026-10-05', hour: '23', runMs: 120_000, validMs: 120_000, scoreTimeSum: 120_000 * 90,
+    balanceRow({ date: '2026-10-05', hour: '23', runMs: 120_000, validMs: 120_000, scoreTimeSum: 120_000 * 90,
       longestContinuousMs: 70_000, deviationEpisodeCount: 2, deviationMs: 3_000 }),
-    shoulderRow({ date: '2026-10-06', hour: '0', runMs: 60_000, validMs: 30_000, scoreTimeSum: 30_000 * 90 }),
+    balanceRow({ date: '2026-10-06', hour: '0', runMs: 60_000, validMs: 30_000, scoreTimeSum: 30_000 * 90 }),
   ] }).upper;
   assert.equal(upper.sessions, 1);
   assert.equal(upper.runMs, 180_000);                  // 10/5 max(120k, 120k) + 10/6 max(60k, 60k)
@@ -69,7 +69,7 @@ test('sessions count once across neck, shoulder and midnight; time is the daily 
 
 test('hourly scores leave hours without rows empty and span the first to the last hour', () => {
   const summary = build({ posture: [postureRow({ hour: '9' }), postureRow({ hour: '11', scoreTimeSum: 60_000 * 60 })] });
-  assert.deepEqual(summary.upper.hourly.map(hour => [hour.hour, hour.turtle, hour.shoulder]),
+  assert.deepEqual(summary.upper.hourly.map(hour => [hour.hour, hour.turtle, hour.balance]),
     [[9, 80, null], [10, null, null], [11, 60, null]]);
   assert.equal(summary.upper.hourlyFloor, 60);
 });
@@ -77,7 +77,7 @@ test('hourly scores leave hours without rows empty and span the first to the las
 test('deviation hours follow the chosen period and leave out the previous one', () => {
   const posture = [
     postureRow({ hour: '9', deviationEpisodeCount: 1 }),
-    shoulderRow({ hour: '9', deviationEpisodeCount: 2 }),
+    balanceRow({ hour: '9', deviationEpisodeCount: 2 }),
     postureRow({ date: '2026-09-29', hour: '15', recordIds: ['s0:turtle'], deviationEpisodeCount: 5 }),  // 7일 기준 이전 기간
     postureRow({ date: '2026-09-20', hour: '20', recordIds: ['s9:turtle'], deviationEpisodeCount: 9 }),
   ];

@@ -11,7 +11,9 @@ import EyeMonitor, { type EyeUpdate } from '../eye/EyeMonitor';
 import { emptyEyeSnapshot, type EyeSnapshot } from '../eye/measurement';
 import { beginEyeRecording, type EyeSink } from '../eye/recording';
 import { beginPostureRecording } from '../records/recording';
-import { readEyeSensitivity, readPostureSensitivity } from '../settings/preferences';
+import { readBalanceSensitivity, readEyeSensitivity } from '../settings/preferences';
+import { readNotificationPreferences } from '../notifications/preferences';
+import { habitRule } from '../posture/evaluation';
 import { createMonitorSnapshot, type MonitorSnapshot } from '../posture/monitorTypes';
 import { createFaceBuffer, type FaceBuffer } from '../posture/e19/frame';
 import { initialKeyboardSnapshot, type KeyboardMonitorSnapshot } from '../keyboard/monitorTypes';
@@ -26,9 +28,13 @@ import { systemIssue } from '../notifications/issues';
 import { sessionLabel } from './presentation';
 
 const initialEye = (): EyeUpdate => ({ measurement: emptyEyeSnapshot(), phase: 'loading', message: '' });
-// Sensitivities chosen in Settings, read when an upper-body run starts and fixed for that run.
+// Sensitivities chosen in Settings and the upper-body alert rule ("N점 이하 N초", which also counts 기준에서 벗어남),
+// read when an upper-body run starts and fixed for that run.
 // Measurement and recording always receive the same values.
-const readSensitivity = () => ({ posture: readPostureSensitivity(), eye: readEyeSensitivity() });
+const readSensitivity = () => {
+  const alert = readNotificationPreferences();
+  return { balance: readBalanceSensitivity(), eye: readEyeSensitivity(), habit: habitRule(alert.scoreThreshold, alert.postureSeconds) };
+};
 export default function MonitoringProvider({ children }: { children: ReactNode }) {
   const upper = useSessionControls('upper_body');
   const keyboard = useSessionControls('keyboard');
@@ -58,7 +64,7 @@ export default function MonitoringProvider({ children }: { children: ReactNode }
     if (value.phase === 'error' && current.running) {
       systemIssue('upper', String(current.run), 'upper-analysis'); failUpper(); eyeSink.current?.finish();
     }
-    setUpperTrend(points => appendTrend(points, { at: performance.now(), neck: value.neck.currentScore, shoulder: value.shoulder.currentScore, keyboard: null }));
+    setUpperTrend(points => appendTrend(points, { at: performance.now(), neck: value.neck.currentScore, balance: value.balance.currentScore, keyboard: null }));
   }, [failUpper, upperState]);
   const onKeyboard = useCallback((value: KeyboardMonitorSnapshot) => {
     observeKeyboard(value);
@@ -69,7 +75,7 @@ export default function MonitoringProvider({ children }: { children: ReactNode }
     if (value.latest && value.latest.id !== lastPress.current) {
       lastPress.current = value.latest.id;
       lastInputAt.current = performance.now();
-      if (livePressScore(value.latest) !== null) setKeyboardTrend(points => appendTrend(points, { at: performance.now(), neck: null, shoulder: null, keyboard: liveAverage(value.scores) }));
+      if (livePressScore(value.latest) !== null) setKeyboardTrend(points => appendTrend(points, { at: performance.now(), neck: null, balance: null, keyboard: liveAverage(value.scores) }));
     }
   }, [failKeyboard, keyboardState, observeKeyboard]);
   const onEyeSample = useCallback((at: number, value: EyeSnapshot) => eyeSink.current?.sample(at, value), []);
@@ -126,7 +132,7 @@ export default function MonitoringProvider({ children }: { children: ReactNode }
     if (!keyboard.isRunning || keyboard.isPaused) return;
     const timer = window.setInterval(() => {
       const at = performance.now();
-      if (at - lastInputAt.current > 1500) setKeyboardTrend(points => points.length ? appendTrend(points, { at, neck: null, shoulder: null, keyboard: null }) : points);
+      if (at - lastInputAt.current > 1500) setKeyboardTrend(points => points.length ? appendTrend(points, { at, neck: null, balance: null, keyboard: null }) : points);
     }, 1000);
     return () => window.clearInterval(timer);
   }, [keyboard.isRunning, keyboard.isPaused]);
@@ -138,8 +144,8 @@ export default function MonitoringProvider({ children }: { children: ReactNode }
     return () => window.removeEventListener('moti-stop-measurement', stop);
   }, [stopUpper, stopKeyboard]);
   const base: BaseState = {
-    upper: { controls: { ...upper, pause: () => { upper.pause(); setUpperTrend(points => appendTrend(points, { at: performance.now(), neck: null, shoulder: null, keyboard: null })); } }, snapshot, eye, trend: upperTrend, start: startUpper, recalibrate: () => { setUpperTrend([]); setReferenceRequest(value => value + 1); } },
-    keyboard: { controls: { ...keyboard, pause: () => { keyboard.pause(); setKeyboardTrend(points => appendTrend(points, { at: performance.now(), neck: null, shoulder: null, keyboard: null })); } }, snapshot: keys, trend: keyboardTrend, start: startKeyboard, remap: () => setRemap(value => value + 1) },
+    upper: { controls: { ...upper, pause: () => { upper.pause(); setUpperTrend(points => appendTrend(points, { at: performance.now(), neck: null, balance: null, keyboard: null })); } }, snapshot, eye, trend: upperTrend, start: startUpper, recalibrate: () => { setUpperTrend([]); setReferenceRequest(value => value + 1); } },
+    keyboard: { controls: { ...keyboard, pause: () => { keyboard.pause(); setKeyboardTrend(points => appendTrend(points, { at: performance.now(), neck: null, balance: null, keyboard: null })); } }, snapshot: keys, trend: keyboardTrend, start: startKeyboard, remap: () => setRemap(value => value + 1) },
   };
   return <CameraProvider modeId="upper_body" deviceId={upper.deviceId} cameraLabel={deviceLabel(upper)} paused={upper.isPaused} onOpen={openCamera}>
     {error && <p role="alert" className="text-sm text-danger">{error}</p>}
@@ -168,7 +174,7 @@ function MonitoringRuntime({ base, children, upperCamera, portal, configMode, se
     <MonitoringDesktopBridge />
     <div hidden aria-hidden="true">
       <CameraContext.Provider value={upperCamera}>
-        <PostureMonitor key={upper.run} isRunning={upper.isRunning} paused={upper.isPaused} referenceRequest={referenceRequest} deviceId={upper.deviceId} onUpdate={onPosture} recordCapture={beginPostureRecording} sensitivity={sensitivity.posture} faces={faces} />
+        <PostureMonitor key={upper.run} isRunning={upper.isRunning} paused={upper.isPaused} referenceRequest={referenceRequest} deviceId={upper.deviceId} onUpdate={onPosture} recordCapture={beginPostureRecording} balanceSensitivity={sensitivity.balance} habitRule={sensitivity.habit} faces={faces} />
         <EyeMonitor key={`eye:${upper.run}`} shared active={upper.isRunning && upperCamera.connected} paused={upper.isPaused} deviceId={upper.deviceId} reference={0} eyeReference={referenceRequest} sensitivity={sensitivity.eye} onUpdate={onEyeUpdate} onSample={onEyeSample} onFace={faces.push} />
       </CameraContext.Provider>
       <CameraContext.Provider value={keyboardCamera}>

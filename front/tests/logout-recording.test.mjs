@@ -54,7 +54,7 @@ test('logging out during a measurement stops it and saves the last batches with 
 
 test('a failed last save asks first: staying keeps the login and the retry, leaving drops what was not saved', async t => {
   const { server } = signedIn(t);
-  posture('shoulder', performance.now());
+  posture('balance', performance.now());
   server.fail('/api/records/posture', 'network down');
   assert.equal(await service.logoutAfterSaving(async () => false), false);
   assert.notEqual(globalThis.localStorage.getItem('moti.session'), null);

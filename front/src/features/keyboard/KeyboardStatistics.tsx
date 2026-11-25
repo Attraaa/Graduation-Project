@@ -58,7 +58,7 @@ export default function KeyboardStatistics({ data, date, days, today, detail, on
         faded={faded} detail={detail} onSelectDate={onSelectDate}
         data={daily.map(row => ({ date: row.date, score: row.score, coverage: row.coverage }))} />
         : <EmptyChart text="선택한 기간의 키보드 집계가 없습니다. 키보드 학습을 시작하면 처리된 입력의 집계를 저장합니다." />}
-      <p className="text-sm text-muted">직전 {days}일 {scoreText(before.score)} ({before.valid}회, 판정 {percentText(before.coverage)}) → 현재 {scoreText(summary.score)} ({summary.valid}회, 판정 {percentText(summary.coverage)}){summary.score !== null && before.score !== null ? ` · ${(summary.score - before.score).toFixed(1)}점 변화` : ''}</p>
+      <p className="text-sm text-muted">직전 {days}일 {scoreText(before.score)} ({before.valid}회, 판정 {percentText(before.coverage)}) → 현재 {scoreText(summary.score)} ({summary.valid}회, 판정 {percentText(summary.coverage)}){summary.score !== null && before.score !== null ? ` · ${Math.round(summary.score) - Math.round(before.score)}점 변화` : ''}</p>
       <p className="text-xs text-muted">표본 수와 판정 가능 비율이 다른 기간의 점수 변화는 실제 개선과 다를 수 있습니다. 일관성은 같은 키·Shift 상황에서 가장 많이 쓴 손가락의 비율이며 점수에 가산하지 않습니다.</p>
     </section>
     <div className="grid gap-4 lg:grid-cols-3">

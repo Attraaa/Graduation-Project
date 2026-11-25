@@ -1,12 +1,11 @@
 import { averageScore, localDateKey } from '../../../../database/contracts.ts';
 import type { PostureRecord, StatisticsRow } from '../../../../database/contracts.ts';
-import { statisticsKey } from '../../../../database/aggregation.ts';
 import { eyeRate } from '../../../../database/eye.ts';
 import type { EyeRecord, EyeStatisticsRow, HistoryRecord } from '../../../../database/eye.ts';
 import { keyboardSummary } from '../../../../database/keyboard.ts';
 import type { KeyboardStored } from '../../../../database/keyboard.ts';
 
-export interface UpperDay { turtle: number | null; shoulder: number | null; sessions: number; runMs: number; deviations: number }
+export interface UpperDay { turtle: number | null; balance: number | null; sessions: number; runMs: number; deviations: number }
 export interface KeyboardDay { score: number | null; coverage: number | null; sessions: number; runMs: number; present: boolean }
 export interface EyeDay { rate: number | null; runMs: number; breaks: number; present: boolean }
 export interface DashboardDay { date: string; upper: UpperDay; keyboard: KeyboardDay; eye: EyeDay; totalMs: number; hasRecords: boolean }
@@ -18,13 +17,19 @@ export type EntrySource =
 export interface TimelineEntry {
   id: string; mode: 'upper' | 'keyboard' | 'eye';
   startedAt: number; endedAt: number; offsetMinutes: number;
-  turtle: number | null; shoulder: number | null; score: number | null; rate: number | null;
+  turtle: number | null; balance: number | null; score: number | null; rate: number | null;
   interrupted: boolean;
   source: EntrySource;
 }
 export interface DeviationHour { hour: number; count: number; strong: boolean }
+/**
+ * A record still marked running whose last save is older than this ended without its last save (the app was killed,
+ * crashed or lost power). Running records save every 1–5 s, so it is shown as interrupted, not as still recording.
+ */
+export const STALE_RUNNING_MS = 3 * 60_000;
+const ended = (status: string, lastSavedAt: number, now: number) => status === 'interrupted' || (status === 'running' && now - lastSavedAt > STALE_RUNNING_MS);
 /** Rows (keyboard: records) of the latest policy group of each mode. */
-export interface PolicyGroups { turtle: StatisticsRow[]; shoulder: StatisticsRow[]; eye: EyeStatisticsRow[]; keyboard: KeyboardStored[] }
+export interface PolicyGroups { turtle: StatisticsRow[]; balance: StatisticsRow[]; eye: EyeStatisticsRow[]; keyboard: KeyboardStored[] }
 /** null means the source has not loaded (or failed); it is treated as empty. */
 export interface PolicySources { posture: StatisticsRow[] | null; eye: EyeStatisticsRow[] | null; keyboard: KeyboardStored[] | null }
 
@@ -48,8 +53,8 @@ export function pastDateOrNull(value: string | null, today: string) {
   return real && value <= today ? value : null;
 }
 
-/** An upper-body session is stored as `${sessionId}:turtle` and `${sessionId}:shoulder`. */
-export const sessionIdOf = (recordId: string) => recordId.replace(/:(turtle|shoulder)$/, '');
+/** An upper-body session is stored as `${sessionId}:turtle` and `${sessionId}:balance`. */
+export const sessionIdOf = (recordId: string) => recordId.replace(/:(turtle|balance)$/, '');
 
 const total = <T>(rows: T[], pick: (row: T) => number) => rows.reduce((sum, row) => sum + pick(row), 0);
 const hourOrder = (row: { date: string; hour: string }) => `${row.date}T${String(Number(row.hour)).padStart(2, '0')}`;
@@ -72,24 +77,31 @@ function latestKeyboard(records: KeyboardStored[]) {
   return records.filter(stored => keyboardKey(stored) === selected);
 }
 
+/**
+ * Upper-body rows group by score policy only: the 기준에서 벗어남 rule follows the alert setting (since 2026-11-25), so
+ * changing that setting keeps earlier rows, counted with their own rule. A different score policy (including another
+ * 좌우 균형 민감도) changes the score itself and starts a new group.
+ */
+const scoreGroup = (row: StatisticsRow) => JSON.stringify([row.mode, row.scorePolicyVersion]);
+
 /** Each mode keeps only the policy group of its latest row (keyboard: latest updated record). */
 export function latestPolicyGroups(input: PolicySources): PolicyGroups {
   const posture = input.posture ?? [];
   return {
-    turtle: latestGroup(posture.filter(row => row.mode === 'turtle'), statisticsKey),
-    shoulder: latestGroup(posture.filter(row => row.mode === 'shoulder'), statisticsKey),
+    turtle: latestGroup(posture.filter(row => row.mode === 'turtle'), scoreGroup),
+    balance: latestGroup(posture.filter(row => row.mode === 'balance'), scoreGroup),
     eye: latestGroup(input.eye ?? [], row => row.policyVersion),
     keyboard: latestKeyboard(input.keyboard ?? []),
   };
 }
 
-function upperDay(turtle: StatisticsRow[], shoulder: StatisticsRow[], date: string): UpperDay {
-  const neck = turtle.filter(row => row.date === date), side = shoulder.filter(row => row.date === date);
+function upperDay(turtle: StatisticsRow[], balance: StatisticsRow[], date: string): UpperDay {
+  const neck = turtle.filter(row => row.date === date), side = balance.filter(row => row.date === date);
   const score = (rows: StatisticsRow[]) =>
     averageScore({ validMs: total(rows, row => row.validMs), scoreTimeSum: total(rows, row => row.scoreTimeSum) });
   const sessions = new Set([...neck, ...side].flatMap(row => row.recordIds).map(sessionIdOf));
   return {
-    turtle: score(neck), shoulder: score(side), sessions: sessions.size,
+    turtle: score(neck), balance: score(side), sessions: sessions.size,
     runMs: Math.max(total(neck, row => row.runMs), total(side, row => row.runMs)),
     deviations: total([...neck, ...side], row => row.deviationEpisodeCount),
   };
@@ -116,7 +128,7 @@ function eyeDay(rows: EyeStatisticsRow[], date: string): EyeDay {
 
 /** One date's values from already selected policy groups. */
 export function dayValues(groups: PolicyGroups, date: string): DashboardDay {
-  const upper = upperDay(groups.turtle, groups.shoulder, date);
+  const upper = upperDay(groups.turtle, groups.balance, date);
   const typing = keyboardDay(groups.keyboard, date);
   const eyes = eyeDay(groups.eye, date);
   return { date, upper, keyboard: typing, eye: eyes, totalMs: upper.runMs + typing.runMs + eyes.runMs,
@@ -129,7 +141,7 @@ export function scoreFloor(scores: number[]) {
 }
 
 /** Rows that started on `date`, newest first: one per upper session, keyboard and eye record, of every policy. */
-export function dayEntries(history: HistoryRecord[], keyboard: KeyboardStored[], date: string): TimelineEntry[] {
+export function dayEntries(history: HistoryRecord[], keyboard: KeyboardStored[], date: string, now = Date.now()): TimelineEntry[] {
   const startsOnDate = (record: { startedAt: number; offsetMinutes: number }) =>
     localDateKey(record.startedAt, record.offsetMinutes) === date;
   const entries: TimelineEntry[] = [];
@@ -140,8 +152,8 @@ export function dayEntries(history: HistoryRecord[], keyboard: KeyboardStored[],
     if (!startsOnDate(record)) continue;
     if (record.mode === 'eye') {
       entries.push({ id: record.id, mode: 'eye', startedAt: record.startedAt, endedAt: record.startedAt + record.runMs,
-        offsetMinutes: record.offsetMinutes, turtle: null, shoulder: null, score: null, rate: eyeRate(record),
-        interrupted: record.status === 'interrupted', source: { mode: 'eye', record } });
+        offsetMinutes: record.offsetMinutes, turtle: null, balance: null, score: null, rate: eyeRate(record),
+        interrupted: ended(record.status, record.startedAt + record.runMs, now), source: { mode: 'eye', record } });
       continue;
     }
     const id = sessionIdOf(record.id);
@@ -149,25 +161,25 @@ export function dayEntries(history: HistoryRecord[], keyboard: KeyboardStored[],
   }
   for (const [id, records] of upper) {
     const neck = records.find(record => record.mode === 'turtle');
-    const side = records.find(record => record.mode === 'shoulder');
+    const side = records.find(record => record.mode === 'balance');
     entries.push({ id, mode: 'upper',
       startedAt: Math.min(...records.map(record => record.startedAt)),
       endedAt: Math.max(...records.map(record => record.startedAt + record.runMs)),
       offsetMinutes: records[0].offsetMinutes,
-      turtle: neck ? averageScore(neck) : null, shoulder: side ? averageScore(side) : null, score: null, rate: null,
-      interrupted: records.some(record => record.status === 'interrupted'), source: { mode: 'upper', records } });
+      turtle: neck ? averageScore(neck) : null, balance: side ? averageScore(side) : null, score: null, rate: null,
+      interrupted: records.some(record => ended(record.status, record.startedAt + record.runMs, now)), source: { mode: 'upper', records } });
   }
   for (const stored of keyboard) {
     if (!startsOnDate(stored.record)) continue;
     entries.push({ id: stored.record.id, mode: 'keyboard', startedAt: stored.record.startedAt, endedAt: stored.record.updatedAt,
-      offsetMinutes: stored.record.offsetMinutes, turtle: null, shoulder: null,
+      offsetMinutes: stored.record.offsetMinutes, turtle: null, balance: null,
       score: keyboardSummary(stored.counts, stored.record.nearbyCredit).score, rate: null,
-      interrupted: stored.record.status === 'interrupted', source: { mode: 'keyboard', stored } });
+      interrupted: ended(stored.record.status, stored.record.updatedAt, now), source: { mode: 'keyboard', stored } });
   }
   return entries.sort((a, b) => b.startedAt - a.startedAt);
 }
 
-/** Neck + shoulder deviation episodes per hour, from the first to the last hour with upper-body rows. */
+/** Neck + balance deviation episodes per hour, from the first to the last hour with upper-body rows. */
 export function deviationHours(rows: StatisticsRow[]): DeviationHour[] {
   if (!rows.length) return [];
   const hours = rows.map(row => Number(row.hour));

@@ -15,7 +15,7 @@ test('two independent clocks pause/resume without resetting accrued session time
   upper.start(); assert.equal(upper.seconds(), 0); assert.equal(keyboard.seconds(), 4.5);
 });
 test('live trends preserve zero, insert immediate missing/pause boundaries and stay bounded', () => {
-  const point = (at, neck) => ({ at, neck, shoulder: neck, keyboard: null });
+  const point = (at, neck) => ({ at, neck, balance: neck, keyboard: null });
   let points = appendTrend([], point(0, 0));
   points = appendTrend(points, point(200, null));
   points = appendTrend(points, point(400, 88));

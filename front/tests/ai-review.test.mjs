@@ -16,7 +16,7 @@ const dates = ['2026-10-11', '2026-10-12', '2026-10-13', '2026-10-14', '2026-10-
 const none = { current: null, previous: null, change: null };
 const summary = ({ upper = {}, eye = {} } = {}) => ({
   range: { from: '2026-10-04', to: '2026-10-17', dates, previousDates: [] }, days: [], upperFloor: 0, eyeMax: 20,
-  upper: { present: false, turtle: none, shoulder: none, runMs: 0, sessions: 0, averageMs: null, longestMs: 0,
+  upper: { present: false, turtle: none, balance: none, runMs: 0, sessions: 0, averageMs: null, longestMs: 0,
     deviations: 0, deviationRate: null, validRate: null, unmeasuredMs: 0, hourly: [], hourlyFloor: 0, ...upper },
   eye: { present: false, rate: null, previousRate: null, validMs: 0, runMs: 0, breaks: 0, nearReminders: 0, openReminders: 0,
     validRate: null, hourly: [], hourlyMax: 20, ...eye },
@@ -33,13 +33,13 @@ test('nothing measured in the period means nothing to send', () => {
 
 test('upper body and eye values are the Statistics numbers, rounded, with minutes instead of milliseconds', () => {
   const input = aiReviewInput(summary({
-    upper: { present: true, turtle: { current: 82.44, previous: 78.06, change: 4 }, shoulder: { current: 100.0000001, previous: null, change: null },
+    upper: { present: true, turtle: { current: 82.44, previous: 78.06, change: 4 }, balance: { current: 100.0000001, previous: null, change: null },
       runMs: 12_030_000, sessions: 4, deviations: 12, deviationRate: 8.25, validRate: 91.04 },
     eye: { present: true, rate: 14.26, previousRate: null, validMs: 9_000_000 },
   }), [], 30);
   assert.deepEqual(input, {
     days: 30,
-    upper: { neck: { current: 82.4, previous: 78.1 }, shoulder: { current: 100, previous: null }, measuredMinutes: 200.5,
+    upper: { neck: { current: 82.4, previous: 78.1 }, balance: { current: 100, previous: null }, measuredMinutes: 200.5,
       sessions: 4, deviations: 12, deviationRate: 8.3, validRate: 91 },
     eye: { blinkRate: 14.3, previousBlinkRate: null, validMinutes: 150 },
     keyboard: null,

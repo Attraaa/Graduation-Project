@@ -17,7 +17,7 @@ flowchart TD
   P --> C[매 세션 5초 기준 자세 보정 · 화면상 변화]
   EYE -->|같은 프레임의 얼굴·머리 행렬| NM[거북목 모델 E19 · 앱 안 ONNX Runtime Web]
   C --> NM
-  NM --> V1[목 점수 E19 · 어깨 점수 v3 · 시간 평균]
+  NM --> V1[목 점수 E19 · 좌우 균형 · 시간 평균]
   C --> V1
   R -->|JWT 로그인| A[Express API · nginx 뒤 배포]
   V1 --> REC[모든 관측의 분 버킷 · 배치 기록]
@@ -32,7 +32,7 @@ flowchart TD
   KM --> FP[버전된 권장 손가락 정책 · 보수적 판정]
 ```
 
-Electron 개발 앱의 키보드 모드는 로컬 Python 프로세스를 자동 실행하고 현재 화면의 카메라 프레임·키 입력을 연결합니다. 로그인과 목·어깨·키보드·안구 기록은 서버 API(`/api/auth`, `/api/records`)를 사용합니다. 기존 `/api/sessions` 측정 경로는 여전히 프론트가 호출하지 않습니다. 서버 주소는 `front/.env`의 `VITE_MOTI_API_URL`이며 저장 계약은 [database](../database/README.md)를 따릅니다.
+Electron 개발 앱의 키보드 모드는 로컬 Python 프로세스를 자동 실행하고 현재 화면의 카메라 프레임·키 입력을 연결합니다. 로그인과 목·좌우 균형·키보드·안구 기록은 서버 API(`/api/auth`, `/api/records`)를 사용합니다. 기존 `/api/sessions` 측정 경로는 여전히 프론트가 호출하지 않습니다. 서버 주소는 `front/.env`의 `VITE_MOTI_API_URL`이며 저장 계약은 [database](../database/README.md)를 따릅니다.
 
 ## 파일별 책임
 
@@ -44,9 +44,9 @@ Electron 개발 앱의 키보드 모드는 로컬 Python 프로세스를 자동 
 | `scripts/package-keyboard.ps1`, `keyboard-detect/packaging/` | Windows x64 Python 분석기·모델·네이티브 라이브러리 묶음 생성. 실행 검사를 통과한 전체 폴더를 Electron `extraResources`의 `keyboard/`에 동봉 |
 | `front/electron/main.ts` | 준비된 주 창 표시, Python 키보드 프로세스, 신뢰 창 IPC·종료 전 기록 flush 요청. 화면이 여는 새 창(window.open)은 카메라 설정 창만 허용하고, 카카오맵 장소 링크(`externalLinks.ts`)는 기본 브라우저로 엶 |
 | `front/electron/preload.ts` | 키보드 시작·중지, motiRecords 종료 flush 및 주 창 전용 테마 IPC 경계 |
-| `front/electron/diagnostics.ts`, `front/src/features/diagnostics/` | 진단 기록(2026-11-24). `%APPDATA%\Moti\logs\moti-YYYY-MM-DD.log`에 JSON 한 줄씩: 시작 정보, GPU 상태(GPU 정보를 다 받은 뒤. 시작 직후 값은 준비 전이라 쓰지 않음), 화면·GPU 프로세스 종료, 창 응답 없음, 화면 장치 변화, 절전·잠금, 종료 때 저장 응답/5초 초과, 1분마다 프로세스 메모리·CPU와 본창이 보낸 JS 메모리·두 측정 상태, 처리되지 않은 화면 오류(분당 20개). 영상·랜드마크·점수는 적지 않고 14일 지난 파일은 지움 |
-| `front/electron/overlayWindow.ts`, `front/overlay.html`, `front/src/features/overlay/` | 독립 미니 바 창(340×118 고정, 화면 장치가 바뀌어도 크기를 되돌림)·준비 확인·위치 보정·복귀, 검증된 요약/명령 계약. `snapshot.ts`가 큰 숫자와 경고 점수 이하 표시(목·어깨는 설정의 상체 경고 점수, 키보드는 홈과 같은 최근 50회 판정 평균과 키보드 경고 점수)를 만듦. 측정은 기존 본창 Provider가 계속 소유하며 작은 창은 별도 메모리 partition에서 제한된 API만 사용 |
-| `front/electron/notificationHandlers.ts`, `front/src/features/notifications/` | main의 포커스/오버레이/잠금 검사, 고정 문구 Windows 알림, 목·어깨 점수와 키보드 최근 50회 평균이 모드별 "N점 이하 N초 유지"인지(설정)·기존 깜빡임 15초 신호와 전달 ACK, 운영 오류별 사건 큐(키보드 자동 인식 실패 `keyboard-area` 포함). 키보드 입력은 이벤트마다 처리하고 경고별 반복 제한을 독립 관리. 점수·기록 정책과 분리 |
+| `front/electron/diagnostics.ts`, `front/src/features/diagnostics/` | 진단 기록(2026-11-24). `%APPDATA%\Moti\logs\moti-YYYY-MM-DD.log`에 JSON 한 줄씩: 시작 정보, GPU 상태(GPU 정보를 다 받은 뒤. 시작 직후 값은 준비 전이라 쓰지 않음), 화면·GPU 프로세스 종료, 창 응답 없음, 화면 장치 변화, 절전·잠금, 종료 때 저장 응답/5초 초과, 1분마다 프로세스 메모리·CPU와 본창이 보낸 JS 메모리·두 측정 상태, 처리되지 않은 화면 오류(분당 20개). 2026-11-25부터 키보드 분석기 시작·종료(예상 밖 종료면 종료 코드·신호·실행 초와 요청 줄을 뺀 마지막 출력 1,500자)와 키보드 화면의 "로컬 분석 연결이 끊어졌습니다"·"영상 분석 응답이 지연…" 순간(끊긴 이유, 단계, 응답받은 프레임 수, 가장 느린 응답 ms)도 적음. 영상·랜드마크·점수는 적지 않고 14일 지난 파일은 지움 |
+| `front/electron/overlayWindow.ts`, `front/overlay.html`, `front/src/features/overlay/` | 독립 미니 바 창(340×118 고정, 화면 장치가 바뀌어도 크기를 되돌림)·준비 확인·위치 보정·복귀, 검증된 요약/명령 계약. `snapshot.ts`가 큰 숫자와 경고 점수 이하 표시(목·좌우 균형은 설정의 상체 경고 점수, 키보드는 홈과 같은 최근 50회 판정 평균과 키보드 경고 점수)를 만듦. 측정은 기존 본창 Provider가 계속 소유하며 작은 창은 별도 메모리 partition에서 제한된 API만 사용 |
+| `front/electron/notificationHandlers.ts`, `front/src/features/notifications/` | main의 포커스/오버레이/잠금 검사, 고정 문구 Windows 알림, 목·좌우 균형 점수와 키보드 최근 50회 평균이 모드별 "N점 이하 N초 유지"인지(설정)·기존 깜빡임 15초 신호와 전달 ACK, 운영 오류별 사건 큐(키보드 자동 인식 실패 `keyboard-area` 포함). 키보드 입력은 이벤트마다 처리하고 경고별 반복 제한을 독립 관리. 점수·기록 정책과 분리 |
 | `front/vite.config.ts` | UI와 Electron 빌드, CommonJS preload 출력, 브라우저 검증 모드 |
 | `front/src/App.tsx` | 라우트 정의와 네이티브 제목 표시줄 테마 동기화. 인증 보호 라우트는 아직 없음 |
 | `front/src/components/layout/WindowTitleBar.tsx`, `front/electron/windowAppearance.ts` | 테마 제목 표시줄과 Windows 기본 창 버튼 overlay. 브라우저에는 자체 표시줄을 추가하지 않음 |
@@ -60,29 +60,28 @@ Electron 개발 앱의 키보드 모드는 로컬 Python 프로세스를 자동 
 | `front/src/features/session/` | 두 모드의 지속 런타임·시작/일시정지/재개/중지·활성 시간·캔버스 복사 미리보기·실시간 그래프·공통 상세 틀. 장치 선택은 카메라 설정 창에 저장 |
 | `front/src/features/session/analysisFrame.ts` | 네이티브 앱의 카메라 변환·자세/안구 분석 예약. Windows 최소화에서 RAF가 느려져도 취소 가능한 30ms 타이머로 새 영상만 처리하며, 브라우저는 기존 RAF 사용. 캡처 시각·중복 프레임·단일 추론·자원 해제 계약 유지 |
 | `front/src/features/camera/`, `front/electron/cameraWindow.ts` | 모드·실제 카메라별 구도 자동 저장, 확대·이동까지 공통 변환 영상으로 분석, 동일 스트림의 별도 설정 창, 수동 키보드 외곽/방향 UI. [계약](camera-settings.md) |
-| `front/src/features/posture/PostureMetrics.tsx` | 목 점수(아래에 추정 CVA)·어깨 점수 다이얼(`features/session/ScoreDial.tsx`)과 깜빡임 빈도 반원 계기(`RateGauge.tsx`, 끝값 30은 그림 눈금일 뿐 기준이 아님)의 지금 값(세션 평균은 통계). 추정 CVA = 설정의 기준 CVA − 같은 목 점수에서 환산한 CVA 감소량(`modes/turtle.ts`). 점수 산식·임계값을 소유하지 않음. 키보드 열은 같은 다이얼과 `MetricTile`(판정 가능 비율·판정한 입력). 키보드 다이얼은 2026-11-25부터 최근 50회 판정 평균의 정수(`features/keyboard/liveScore.ts`) |
+| `front/src/features/posture/PostureMetrics.tsx` | 목 점수(아래에 추정 CVA)·좌우 균형 점수 다이얼(`features/session/ScoreDial.tsx`)과 깜빡임 빈도 반원 계기(`RateGauge.tsx`, 끝값 30은 그림 눈금일 뿐 기준이 아님)의 지금 값(세션 평균은 통계). 추정 CVA = 설정의 기준 CVA − 같은 목 점수에서 환산한 CVA 감소량(`modes/turtle.ts`). 점수 산식·임계값을 소유하지 않음. 키보드 열은 같은 다이얼과 `MetricTile`(판정 가능 비율·판정한 입력). 키보드 다이얼은 2026-11-25부터 최근 50회 판정 평균의 정수(`features/keyboard/liveScore.ts`) |
 | `front/src/features/posture/e19/` | 거북목 모델 E19(`public/models/fhp-e19`) 실행. `model.ts` 보정·추론(연구 런타임의 E19 부분), `flow.ts` 3초 준비·5초 기록·실패 안내 후 재시도와 One Euro, `frame.ts` 같은 영상 프레임의 포즈·얼굴 짝짓기, `load.ts` 앱 안의 모델·ORT wasm 로딩(CDN 없음), `cva_map.json` 목 부하 → CVA 감소 환산표(인계 패키지 그대로). [보정 계약](calibration.md#거북목-모델-e19-보정-2026-11-23) |
 | `front/src/features/posture/CameraGuidance.tsx`, `guidance.ts`, `features/session/GuidanceBand.tsx`, `KeyboardGuidance.tsx` | 카메라 화면 아래쪽 안내 띠(상체: 보정·깜빡임 보정·관찰 불가·오류, 키보드: 준비·위치 인식·오류·미승인 앱). 2026-11-23부터 별도 회색 안내 칸 없음 |
 | `front/src/features/posture/monitorTypes.ts` | 카메라와 독립된 상태·점수·습관 표시 계약 |
-| `front/src/components/PostureMonitor.tsx` | 웹캠·모델·기준 수집 연결(5초 보정에서 어깨 기준과 E19 보정을 함께), E19 추론(초당 약 10회)과 목 점수 평가, 오버레이, 누락/오류 상태 전달 |
+| `front/src/components/PostureMonitor.tsx` | 웹캠·모델·기준 수집 연결(5초 보정에서 자세 기준·E19 보정·좌우 균형 기준을 함께), E19 추론(초당 약 10회)과 목·좌우 균형 점수 평가(각자 One Euro·관찰 시간), 오버레이, 누락/오류 상태 전달 |
 | `front/src/components/KeyboardMonitor.tsx` | 동일 변환의 손캠 미리보기/프레임 전송, 현재 화면·승인 앱 입력 연결, 키 맵 재인식, 종료/실패 정리. 자동 인식 상태(`recognition`: 찾는 중·찾음·직접 맞추기 대기·직접 맞춘 영역)를 내보내고, 10초 동안 못 찾으면 직접 맞추기로 바꾼 뒤 영역을 맞출 때까지 판정하지 않음(대기 표시는 카메라 런타임의 `manualPending`). 판정한 입력마다 최근 50회 점수(`scores`)를 갱신 |
 | `front/src/features/keyboard/` | Python 인식 결과 어댑터, 버전된 권장 손가락표, 신뢰도·모호성 기반 순수 판정 |
 | `front/src/hooks/useWebcam.ts` | 장치 요청과 트랙 해제. 늦게 완료된 이전 요청도 폐기 |
 | `front/src/hooks/useMediaPipe.ts` | 로컬 Pose 파일 로드, 프레임 처리, 비동기 초기화/종료 제어 |
 | `front/src/features/posture/calibration.ts` | DOM 없는 기준 자세 수집/관측 계산. 단위·품질·샘플 정책 |
 | `front/src/features/posture/observation.ts` | DOM 없는 기준 대비 변화·유효 관찰 시간 계산. 누락·중복·역행 시각과 관측 연속성 처리 |
-| `front/src/features/posture/modes/turtle.ts`, `modes/shoulder.ts` | 목: E19 목 점수 정책(100 − 목 부하 점수, 습관 편차·추정 CVA 환산(부하 기준, `e19/cva_map.json` 선형 보간), 정책 ID `upper-body-neck-e19-v1-<해시>`). 어깨: 가중합 정책·버전, 조정 상수는 scoreSettings.ts |
-| `front/src/features/posture/scoring.ts` | 어깨의 귀·어깨 비율을 가중합으로 0–100 환산하는 순수 함수 |
-| `front/src/features/posture/evaluation.ts` | 유효 시간 가중 평균·연속 관찰·기준 이탈 구간의 순수 집계 |
+| `front/src/features/posture/modes/turtle.ts`, `modes/balance.ts` | 목: E19 목 점수 정책(100 − 목 부하 점수, 습관 편차·추정 CVA 환산(부하 기준, `e19/cva_map.json` 선형 보간), 정책 ID `upper-body-neck-e19-v1-<해시>`). 좌우 균형(2026-11-25, 어깨 점수를 대신함): 고개 기울기(머리 행렬 roll)와 양 어깨가 또렷하면 어깨선 기울기 중 보정 때보다 더 기운 각도를 3°/18° → 100/0점으로 환산(설정의 좌우 균형 민감도 10–100%가 두 각도를 바꿈, `balancePolicy`), 정책 ID `upper-body-balance-v1-<해시>`(50%가 아니면 `:s<값>`) |
+| `front/src/features/posture/evaluation.ts` | 측정한 점수를 정수로 만들어 유효 시간 가중 평균·연속 관찰·기준 이탈 구간을 집계하는 순수 함수 |
 | `front/src/utils/apiClient.ts`, `authStore.ts` | API 주소·JWT 세션 보관·401 처리, 서버 회원가입/로그인/계정 변경(가입·이메일 변경 전 이메일 인증 코드), 이메일로 아이디 찾기·비밀번호 재설정(`pages/FindId.tsx`, `FindPassword.tsx`) |
 | `database/contracts.ts`, `keyboard.ts`, `eye.ts`, `eyeRecorder.ts`, `recorder.ts`, `aggregation.ts` | 자세·키보드 직렬화 계약·순수 집계. 프론트와 서버가 같은 검증기를 사용 |
-| `front/src/features/records/` | 저장 배치/실패 재시도·HTTP 기록 API·조회 상태·목/어깨 표시 어댑터. 측정의 마지막 배치가 저장되면 `refresh.ts`가 신호를 보내고 `useRecordQuery`가 열린 화면(홈·통계·학습이력)을 이전 값을 유지한 채 다시 불러옴. AI/의학 예시는 별도 컴포넌트 |
-| `front/src/pages/Statistics.tsx`, `front/src/features/statistics/` | 통계(7/30일, 직전 같은 길이 기간 비교, 상체·키보드·안구 탭). `period.ts`가 세 출처 응답으로 기간 값(상체의 시간대별 점수·기준 이탈이 잦은 시간 포함)을 계산하는 순수 함수, `useStatisticsData.ts`가 불러옴. 키보드 탭은 `features/keyboard/KeyboardStatistics.tsx`(계산은 키보드 담당). [설계](superpowers/specs/2026-10-06-stats-history-redesign-design.md) |
-| `front/src/pages/LearningHistory.tsx`, `front/src/features/history/` | 학습이력(주간·월간 달력, 시작일별 기록 줄(2026-11-25부터 최신순), 오른쪽 상세, 기록 없는 날). `calendar.ts`가 달력·기록 줄·앞뒤 기록을 계산하고 `currentPolicies.ts`가 "이전 기준"을 판단. 세 모드의 세션 상세를 여기서 봄(키보드는 `KeyboardRecordDetail`) |
-| `front/src/pages/Settings.tsx`, `front/src/features/settings/` | 설정. 대시보드와 같은 카드 격자(계정, 비밀번호·이메일, 화면 테마, 알림, 상체·안구·키보드 모드 카드, 데이터 관리). `parts.tsx`가 카드·입력 캡션·구분 버튼·스위치·슬라이더·− 값 + 단계 버튼(`Stepper`)·입력 창(`Modal`)을 제공함. `AccountSecurity.tsx`는 등록 이메일을 보여 주고, 이메일 변경(새 주소로 받은 인증 코드 → 현재 비밀번호)과 비밀번호 재설정(등록 이메일의 코드 확인 → 새 비밀번호)을 창으로 엶. 재설정 단계는 `hooks/usePasswordReset.ts`를 로그인 화면의 비밀번호 재설정(`pages/FindPassword.tsx`)과 함께 씀. `features/keyboard/KeyboardSettings.tsx`는 기존 UI와 관찰 동작을 유지하며 격자 배치만 맞춤. `preferences.ts`가 모드별 민감도(상체 자세 무너짐 10–100%, 안구 깜빡임 낮음/보통/높음)를 이 기기에 저장하고, `MonitoringProvider`가 상체 실행을 시작할 때 읽어 그 실행의 습관·깜빡임 정책에 고정. 테마·알림도 바꾸는 즉시 저장. 알림 켜기·반복 간격·소리는 `features/notifications/`에서 자세·키보드·깜빡임 경고에 공통 적용함. 2026-11-25부터 알림 카드의 "알림 기준"에 상체(목·어깨 공통)와 키보드가 각각 "N점 이하 N초 유지 시" 두 줄로 있고(기본 70점·3초), 상체 카드의 경고 점수 슬라이더는 없앰. 측정 산식은 바꾸지 않음. Windows 네이티브 알림은 신뢰 주 창 IPC를 거쳐 Electron main에서 표시([규칙](monitoring.md#windows-자세-경고-알림)) |
+| `front/src/features/records/` | 저장 배치/실패 재시도·HTTP 기록 API·조회 상태·목/좌우 균형 표시 어댑터. 측정의 마지막 배치가 저장되면 `refresh.ts`가 신호를 보내고 `useRecordQuery`가 열린 화면(홈·통계·학습이력)을 이전 값을 유지한 채 다시 불러옴. AI/의학 예시는 별도 컴포넌트 |
+| `front/src/pages/Statistics.tsx`, `front/src/features/statistics/` | 통계(7/30일, 직전 같은 길이 기간 비교, 상체·키보드·안구 탭). `period.ts`가 세 출처 응답으로 기간 값(상체의 시간대별 점수·기준 이탈이 잦은 시간 포함)을 계산하는 순수 함수(상체는 점수 정책으로만 묶어 기준 이탈 규칙이 다른 기록도 함께 셈, `dashboard/summary.ts`의 `latestPolicyGroups`), `useStatisticsData.ts`가 불러옴. 키보드 탭은 `features/keyboard/KeyboardStatistics.tsx`(계산은 키보드 담당). [설계](superpowers/specs/2026-10-06-stats-history-redesign-design.md) |
+| `front/src/pages/LearningHistory.tsx`, `front/src/features/history/` | 학습이력(주간·월간 달력, 시작일별 기록 줄(2026-11-25부터 최신순), 오른쪽 상세, 기록 없는 날). `calendar.ts`가 달력·기록 줄·앞뒤 기록을 계산하고 `currentPolicies.ts`가 "이전 기준"을 판단. 2026-11-25부터 마지막 저장이 3분 넘게 지난 `running` 기록(앱이 마지막 저장 없이 꺼짐)은 "중단됨"으로 봄(`dashboard/summary.ts`의 `STALE_RUNNING_MS`). 오른쪽 상세(`RecordDetail.tsx`)는 세 모드가 같은 틀: 머리줄(모드·시각·상태) → 상자 없는 숫자 3–4개(`detail.ts`의 `detailStats`, 기록 줄 자료만 씀) → 그림 하나(상체 분별 목·좌우 균형 점수, 안구 분별 깜빡임 빈도, 키보드는 `KeyboardRecordDetail`의 키 히트맵·선택 키) |
+| `front/src/pages/Settings.tsx`, `front/src/features/settings/` | 설정. 대시보드와 같은 카드 격자(계정, 비밀번호·이메일, 화면 테마, 알림, 상체 측정 기준, 데이터 관리, 키보드·승인 앱 관찰 순서. 2026-11-25부터 깜빡임 민감도는 따로 카드 없이 상체 측정 기준 카드 안에 있음). `parts.tsx`가 카드·입력 캡션·구분 버튼·스위치·슬라이더·− 값 + 단계 버튼(`Stepper`)·입력 창(`Modal`)을 제공함. `AccountSecurity.tsx`는 등록 이메일을 보여 주고, 이메일 변경(새 주소로 받은 인증 코드 → 현재 비밀번호)과 비밀번호 재설정(등록 이메일의 코드 확인 → 새 비밀번호)을 창으로 엶. 재설정 단계는 `hooks/usePasswordReset.ts`를 로그인 화면의 비밀번호 재설정(`pages/FindPassword.tsx`)과 함께 씀. `features/keyboard/KeyboardSettings.tsx`는 기존 UI와 관찰 동작을 유지하며 격자 배치만 맞춤. `preferences.ts`가 모드별 민감도(좌우 균형 10–100%, 깜빡임 낮음/보통/높음)를 이 기기에 저장하고, `MonitoringProvider`가 상체 실행을 시작할 때 읽어 그 실행의 좌우 균형·깜빡임 정책에 고정. 2026-11-25에 자세 무너짐 민감도 슬라이더 자리를 좌우 균형 민감도로 바꿨고, 기준 이탈 횟수는 목·좌우 균형 모두 알림 카드의 상체 "N점 이하 N초"로 셈(상체 시작 때 함께 읽어 그 실행 동안 고정, `evaluation.ts`의 `habitRule`). 테마·알림도 바꾸는 즉시 저장. 알림 켜기·반복 간격·소리는 `features/notifications/`에서 자세·키보드·깜빡임 경고에 공통 적용함. 2026-11-25부터 알림 카드의 "알림 기준"에 상체(목·좌우 균형 공통)와 키보드가 각각 "N점 이하 N초 유지 시" 두 줄로 있고(기본 70점·3초), 상체 카드의 경고 점수 슬라이더는 없앰. 측정 산식은 바꾸지 않음. Windows 네이티브 알림은 신뢰 주 창 IPC를 거쳐 Electron main에서 표시([규칙](monitoring.md#windows-자세-경고-알림)) |
 | `front/src/pages/AiReview.tsx`, `front/src/features/ai-review/` | AI 총평(별도 메뉴 `/ai-review`, 최종 위치 미정). 통계와 같은 기간 수치를 `input.ts`가 요청 형태로 바꾸고 보내기 전에 모두 표시하며, `ReviewCards.tsx`가 총평·잘한 점·개선할 점을 표시. 저장하지 않음. [안내](ai-review.md) |
 | `front/src/features/hospitals/` | 주변 병원 찾기(AI 총평 화면 맨 아래, 점수·총평과 연결하지 않음). 진료과와 동네·주소 또는 약 1km로 반올림한 현재 위치로 `GET /api/hospitals`를 부르고, `kakaoMap.ts`가 불러온 카카오 지도 SDK에 마커와 목록을 함께 표시. [안내](nearby-hospitals.md) |
-| `front/src/features/keyboard/KeyboardRecordDetail.tsx`, `KeyboardKeyExploration.tsx`, `keyExploration.ts` | 키보드 세션 상세 표시, 통계/이력 공용 히트맵·선택 키 표시, DOM 없는 키별 집계·연습 순위. 카메라/실시간 점수 정책을 소유하지 않음 |
+| `front/src/features/keyboard/KeyboardRecordDetail.tsx`, `KeyboardKeyExploration.tsx`, `keyExploration.ts` | 학습이력 키보드 세션의 키 히트맵(카드 없이 상세 패널 위), 통계/이력 공용 히트맵·선택 키 표시, DOM 없는 키별 집계. 카메라/실시간 점수 정책을 소유하지 않음 |
 | `server/src/server.ts`, `config.ts` | 환경 검증 후 서버 시작. JWT 비밀값 자동 기본값 없음. AI 총평 키(`ANTHROPIC_API_KEY`)는 선택 |
 | `server/src/app.ts`, `http.ts` | API 조립과 공통 비동기 오류 응답 |
 | `server/src/validation.ts` | HTTP 입력을 런타임에서 검사 |
@@ -103,26 +102,26 @@ Electron 개발 앱의 키보드 모드는 로컬 Python 프로세스를 자동 
 
 ## 측정 화면의 계약
 
-홈 실행 카드는 `상체 / 키보드` 두 개입니다. 상체는 목·어깨·깜빡임을 한 카메라로 분석하며 시작은 화면 이동 없이 작동합니다. 두 카메라와 일시정지를 독립적으로 유지하고 카드의 설정 아이콘은 카메라 설정 창을 엽니다. 통계의 저장 부위 탭 `상체 / 키보드 / 안구`와 기존 기록/이력은 보존합니다. 통계는 7/30일과 직전 기간을 비교하고 최신 정책 묶음만 사용합니다. 실시간 점수 그래프는 홈 카드 아래에서 목·어깨 또는 키보드를 표시하며 안구 점수는 만들지 않습니다. [모니터링](monitoring.md)
+홈 실행 카드는 `상체 / 키보드` 두 개입니다. 상체는 목·좌우 균형·깜빡임을 한 카메라로 분석하며 시작은 화면 이동 없이 작동합니다. 두 카메라와 일시정지를 독립적으로 유지하고 카드의 설정 아이콘은 카메라 설정 창을 엽니다. 통계의 저장 부위 탭 `상체 / 키보드 / 안구`와 기존 기록/이력은 보존합니다. 통계는 7/30일과 직전 기간을 비교하고 최신 정책 묶음만 사용합니다. 실시간 점수 그래프는 홈 카드 아래에서 목·좌우 균형 또는 키보드를 표시하며 안구 점수는 만들지 않습니다. [모니터링](monitoring.md)
 
-상체 계산은 `AppLayout → MonitoringProvider → PostureMonitor → useWebcam/useMediaPipe → 5초 보정(어깨 기준 calibration + E19) → observation → 목: E19 추론·One Euro / 어깨: scoring → evaluation → MonitorSnapshot` 순서입니다. `EyeMonitor(shared) → Face Landmarker → measurement`는 같은 변환 캔버스를 빌려 깜빡임을 계산하며 별도 카메라를 열거나 상체 트랙을 종료하지 않습니다. 같은 얼굴 결과(478점·머리 행렬)를 캡처 시각·영상 시각과 함께 `MonitoringProvider`의 얼굴 버퍼로 넘기고, `PostureMonitor`가 같은 영상 프레임의 포즈와 짝지어 E19에 넣습니다. 홈 카드의 `PostureMetrics`가 공통 상태를, 카메라 화면 아래 띠(`CameraGuidance`)가 안내를 표시합니다. 기준 다시 잡기는 스트림을 유지하며 자세 기준/기록 구간을 새로 수집하고 깜빡임 누적은 보존합니다. 일시정지는 관측 연속성을 끊고 기준·평균을 유지하며, 중지는 트랙·모델을 해제하고 종료 배치를 보냅니다. 페이지 이동은 계속 관찰합니다. 기존 안구 서버 집계와 통계·이력은 유지하며 휴식 UI는 제거했습니다.
+상체 계산은 `AppLayout → MonitoringProvider → PostureMonitor → useWebcam/useMediaPipe → 5초 보정(자세 기준 calibration + E19 + 좌우 균형 기준) → observation(안내 이유·관찰 시간 표시) → 목: E19 추론·One Euro / 좌우 균형: 고개·어깨선 각도·One Euro → evaluation → MonitorSnapshot` 순서입니다. `EyeMonitor(shared) → Face Landmarker → measurement`는 같은 변환 캔버스를 빌려 깜빡임을 계산하며 별도 카메라를 열거나 상체 트랙을 종료하지 않습니다. 같은 얼굴 결과(478점·머리 행렬)를 캡처 시각·영상 시각과 함께 `MonitoringProvider`의 얼굴 버퍼로 넘기고, `PostureMonitor`가 같은 영상 프레임의 포즈와 짝지어 E19에 넣습니다. 홈 카드의 `PostureMetrics`가 공통 상태를, 카메라 화면 아래 띠(`CameraGuidance`)가 안내를 표시합니다. 기준 다시 잡기는 스트림을 유지하며 자세 기준/기록 구간을 새로 수집하고 깜빡임 누적은 보존합니다. 일시정지는 관측 연속성을 끊고 기준·평균을 유지하며, 중지는 트랙·모델을 해제하고 종료 배치를 보냅니다. 페이지 이동은 계속 관찰합니다. 기존 안구 서버 집계와 통계·이력은 유지하며 휴식 UI는 제거했습니다.
 
 키보드는 `MonitoringProvider → KeyboardMonitor → loopback Python service → runtime adapter → finger policy → aggregate recording` 순서이며 홈 키보드 카드가 화면입니다. Electron main은 빈 로컬 포트와 세션 토큰으로 개발 시 `.venv` Python을, 설치 앱에서는 `resources/keyboard/moti-keyboard.exe`를 실행합니다. 설치 분석기는 Python·CPU 추론 라이브러리·모델·키 맵을 함께 배포하며 사용자에게 별도 Python 설치를 요구하지 않습니다. 기본 입력은 Moti 화면의 물리 `code`이고 설정에서 승인한 일반 앱은 시작 때 함께 관찰합니다. 빈 승인 목록은 Moti 관찰만 실행합니다. 일시정지는 입력/프레임·승인 앱 관찰을 멈추고 서버의 임시 프레임/입력 큐를 비우며 재개 때 맵을 새로 확인하고 기존 세션 집계를 이어갑니다. 승인 경로·foreground 권한과 미승인·관리자·확인 불가 앱 제외 경계는 유지합니다.
 
-안구 v3는 3초간 열린 양쪽 눈·거리 기준을 수집하고 안내된 양안 깜빡임 3회로 개인별 판정 기준을 정합니다. `blinkCalibration.ts`가 순수 기준 수집·양안 주기를, `EyeCalibrationGuide.tsx`가 홈 상체 카드에서 보정 진행을 안내합니다. 민감도는 설정 화면의 안구 카드에서 고르고(기본 보통), 공통 모니터링 런타임이 상체 시작 때 읽어 측정·저장에 같은 값을 쓰며 그 실행 동안 고정합니다. 새 기록은 `eye-habits-v3:low|normal|high`이고 기존 v2 및 다른 민감도와 합산하지 않습니다. 개인 눈 기준은 세션 메모리에만 두며, 교정 동작은 측정 횟수·유효 시간에서 제외합니다. 기준 재수집과 짧은 프레임의 보호 조건은 안구 가이드를 따릅니다.
+안구 v3는 3초간 열린 양쪽 눈·거리 기준을 수집하고 안내된 양안 깜빡임 3회로 개인별 판정 기준을 정합니다. `blinkCalibration.ts`가 순수 기준 수집·양안 주기를, `EyeCalibrationGuide.tsx`가 홈 상체 카드에서 보정 진행을 안내합니다. 민감도는 설정 화면의 상체 측정 기준 카드에서 고르고(기본 보통), 공통 모니터링 런타임이 상체 시작 때 읽어 측정·저장에 같은 값을 쓰며 그 실행 동안 고정합니다. 새 기록은 `eye-habits-v3:low|normal|high`이고 기존 v2 및 다른 민감도와 합산하지 않습니다. 개인 눈 기준은 세션 메모리에만 두며, 교정 동작은 측정 횟수·유효 시간에서 제외합니다. 기준 재수집과 짧은 프레임의 보호 조건은 안구 가이드를 따릅니다.
 
 Python은 손끝 후보와 프레임 시간차를 반환하고 앱의 `ansi-qwerty-touch:2.0.0` 정책이 100·70·0/보류를 결정합니다. 손 가림을 직접 감지하는 모델은 없으며 관측 부족·가까운 후보·시간 차이를 보류 근거로 사용합니다. 손가락 일관성은 별도 지표이며 가산점이 아닙니다. 원문·입력 순서·영상은 저장하지 않고 날짜·키·상황·손가락·판정 횟수만 서버에 저장합니다. 정책별 통계·히트맵은 Statistics의 키보드 탭에, 세션별 키 탐색 상세는 학습이력에 있습니다. 두 화면은 히트맵/선택 키 컴포넌트를 공유합니다. 학습이력 응답에 키보드 요약이 추가되어도 학습이력 화면(모든 정책)은 키보드 줄을 키보드 통계 출처에서 한 번만 만듭니다. crop·자유 회전·필터는 미리보기와 분석에 동일하게 적용하고 변경 시 기존 맵과 프레임을 폐기합니다. 세부 산식/품질 한계는 [키보드 계약](../front/src/features/keyboard/README.md), 저장은 [database](../database/README.md)를 따릅니다.
 
-`MonitorSnapshot`은 준비/수집/관찰/관찰 불가/오류 상태와 수집 진행률, 부위별 편차, 유효 관찰 시간, 목·어깨 각각의 현재/평균 점수와 보호 상태·습관 집계·정책 버전, E19 보정 단계(준비·기록·계산·실패 이유·남은 초)를 전달합니다. 추정 CVA는 따로 싣지 않고 화면이 현재 목 점수에서 환산합니다. 사용자의 자세가 의학적으로 올바른지 판단하는 타입이 아닙니다.
+`MonitorSnapshot`은 준비/수집/관찰/관찰 불가/오류 상태와 수집 진행률, 부위별 편차, 유효 관찰 시간, 목·좌우 균형 각각의 현재/평균 점수와 습관 집계·정책 버전, E19 보정 단계(준비·기록·계산·실패 이유·남은 초)를 전달합니다. 추정 CVA는 따로 싣지 않고 화면이 현재 목 점수에서 환산합니다. 사용자의 자세가 의학적으로 올바른지 판단하는 타입이 아닙니다.
 
 - 2D 좌표는 이미지 가로/세로 픽셀로 환산한 뒤 어깨 너비 대비 비율을 계산합니다.
-- 측정 시작·기준 다시 잡기·카메라 구도 변경 때 3초 준비 뒤 5초 동안 기준 자세를 기록합니다. 같은 5초에서 E19 보정과 어깨 기준(3초 이상 연속 안정 구간의 중앙값)을 만들고, 하나라도 실패하면 이유를 3초 안내한 뒤 다시 합니다. 수집 시간은 잠정 설정이며 점수/건강 임계값이 아닙니다. [보정 계약](calibration.md)
+- 측정 시작·기준 다시 잡기·카메라 구도 변경 때 3초 준비 뒤 5초 동안 기준 자세를 기록합니다. 같은 5초에서 E19 보정과 자세 기준(3초 이상 연속 안정 구간의 중앙값)을 만들고, 하나라도 실패하면 이유를 3초 안내한 뒤 다시 합니다. 성공하면 같은 프레임의 고개·어깨선 각도 중앙값을 좌우 균형 기준으로 씁니다. 수집 시간은 잠정 설정이며 점수/건강 임계값이 아닙니다. [보정 계약](calibration.md)
 - 얼굴·어깨가 안 보이거나 신뢰도가 낮으면 수집을 다시 시작합니다.
-- 기준 확보 후 관측이 사라지거나 고개 회전 비율이 0.15를 초과하면 어깨의 현재 값과 유효 관찰 시간의 증가를 중단합니다(목은 아래 E19 조건). 이를 휴식이나 정상으로 바꾸지 않습니다. 내부의 마지막 점수는 보존해 재개 시 이어갑니다.
+- 기준 확보 후 관측이 사라지거나 고개 회전 비율이 0.15를 초과하면 안내 띠에 이유를 보이고 화면의 관찰 시간 증가를 멈춥니다. 점수는 목·좌우 균형 각자의 측정 조건(아래)을 따릅니다. 이를 휴식이나 정상으로 바꾸지 않습니다.
 - 관찰 시간은 단조 캡처 시각의 양수 간격 중 500ms 이하만 더합니다. 중복·역행 시각과 누락은 연속성을 끊고 같은 구간을 다시 더하지 않습니다.
-- 2026-11-25부터 목·어깨 현재 점수는 `evaluation.ts`가 반올림한 정수입니다. 화면·그래프·알림과 서버에 보내는 점수×시간 합계가 모두 이 정수를 쓰고, 움직임 유지·감점·복귀에 쓰는 내부 값(`lastScore`)만 소수를 유지합니다(프레임마다 반올림하면 0.5점 미만 감점이 멈춤). 저장 계약·DB 열은 그대로입니다.
-- 목 점수는 거북목 모델 E19의 목 부하 점수(보정 자세보다 머리 무게가 앞으로 실린 정도, 150 % = 100점)를 One Euro 필터로 다듬어 100에서 뺀 값입니다. 움직임 보호·유예·복귀 확인은 적용하지 않고, 어깨의 관측 조건과 따로 E19 자체 검사(고개 좌우 25° 등)만 따르며 관찰 시간도 따로 셉니다. 목·어깨 둘 다 못 잴 때만 관찰 불가입니다. [평가](evaluation.md#목-점수-e19-2026-11-23)
-- 어깨의 “가중 편차”는 기울기·귀-어깨 간격 변화의 절댓값 가중합이며 상하 항만 1.25배 강화합니다. 3%/18%를 100/0점으로 선형 환산하며 회전 판정 보류·움직임 동결·2초 유예·점진 감점·1초 복귀 확인을 적용합니다. 첫 정지 유효 관측은 실제 원점수로 시작하며 보호된 점수로 시간 가중 평균과 서버 기록을 계산합니다.
+- 2026-11-25부터 목·좌우 균형 현재 점수는 `evaluation.ts`가 반올림한 정수입니다. 화면·그래프·알림과 서버에 보내는 점수×시간 합계가 모두 이 정수를 씁니다. 저장 계약·DB 열은 그대로입니다.
+- 목 점수는 거북목 모델 E19의 목 부하 점수(보정 자세보다 머리 무게가 앞으로 실린 정도, 150 % = 100점)를 One Euro 필터로 다듬어 100에서 뺀 값입니다. 움직임 보호·유예·복귀 확인은 적용하지 않고, E19 자체 검사(고개 좌우 25° 등)만 따르며 관찰 시간도 따로 셉니다. 목·좌우 균형 둘 다 못 잴 때만 관찰 불가입니다. [평가](evaluation.md#목-점수-e19-2026-11-23)
+- 좌우 균형(2026-11-25, 어깨 점수를 대신함)은 고개 기울기(같은 프레임 얼굴 분석의 머리 행렬 roll. 고개를 좌우로 25° 넘게 돌리면 재지 않음)와, 양 어깨 가시성이 0.7 이상이면 어깨선 기울기 중 보정 때보다 더 기운 각도를 씁니다. 좌우 균형 민감도 50%(기본)에서 3° 이내 100점, 18° 이상 0점, 사이는 직선이며(민감도를 올리면 두 각도가 작아짐) 목과 같은 One Euro 필터로 다듬습니다. 고개를 못 재면 어깨만으로 매기지 않고 관찰 시간도 세지 않습니다. 기준 이탈 편차는 목과 같은 (100 − 점수)/200입니다. 3°·18°·0.7은 잠정 설정이며 진단 기준이 아닙니다. [평가](evaluation.md#좌우-균형-점수-2026-11-25)
 - 관측률·연속 관찰·지속된 기준 이탈의 기존 집계/저장 계약은 유지합니다. 새 모니터링 화면은 현재 값·세션 평균·추이를 중심으로 표시합니다. 기준 이탈과 오사용·휴식·질환 판정을 구분합니다. 산식·초기 설정·검증 한계는 [evaluation.md](evaluation.md)를 따릅니다.
 - 카메라 위치를 물리적으로 옮기면 다시 수집해야 합니다. 장치 ID/해상도 변경은 자동 감지하지만 모든 물리적 이동을 자동 판별하지는 못합니다.
 

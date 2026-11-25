@@ -14,7 +14,7 @@ type Pair = { current: number | null; previous: number | null };
 export interface ReviewInput {
   days: 7 | 30;
   upper: {
-    neck: Pair; shoulder: Pair; measuredMinutes: number; sessions: number;
+    neck: Pair; balance: Pair; measuredMinutes: number; sessions: number;
     deviations: number; deviationRate: number | null; validRate: number | null;
   } | null;
   eye: { blinkRate: number | null; previousBlinkRate: number | null; validMinutes: number } | null;
@@ -49,7 +49,7 @@ export function parseReviewInput(body: unknown): ReviewInput {
   const days = input.days === 7 || input.days === 30 ? input.days : null;
   if (!days) throw new HttpError(400, '기간은 7일 또는 30일이어야 합니다.');
   const upper = section(input.upper, item => ({
-    neck: pair(item.neck, '목 점수'), shoulder: pair(item.shoulder, '어깨 점수'),
+    neck: pair(item.neck, '목 점수'), balance: pair(item.balance, '좌우 균형 점수'),
     measuredMinutes: minutes(item.measuredMinutes, '측정 시간'),
     sessions: integer(item.sessions, '측정 횟수', 0, 100_000),
     deviations: integer(item.deviations, '기준 이탈 횟수', 0, 10_000_000),
@@ -75,7 +75,7 @@ const SYSTEM_PROMPT = `당신은 자세·타자 습관 기록 앱 Moti의 코치
 
 사용자 메시지의 JSON은 앱이 계산한 기간 집계입니다. 계산은 프로그램이 끝냈고, 당신은 그 수치를 해석해 설명합니다.
 - days: 기간 길이(7 또는 30일). previous가 붙은 값은 바로 앞 같은 길이 기간의 값입니다.
-- upper: 상체 측정. neck·shoulder는 0~100점 평균 점수로, 측정을 시작할 때 사용자가 잡은 자기 기준 자세와 얼마나 비슷했는지 나타냅니다. 실제 목 각도나 몸 상태가 아닙니다. measuredMinutes는 측정 시간(분), sessions는 측정 횟수, deviations는 기준 자세에서 2초 이상 벗어난 횟수, deviationRate는 제대로 관찰한 시간 중 기준에서 벗어나 있던 시간 비율(%), validRate는 측정 시간 중 얼굴과 어깨가 보여 실제로 분석한 시간 비율(%)입니다.
+- upper: 상체 측정. neck(목 자세 점수)·balance(좌우 균형 점수)는 0~100점 평균 점수로, 측정을 시작할 때 사용자가 잡은 자기 기준 자세와 얼마나 비슷했는지 나타냅니다. neck은 머리가 앞으로 나간 정도, balance는 고개와 어깨선이 옆으로 기운 정도를 봅니다. 실제 목 각도나 몸 상태가 아닙니다. measuredMinutes는 측정 시간(분), sessions는 측정 횟수, deviations는 기준 자세에서 2초 이상 벗어난 횟수, deviationRate는 제대로 관찰한 시간 중 기준에서 벗어나 있던 시간 비율(%), validRate는 측정 시간 중 얼굴과 어깨가 보여 실제로 분석한 시간 비율(%)입니다.
 - eye: 깜빡임 관찰. blinkRate는 제대로 관찰한 시간 기준 분당 깜빡임 횟수, validMinutes는 제대로 관찰한 시간(분)입니다. 깜빡임 횟수는 점수가 아니며 건강 상태를 판단하는 근거가 아닙니다.
 - keyboard: 타자 손가락 연습. score는 권장 손가락으로 누른 정도를 0~100으로 나타낸 훈련 점수, coverage는 손가락을 판정할 수 있었던 입력 비율(%), consistency는 같은 키를 같은 손가락으로 누른 비율(%), judged는 판정한 입력 수, frequentKeys는 권장과 다른 손가락을 자주 쓴 키(KeyboardEvent.code)와 그 키에서 다른 손가락을 쓴 비율(%)입니다.
 - 값이 null이거나 영역 전체가 null이면 그 기간에 측정하지 않았거나 표본이 부족한 것입니다.

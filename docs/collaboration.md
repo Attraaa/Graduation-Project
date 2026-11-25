@@ -23,16 +23,15 @@ flowchart TD
 | 작업 | 담당 경로 | 검증 |
 | --- | --- | --- |
 | 목 점수(거북목 모델 E19) | 정책 `front/src/features/posture/modes/turtle.ts`, 모델 실행·보정 `front/src/features/posture/e19/`, 모델 패키지 `front/public/models/fhp-e19`와 CVA 환산표 `front/src/features/posture/e19/cva_map.json`(둘 다 숫자 변경 금지) | `e19-runtime.test.mjs`, `fhp-e19-parity.test.mjs`(fixtures는 Git 제외) |
-| 어깨 점수 지표·감점 기준 | `front/src/features/posture/modes/shoulder.ts` | 같은 테스트의 어깨 모드·격리 사례 |
-| 모든 상체 점수에 공통인 산식 | `front/src/features/posture/scoring.ts` | 양 모드 경계·누락·재현성 |
+| 좌우 균형 점수(2026-11-25, 어깨 점수를 대신함) | `front/src/features/posture/modes/balance.ts` | `posture-balance.test.mjs` |
 | 기준 수집·좌표 정의 | `front/src/features/posture/calibration.ts`, `observation.ts` | 수집/관측 회귀 검사, 실제 촬영 검증 |
 | 시간 평균·연속 관찰·기준 이탈 | `front/src/features/posture/evaluation.ts` | `posture-evaluation.test.mjs` |
 | 점수·습관 카드의 문구·디자인 | `front/src/features/posture/PostureMetrics.tsx`, 카메라 화면 안내 띠 `CameraGuidance.tsx`·`guidance.ts`(공통 띠 `features/session/GuidanceBand.tsx`) | `posture-metrics.test.mjs`, `session-ui.test.mjs`, 실제 화면 확인 |
 | 홈 시작·일시정지·재수집 | `front/src/features/session/MonitoringProvider.tsx`(카메라 설정 창의 기준/위치 다시 잡기 포함), `SessionActions.tsx`, `front/src/features/dashboard/ModeCards.tsx` | 두 모드 독립 상태, 이동 시 유지, 중지 시 해제 |
 | 카메라·모델 연결 | `front/src/components/PostureMonitor.tsx`, `front/src/hooks/` | 생명주기 검사와 실기기 검증 |
-| 공통 틀·타이머·장치 선택 | `front/src/features/session/` | 목·어깨·키보드 화면 모두 확인 |
+| 공통 틀·타이머·장치 선택 | `front/src/features/session/` | 목·좌우 균형·키보드 화면 모두 확인 |
 
-모드별 상세 화면(`LearningSession.tsx`)은 2026-11-21에 없앴습니다. 새 모드는 홈 카드(`ModeCards.tsx`)와 `MonitoringProvider`에 연결합니다. 현재 목·어깨는 같은 카메라·랜드마크 추론과 상체 카드를 재사용합니다. 향후 전혀 다른 관측기가 필요할 때 해당 모드의 분석 모듈을 추가하면 됩니다.
+모드별 상세 화면(`LearningSession.tsx`)은 2026-11-21에 없앴습니다. 새 모드는 홈 카드(`ModeCards.tsx`)와 `MonitoringProvider`에 연결합니다. 현재 목·좌우 균형은 같은 카메라·랜드마크 추론과 상체 카드를 재사용합니다. 향후 전혀 다른 관측기가 필요할 때 해당 모드의 분석 모듈을 추가하면 됩니다.
 
 React 상태도 책임에 맞춰 둡니다. 2026-10-10부터 `AppLayout`의 `MonitoringProvider`가 상체와 키보드의 시작/일시정지·결과 상태를 소유합니다. 홈 카드와 오버레이는 같은 상태를 표시하며 화면 이동으로 세션을 폐기하지 않습니다. 각 분석기의 `key={run}`은 해당 모드의 새 실행만 초기화합니다. 카메라 Provider에 장치별 key를 두면 다른 모드까지 재설정될 수 있으므로 장치 선택은 내부 프로필을 갱신합니다. 상태 소유와 재설정 방식은 [React의 상태 공유](https://react.dev/learn/sharing-state-between-components), [상태 유지와 재설정](https://react.dev/learn/preserving-and-resetting-state) 계약을 따릅니다.
 
@@ -48,8 +47,8 @@ React 상태도 책임에 맞춰 둡니다. 2026-10-10부터 `AppLayout`의 `Mon
 
 ```text
 README와 docs/collaboration.md, docs/evaluation.md를 읽어.
-담당 파일은 front/src/features/posture/modes/shoulder.ts와 관련 점수 테스트야.
-어깨 모드의 [변경 요구]를 구현해. 목 정책·카메라·공통 화면은 변경하지 마.
+담당 파일은 front/src/features/posture/modes/balance.ts와 관련 점수 테스트야.
+좌우 균형 모드의 [변경 요구]를 구현해. 목 정책·카메라·공통 화면은 변경하지 마.
 점수 정책 버전을 올리고 경계·누락·목 모드 비영향 테스트를 실행해.
 다른 파일의 계약 변경이 필요하면 먼저 이유를 알려줘.
 ```
@@ -58,7 +57,7 @@ README와 docs/collaboration.md, docs/evaluation.md를 읽어.
 
 ## 기록 담당 경계 (2026-09-19, 2026-10-03 서버 저장으로 변경)
 
-목·어깨 기록은 `front/src/features/statistics/UpperPanel.tsx`와 `front/src/features/history/RecordDetail.tsx`에서 표시합니다. `database/contracts.ts`(버전·직렬화), `recorder.ts`(시간 분할), `aggregation.ts`(순수 합산), `front/src/features/records/api.ts`(HTTP), `server/src/routes/records.ts`·`repositories/records.ts`(API·MySQL)는 공통 연결 담당자가 조정합니다. `database/` 계약을 바꾸면 서버도 같은 검증기를 쓰므로 서버를 다시 빌드·배포해야 합니다. 기록 기능이 점수/관측/카메라 정책을 소유하지 않습니다. 저장 경로와 복구·삭제 계약 변경은 [database/README.md](../database/README.md)와 해당 테스트를 함께 갱신합니다.
+목·좌우 균형 기록은 `front/src/features/statistics/UpperPanel.tsx`와 `front/src/features/history/RecordDetail.tsx`에서 표시합니다. `database/contracts.ts`(버전·직렬화), `recorder.ts`(시간 분할), `aggregation.ts`(순수 합산), `front/src/features/records/api.ts`(HTTP), `server/src/routes/records.ts`·`repositories/records.ts`(API·MySQL)는 공통 연결 담당자가 조정합니다. `database/` 계약을 바꾸면 서버도 같은 검증기를 쓰므로 서버를 다시 빌드·배포해야 합니다. 기록 기능이 점수/관측/카메라 정책을 소유하지 않습니다. 저장 경로와 복구·삭제 계약 변경은 [database/README.md](../database/README.md)와 해당 테스트를 함께 갱신합니다.
 
 ## 안구 모드 담당 경계
 
@@ -66,6 +65,6 @@ README와 docs/collaboration.md, docs/evaluation.md를 읽어.
 
 ## 상체 통합 담당 경계 (2026-10-02)
 
-사용자가 선택하는 상체 화면은 `upper_body` 하나이며 목·어깨를 동시에 계산합니다. `modes/turtle.ts`(2026-11-23부터 E19 목 정책)와 `shoulder.ts`는 독립 부위 정책으로 유지하고, 어깨 조정값은 `scoreSettings.ts` 상단에 모읍니다. 한 카메라의 관측을 두 evaluation 상태와 두 저장 sink에 전달합니다. 가중치·상하 gain·보호 설정 해시가 정책 ID에 포함되며, 공식 변경 시 정책 버전도 올립니다. 현재 회전 보류·상하 양방향 감도·복귀 확인은 점수/습관 v3이고 기준 스키마는 v2입니다. 기존 저장 부위 키와 데이터는 보존합니다.
+사용자가 선택하는 상체 화면은 `upper_body` 하나이며 목·좌우 균형을 동시에 계산합니다. `modes/turtle.ts`(2026-11-23부터 E19 목 정책)와 `modes/balance.ts`(2026-11-25부터, 어깨 `shoulder.ts`를 대신함)는 독립 부위 정책이고 각자 조정값을 파일 맨 위에 둡니다. 한 카메라의 관측을 두 evaluation 상태와 두 저장 sink에 전달합니다. 조정값 해시가 정책 ID에 포함되며, 공식 변경 시 정책 버전도 올립니다. 습관 정책은 v3, 기준 스키마는 v2입니다. 저장 부위 키는 `turtle`/`balance`이고 이전 `shoulder` 기록은 쓰지 않습니다.
 
 안구 저장 통합은 `database/eye.ts`, `eyeRecorder.ts`, `front/src/features/eye/recording.ts`와 공통 HTTP 저장소/API가 소유합니다. 안구 표본/순수 정책과 서버 인증/SQL을 분리하며 서버 추가 테이블은 `server/migrations/003_eye_records.sql`을 따릅니다. 안구 통계·학습이력은 기존 상체·키보드 화면과 함께 유지합니다.

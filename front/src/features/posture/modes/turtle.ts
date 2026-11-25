@@ -9,7 +9,7 @@ import cvaMap from '../e19/cva_map.json' with { type: 'json' };
  * 화면의 추정 CVA는 같은 목 부하를 각도로 바꾼 값이며(2026-11-24부터 부하 기준) 저장하지 않습니다.
  * 진단·임상 CVA가 아니라 보정 자세와 비교한 참고값입니다.
  */
-// 목의 '기준 이탈' 편차 = (100 − 목 점수) / 200. 기본 민감도(진입 0.15·복귀 0.10)에서 70점 이하 2초 → 이탈, 80점 이상 → 복귀.
+// 목의 '기준 이탈' 편차 = (100 − 화면의 정수 목 점수) / 200. 알림 기본값(70점 이하 3초)이면 진입 0.15·종료 0.10(80점 이상).
 export const NECK_DEVIATION_SCALE = 200;
 // 연구 도구와 같은 One Euro 설정(min_cutoff·beta는 패키지 config.json temporal.one_euro, dCutoff는 도구의 기본값).
 export const NECK_ONE_EURO = Object.freeze({ minCutoff: 0.5, beta: 0.01, dCutoff: 1.0 });
@@ -31,8 +31,8 @@ export const turtleScorePolicy = Object.freeze({
 
 /** 목 점수(0–100): E19 목 부하 점수를 100에서 뺍니다. */
 export const neckScore = (loadScore: number) => 100 - loadScore;
-/** 습관 집계(기준 이탈)에 쓰는 편차. */
-export const neckDeviation = (score: number) => (100 - score) / NECK_DEVIATION_SCALE;
+/** 습관 집계(기준 이탈)에 쓰는 편차. 알림과 같게 화면에 보이는 정수 점수로 셉니다. */
+export const neckDeviation = (score: number) => (100 - Math.round(score)) / NECK_DEVIATION_SCALE;
 /** 목 부하 L′(%, 0–150) = One Euro 후 목 부하 점수 × 1.5 = (100 − 목 점수) × 1.5. 0보다 작으면 0. */
 export const neckLoadPct = (score: number) => Math.max(0, (100 - score) * 1.5);
 /**

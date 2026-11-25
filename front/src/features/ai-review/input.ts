@@ -10,7 +10,7 @@ type Pair = { current: number | null; previous: number | null };
 export interface AiReviewInput {
   days: PeriodDays;
   upper: {
-    neck: Pair; shoulder: Pair; measuredMinutes: number; sessions: number;
+    neck: Pair; balance: Pair; measuredMinutes: number; sessions: number;
     deviations: number; deviationRate: number | null; validRate: number | null;
   } | null;
   eye: { blinkRate: number | null; previousBlinkRate: number | null; validMinutes: number } | null;
@@ -54,7 +54,7 @@ export function aiReviewInput(summary: StatisticsSummary, keyboard: KeyboardStor
     days,
     upper: upper.present ? {
       neck: { current: percent(upper.turtle.current), previous: percent(upper.turtle.previous) },
-      shoulder: { current: percent(upper.shoulder.current), previous: percent(upper.shoulder.previous) },
+      balance: { current: percent(upper.balance.current), previous: percent(upper.balance.previous) },
       measuredMinutes: minutes(upper.runMs), sessions: upper.sessions, deviations: upper.deviations,
       deviationRate: percent(upper.deviationRate), validRate: percent(upper.validRate),
     } : null,
@@ -75,7 +75,7 @@ const score = (pair: Pair) => pair.current === null ? '—'
 export function inputRows({ upper, eye, keyboard }: AiReviewInput): InputRow[] {
   const rows: InputRow[] = [];
   if (upper) rows.push({ mode: 'upper', name: '상체', text: [
-    `목 ${score(upper.neck)}`, `어깨 ${score(upper.shoulder)}`,
+    `목 ${score(upper.neck)}`, `좌우 균형 ${score(upper.balance)}`,
     `측정 ${minutesText(upper.measuredMinutes * 60_000)} · ${upper.sessions}회`,
     `기준에서 벗어남 ${upper.deviations}회 (시간 ${percentLabel(upper.deviationRate)})`,
     `제대로 측정 ${percentLabel(upper.validRate)}`,

@@ -145,7 +145,7 @@ CREATE TABLE record_owners (
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_bin;
 
--- 9. 상체 부위(turtle/shoulder) 기록 요약
+-- 9. 상체 부위(turtle/balance, 2026-11-25 전에는 shoulder) 기록 요약
 CREATE TABLE posture_records (
   id           VARCHAR(120) NOT NULL PRIMARY KEY,      -- 클라이언트가 만든 UUID
   user_id      INT          NOT NULL,

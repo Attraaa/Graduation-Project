@@ -1,7 +1,9 @@
 .keyboard-record-detail { container-type: inline-size; word-break: keep-all; }
 .keyboard-record-card { min-width: 0; border: 1px solid var(--color-border); border-radius: 16px; padding: 20px; background: var(--color-surface); }
 .keyboard-record-exploration { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
-.keyboard-record-summary, .keyboard-record-secondary { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+/* Learning history: the heatmap and the selected key sit on the detail panel, split by a line instead of cards of their own. */
+.keyboard-record-plain .keyboard-record-card { border: 0; border-radius: 0; padding: 0; background: none; }
+.keyboard-record-plain .keyboard-record-card + .keyboard-record-card { border-top: 1px solid var(--color-border); padding-top: 16px; }
 .keyboard-record-keys { display: grid; gap: 5px; max-width: 640px; margin-inline: auto; container: keyboard-heatmap / inline-size; }
 .keyboard-record-key-row { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 4px; }
 .keyboard-record-key-row:last-child { display: flex; justify-content: center; }
@@ -22,10 +24,7 @@
 }
 @container (min-width: 760px) {
   .keyboard-record-exploration { grid-template-columns: minmax(0, 1.65fr) minmax(260px, 1fr); }
-}
-@container (min-width: 640px) {
-  .keyboard-record-summary { grid-template-columns: minmax(0, 1.2fr) repeat(2, minmax(0, 1fr)); }
-  .keyboard-record-secondary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .keyboard-record-plain .keyboard-record-card + .keyboard-record-card { border-top: 0; padding-top: 0; border-left: 1px solid var(--color-border); padding-left: 16px; }
 }
 @container (max-width: 450px) {
   .keyboard-record-card { padding: 16px; }

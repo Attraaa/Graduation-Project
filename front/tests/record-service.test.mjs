@@ -24,7 +24,7 @@ test('renderer retries the same failed batch and close flushes records before ac
   // A still-active recording must also flush on close; failure must veto the close.
   fail();
   const nextAt = performance.now();
-  const activeSink = service.beginPostureRecording({ mode: 'shoulder', scorePolicyVersion: 'v1', habitPolicyVersion: 'h1', at: nextAt, epoch: 1800000060000 });
+  const activeSink = service.beginPostureRecording({ mode: 'balance', scorePolicyVersion: 'v1', habitPolicyVersion: 'h1', at: nextAt, epoch: 1800000060000 });
   activeSink.sample(nextAt, { validMs: 0, scoreTimeSum: 0, currentScore: 0, deviationMs: 0, deviationEpisodeCount: 0 });
   activeSink.sample(nextAt + 100, { validMs: 100, scoreTimeSum: 0, currentScore: 0, deviationMs: 0, deviationEpisodeCount: 0 });
   assert.equal(await closeHandler(), false);
@@ -35,7 +35,7 @@ test('renderer retries the same failed batch and close flushes records before ac
   assert.equal(db.detail('demo', failedCloseBatch.record.id).record.status, 'finished');
   // A single upper-body capture persists both components, including close/retry.
   const pairAt = performance.now();
-  for (const [mode, score] of [['turtle', 80], ['shoulder', 60]]) {
+  for (const [mode, score] of [['turtle', 80], ['balance', 60]]) {
     const part = service.beginPostureRecording({ id: `paired:${mode}`, mode, scorePolicyVersion: 'upper-body-test-v2',
       habitPolicyVersion: 'weighted-reference-deviation-v2', at: pairAt, epoch: 1800000120000 });
     part.sample(pairAt, { validMs: 0, scoreTimeSum: 0, currentScore: score, deviationMs: 0, deviationEpisodeCount: 0 });
@@ -45,10 +45,10 @@ test('renderer retries the same failed batch and close flushes records before ac
   assert.equal(await closeHandler(), false);
   assert.equal(await closeHandler(), true);
   const neck = db.detail('demo', 'paired:turtle').record;
-  const shoulder = db.detail('demo', 'paired:shoulder').record;
-  assert.equal(neck.startedAt, shoulder.startedAt);
+  const balance = db.detail('demo', 'paired:balance').record;
+  assert.equal(neck.startedAt, balance.startedAt);
   assert.equal(neck.scoreTimeSum / neck.validMs, 80);
-  assert.equal(shoulder.scoreTimeSum / shoulder.validMs, 60);
-  assert.equal(neck.status, 'finished'); assert.equal(shoulder.status, 'finished');
+  assert.equal(balance.scoreTimeSum / balance.validMs, 60);
+  assert.equal(neck.status, 'finished'); assert.equal(balance.status, 'finished');
   globalThis.fetch = originalFetch; delete globalThis.window; delete globalThis.localStorage;
 });

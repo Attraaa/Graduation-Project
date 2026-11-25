@@ -1,6 +1,6 @@
 /**
  * Bumped after a measurement's last batch reaches the server, so screens that show records load them again.
- * A session ends with up to three records (neck, shoulder, eye); saves within a moment become one reload.
+ * A session ends with up to three records (neck, balance, eye); saves within a moment become one reload.
  */
 let revision = 0;
 let pending: ReturnType<typeof setTimeout> | null = null;

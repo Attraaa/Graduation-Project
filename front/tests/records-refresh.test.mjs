@@ -18,7 +18,7 @@ test('open record screens reload once after a finished measurement is saved, nev
   t.after(service.subscribeRecordsChanged(() => { reloads += 1; }));
 
   const at = performance.now(), epoch = Date.now();
-  const parts = ['turtle', 'shoulder'].map(mode => service.beginPostureRecording({ id: `session:${mode}`, mode, scorePolicyVersion: 'v1', habitPolicyVersion: 'h1', at, epoch }));
+  const parts = ['turtle', 'balance'].map(mode => service.beginPostureRecording({ id: `session:${mode}`, mode, scorePolicyVersion: 'v1', habitPolicyVersion: 'h1', at, epoch }));
   for (const part of parts) {
     part.sample(at, { validMs: 0, scoreTimeSum: 0, currentScore: 90, deviationMs: 0, deviationEpisodeCount: 0 });
     part.sample(at + 500, { validMs: 500, scoreTimeSum: 45000, currentScore: 90, deviationMs: 0, deviationEpisodeCount: 0 });

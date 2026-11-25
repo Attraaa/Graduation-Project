@@ -14,7 +14,7 @@ const auth = createAuth(readConfig({ JWT_SECRET: 'test-only-secret-0123456789012
 const token = auth.signToken({ userId: 3, username: 'tester' });
 const input: ReviewInput = {
   days: 7,
-  upper: { neck: { current: 82.4, previous: 78 }, shoulder: { current: 75, previous: null }, measuredMinutes: 200.5,
+  upper: { neck: { current: 82.4, previous: 78 }, balance: { current: 75, previous: null }, measuredMinutes: 200.5,
     sessions: 4, deviations: 12, deviationRate: 8.2, validRate: 91 },
   eye: { blinkRate: 14.2, previousBlinkRate: null, validMinutes: 150 },
   keyboard: { score: 71.2, previousScore: 65, coverage: 88, consistency: 93.5, judged: 1200,

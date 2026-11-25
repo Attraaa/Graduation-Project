@@ -4,9 +4,9 @@ import type { TrendPoint } from './trend';
 /** 홈 모드 열 맨 아래의 최근 5분 점수 추이(시안 27). 카드 안에 들어가므로 자체 테두리 없이 작게 그립니다. */
 export default function LiveScoreChart({ points, keyboard = false }: { points: TrendPoint[]; keyboard?: boolean }) {
   const lines = keyboard ? [{ key: 'keyboard', name: '키보드', color: 'var(--color-mode-keyboard)' }]
-    : [{ key: 'neck', name: '목', color: 'var(--color-mode-upper)' }, { key: 'shoulder', name: '어깨', color: 'var(--color-mode-shoulder)' }];
+    : [{ key: 'neck', name: '목', color: 'var(--color-mode-upper)' }, { key: 'balance', name: '좌우 균형', color: 'var(--color-mode-shoulder)' }];
   const end = points.at(-1)?.at ?? 0;
-  return <section aria-label={keyboard ? '키보드 점수 추이' : '목·어깨 점수 추이'}>
+  return <section aria-label={keyboard ? '키보드 점수 추이' : '목·좌우 균형 점수 추이'}>
     <div className="mb-1 flex flex-wrap items-center justify-between gap-2"><h3 className="text-[13px] font-bold text-heading">최근 5분</h3>
       <div className="flex gap-3 text-xs text-muted">{lines.map(line => <span key={line.key} className="flex items-center gap-1"><i className="h-2 w-2 rounded-full" style={{ backgroundColor: line.color }} />{line.name}</span>)}</div>
     </div>
@@ -16,7 +16,7 @@ export default function LiveScoreChart({ points, keyboard = false }: { points: T
         <XAxis dataKey="at" type="number" domain={[Math.max(points[0].at, end - 300_000), Math.max(end, points[0].at + 1000)]} tickLine={false} axisLine={false} tick={{ fill: 'var(--color-muted)', fontSize: 11 }} tickFormatter={(at: number) => `${Math.round((at - end) / 1000)}초`} />
         <YAxis domain={[0, 100]} ticks={[0, 50, 100]} width={28} tickLine={false} axisLine={false} tick={{ fill: 'var(--color-muted)', fontSize: 11 }} />
         <Tooltip labelFormatter={at => `${Math.round((Number(at) - end) / 1000)}초`} contentStyle={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)', borderRadius: 12 }} />
-        {lines.map(line => <Line key={line.key} type="linear" dataKey={line.key} name={line.name} stroke={line.color} strokeWidth={2} strokeDasharray={line.key === 'shoulder' ? '5 3' : undefined} dot={keyboard ? { r: 2.5 } : false} connectNulls={false} isAnimationActive={false} />)}
+        {lines.map(line => <Line key={line.key} type="linear" dataKey={line.key} name={line.name} stroke={line.color} strokeWidth={2} strokeDasharray={line.key === 'balance' ? '5 3' : undefined} dot={keyboard ? { r: 2.5 } : false} connectNulls={false} isAnimationActive={false} />)}
       </LineChart></ResponsiveContainer>}
     </div>
   </section>;

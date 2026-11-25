@@ -158,9 +158,14 @@ export default function KeyboardMonitor({ isRunning, paused = false, deviceId, r
     let automaticFailed = false
     const counts = new Map<string, KeyboardCount>()
     const shifts = new Set<string>()
+    // For the diagnostics log when observation stops: answered frames and the slowest recent answer.
+    let answeredFrames = 0, slowestFrameMs = 0
 
-    const fail = (message: string) => {
+    // `detail` says why in the diagnostics log (no video, landmarks or input); the user sees `message`.
+    const fail = (message: string, detail?: string) => {
       if (!abort.signal.aborted) {
+        window.motiDiagnostics?.error({ kind: 'error', source: 'keyboard-analysis',
+          message: `${detail ? `${detail} · ` : ''}${message} (phase ${snapshotRef.current.phase}, frames ${answeredFrames}, slowest ${Math.round(slowestFrameMs)} ms)` })
         publish({ phase: 'error', message, recognition: 'off', latest: null, recent: [] }); mapped = false
         clearInterval(frameTimer); clearInterval(mappingTimer); clearInterval(settingsTimer); socket?.disconnect()
         sink?.finish(); stopWebcam(); detach(); void window.motiKeyboard?.stop()
@@ -248,9 +253,10 @@ export default function KeyboardMonitor({ isRunning, paused = false, deviceId, r
           input_is_mirrored: runtime.current.profile.flipX !== runtime.current.profile.flipY }, (error: Error | null, response?: FrameResponse) => {
           frameInFlight = false
           if (abort.signal.aborted || sentRevision !== revision) return
-          if (error) { fail('영상 분석 응답이 지연되어 관찰을 중지했습니다. 다시 시작해 주세요.'); return }
+          if (error) { fail('영상 분석 응답이 지연되어 관찰을 중지했습니다. 다시 시작해 주세요.', 'frame answer over 5 s'); return }
           if (!response?.ok) return
           const receivedAt = performance.now()
+          answeredFrames += 1; slowestFrameMs = Math.max(slowestFrameMs * 0.98, receivedAt - encodedAt)
           bufferedFrames = response.buffered_frames ?? bufferedFrames
           const age = receivedAt - capturedAt
           reportMetrics({ encodingMs: encodedAt - encodingStarted, roundTripMs: receivedAt - encodedAt, inferenceMs: response.timing?.inference_ms ?? 0, resultAgeMs: age })
@@ -341,8 +347,8 @@ export default function KeyboardMonitor({ isRunning, paused = false, deviceId, r
           if (!response?.ok) fail('승인 앱 관찰을 시작할 수 없습니다. 승인 앱 설정을 확인해 주세요.')
         })
       })
-      socket.on('connect_error', error => fail(`로컬 키보드 분석 연결 실패: ${error.message}`))
-      socket.on('disconnect', () => { if (!abort.signal.aborted && snapshotRef.current.phase !== 'error') fail('로컬 분석 연결이 끊어졌습니다.') })
+      socket.on('connect_error', error => fail(`로컬 키보드 분석 연결 실패: ${error.message}`, 'connect error'))
+      socket.on('disconnect', reason => { if (!abort.signal.aborted && snapshotRef.current.phase !== 'error') fail('로컬 분석 연결이 끊어졌습니다.', `disconnect: ${reason}`) })
       socket.on('observation_status', (payload: { status: KeyboardMonitorSnapshot['observationStatus'] }) => {
         if (abort.signal.aborted || pausedRef.current) return
         publish({ observationStatus: payload.status, ...(payload.status !== 'observing' ? { latest: null, recent: [] } : {}) })

@@ -28,6 +28,8 @@ export class KeyboardCollector {
     this.counts.set(key, { ...row, count: (previous?.count ?? 0) + 1 }); this.record.total += 1;
   }
   finish(epoch: number) { if (this.record.status === 'running') { this.record.updatedAt = Math.max(epoch, this.record.updatedAt); this.record.status = 'finished'; this.seen.clear(); } }
+  /** While running, each periodic save carries the time so far, so a record that stops saving can be told apart. */
+  touch(epoch: number) { if (this.record.status === 'running') this.record.updatedAt = Math.max(epoch, this.record.updatedAt); }
   batch(generation: number) {
     return this.pending ??= { schemaVersion: 1, generation, sequence: this.sequence,
       record: { ...this.record }, counts: [...this.counts.values()].map(row => ({ ...row })) };
@@ -78,7 +80,7 @@ export function beginKeyboardRecording() {
     recognitionVersion: 'hands-camera-manual-v3', nearbyCredit: 70, total: 0 });
   const generation = recordValue(recordsApi().generation(owner)); void generation.catch(() => {});
   const entry: Active = { collector, generation, saving: null, error: null, now,
-    timer: setInterval(() => { void save(entry).catch(() => {}); }, 5000) };
+    timer: setInterval(() => { collector.touch(now()); void save(entry).catch(() => {}); }, 5000) };
   active.add(entry); announceRecording('키보드 집계 저장 중');
   return { press: (result: KeyboardLiveResult) => { if (active.has(entry)) collector.press(result, now()); },
     finish: () => { clearInterval(entry.timer); collector.finish(now()); void save(entry).catch(() => {}); } };

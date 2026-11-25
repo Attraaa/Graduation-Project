@@ -1,7 +1,7 @@
 import { LIVE_SCORE_WINDOW } from '../keyboard/liveScore.ts';
 import { eyePolicy } from '../eye/eyePolicy.ts';
 
-export interface PostureAlertPart { part: 'neck' | 'shoulder'; score: number }
+export interface PostureAlertPart { part: 'neck' | 'balance'; score: number }
 export type IssueCode = 'upper-analysis' | 'keyboard-analysis' | 'keyboard-area' | 'eye-analysis' | 'tracking' | 'storage' | 'auth';
 export type SystemNotificationRequest = { kind: 'test'; silent: boolean }
   | { kind: 'posture'; silent: boolean; parts: PostureAlertPart[] }
@@ -51,12 +51,12 @@ export function notificationContent(input: unknown) {
   const lines = value.parts.map((part: unknown) => {
     if (!part || typeof part !== 'object') throw new Error('잘못된 자세 알림입니다.');
     const p = part as Record<string, unknown>;
-    if ((p.part !== 'neck' && p.part !== 'shoulder') || names.has(p.part) || typeof p.score !== 'number'
+    if ((p.part !== 'neck' && p.part !== 'balance') || names.has(p.part) || typeof p.score !== 'number'
       || !Number.isFinite(p.score) || p.score < 0 || p.score > 100) {
       throw new Error('잘못된 자세 알림입니다.');
     }
     names.add(p.part);
-    return `${p.part === 'neck' ? '목' : '어깨'} ${Math.round(p.score)}점 · 점수 저하`;
+    return `${p.part === 'neck' ? '목' : '좌우 균형'} ${Math.round(p.score)}점 · 점수 저하`;
   });
   return { title: 'Moti · 자세를 확인해 주세요', body: `${lines.join('\n')}\n처음 잡은 기준 자세를 확인해 주세요.`, silent: value.silent };
 }

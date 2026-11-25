@@ -1,5 +1,9 @@
-/** Portable records. No Electron, React, SQL, images or credentials in this contract. */
-export type RecordMode = 'turtle' | 'shoulder';
+/**
+ * Portable records. No Electron, React, SQL, images or credentials in this contract.
+ * Upper-body modes: turtle (neck, E19) and balance (head and shoulder-line tilt; replaced the shoulder mode on 2026-11-25).
+ */
+export type RecordMode = 'turtle' | 'balance';
+export const RECORD_MODES: readonly RecordMode[] = ['turtle', 'balance'];
 export type RecordStatus = 'running' | 'finished' | 'interrupted';
 export const RECORD_VERSION = 1;
 export const AGGREGATION_VERSION = 'capture-minute-v1';
@@ -113,9 +117,9 @@ function totals(value: Record<string, unknown>): Totals {
 export function parseRecord(value: unknown): PostureRecord {
   const row = object(value);
   exact(row, [...totalKeys, 'id', 'owner', 'mode', 'startedAt', 'updatedAt', 'offsetMinutes', 'scorePolicyVersion', 'habitPolicyVersion', 'longestContinuousMs', 'status']);
-  const mode = row.mode;
+  const mode = row.mode as RecordMode;
   const status = row.status;
-  if (mode !== 'turtle' && mode !== 'shoulder') throw new Error('지원하지 않는 기록 모드입니다.');
+  if (!RECORD_MODES.includes(mode)) throw new Error('지원하지 않는 기록 모드입니다.');
   if (status !== 'running' && status !== 'finished' && status !== 'interrupted') throw new Error('기록 상태가 올바르지 않습니다.');
   const startedAt = number(row.startedAt, 8e12);
   const updatedAt = number(row.updatedAt, 8e12);
@@ -152,6 +156,6 @@ export function parseQuery(value: unknown): RecordQuery {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(Date.parse(date)) || new Date(date).toISOString().slice(0, 10) !== date) throw new Error('날짜가 올바르지 않습니다.');
   }
   if (from > to || Date.parse(to) - Date.parse(from) > 366 * 86400_000) throw new Error('조회 기간은 최대 1년입니다.');
-  if (row.mode !== undefined && row.mode !== 'turtle' && row.mode !== 'shoulder') throw new Error('지원하지 않는 조회 모드입니다.');
+  if (row.mode !== undefined && !RECORD_MODES.includes(row.mode as RecordMode)) throw new Error('지원하지 않는 조회 모드입니다.');
   return { owner: recordText(row.owner), from, to, mode: row.mode as RecordMode | undefined, offset: row.offset === undefined ? 0 : integer(row.offset) };
 }

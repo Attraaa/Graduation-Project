@@ -6,7 +6,7 @@ import { buildReviewFacts, cautionNote, renderReviewFacts, renderSummaryInput } 
 const wellMeasured: ReviewInput = {
     days: 7,
     upper: {
-      neck: { current: 78.4, previous: 72.2 }, shoulder: { current: 85.6, previous: 86.1 },
+      neck: { current: 78.4, previous: 72.2 }, balance: { current: 85.6, previous: 86.1 },
       measuredMinutes: 200, sessions: 12, deviations: 34, deviationRate: 8.4, validRate: 92,
     },
     eye: { blinkRate: 15.2, previousBlinkRate: 17.4, validMinutes: 65 },
@@ -21,7 +21,7 @@ test('a well-measured period becomes the exact sheet of records and candidates',
     '기간: 최근 7일',
     '[기록]',
     '- 목 자세 점수 78점 (직전 7일 72점, 6점 오름)',
-    '- 어깨 자세 점수 86점 (직전 7일 86점, 비슷함)',
+    '- 좌우 균형 점수 86점 (직전 7일 86점, 비슷함)',
     '- 상체 측정 시간 3시간 20분, 측정 12회',
     '- 기준 자세에서 2초 넘게 벗어난 횟수 34번',
     '- 제대로 관찰한 시간 중 기준 자세에서 벗어나 있던 시간 8%',
@@ -36,7 +36,7 @@ test('a well-measured period becomes the exact sheet of records and candidates',
     '[잘한 점 후보]',
     '- 목 자세 점수가 78점으로 직전 7일보다 6점 올랐어요.',
     '- 같은 키를 같은 손가락으로 누른 비율이 93%로 꾸준했어요.',
-    '- 어깨 자세 점수가 86점으로 높았어요.',
+    '- 좌우 균형 점수가 86점으로 높았어요.',
     '- 기준 자세에서 벗어나 있던 시간이 8%로 짧았어요.',
     '- 최근 7일 동안 상체를 12번 측정했어요.',
     '[개선할 점 후보]',
@@ -50,7 +50,7 @@ test('thin samples keep their records but give no judgement, only cautions and h
   const facts = buildReviewFacts({
     days: 30,
     upper: {
-      neck: { current: 50, previous: 70 }, shoulder: { current: 90, previous: null },
+      neck: { current: 50, previous: 70 }, balance: { current: 90, previous: null },
       measuredMinutes: 12, sessions: 1, deviations: 3, deviationRate: 40, validRate: 55,
     },
     eye: null,
@@ -58,7 +58,7 @@ test('thin samples keep their records but give no judgement, only cautions and h
   });
   assert.deepEqual(facts.records, [
     '목 자세 점수 50점 (직전 30일 70점, 20점 내려감)',
-    '어깨 자세 점수 90점 (직전 30일 기록 없음)',
+    '좌우 균형 점수 90점 (직전 30일 기록 없음)',
     '상체 측정 시간 12분, 측정 1회',
     '측정 시간 중 얼굴과 어깨가 보여 분석한 시간 55%',
     '타자 훈련 점수 90점 (직전 30일 기록 없음)',
@@ -79,7 +79,7 @@ test('thin samples keep their records but give no judgement, only cautions and h
     '손가락을 판정한 입력이 200회가 안 돼 타자 기록은 참고용이에요.',
   ]);
   assert.equal(cautionNote(facts), '상체·타자 기록은 측정이 부족해 참고용으로 봐 주세요.');
-  assert.equal(facts.overview, '최근 30일 동안 목 자세 점수는 20점 내려갔고, 어깨 자세 점수는 90점이었고, 타자 훈련 점수는 90점이었어요.');
+  assert.equal(facts.overview, '최근 30일 동안 목 자세 점수는 20점 내려갔고, 좌우 균형 점수는 90점이었고, 타자 훈련 점수는 90점이었어요.');
 });
 
 test('blinking is reported but never judged, and empty sections are left out', () => {
@@ -103,12 +103,12 @@ test('changes are judged on the rounded numbers the text shows', () => {
   const facts = buildReviewFacts({
     days: 7, eye: null, keyboard: null,
     upper: {
-      neck: { current: 80.4, previous: 78.6 }, shoulder: { current: 70.5, previous: 72.4 },
+      neck: { current: 80.4, previous: 78.6 }, balance: { current: 70.5, previous: 72.4 },
       measuredMinutes: 60, sessions: 2, deviations: 0, deviationRate: null, validRate: null,
     },
   });
   // 80 vs 79 and 71 vs 72 both differ by 1 point, below the 2-point "same" range.
-  assert.deepEqual(facts.records.slice(0, 2), ['목 자세 점수 80점 (직전 7일 79점, 비슷함)', '어깨 자세 점수 71점 (직전 7일 72점, 비슷함)']);
+  assert.deepEqual(facts.records.slice(0, 2), ['목 자세 점수 80점 (직전 7일 79점, 비슷함)', '좌우 균형 점수 71점 (직전 7일 72점, 비슷함)']);
   assert.deepEqual(facts.strengths, ['목 자세 점수가 80점으로 높았어요.']);
   assert.deepEqual(facts.improvements, []);
 });
@@ -117,7 +117,7 @@ test('a falling score gives one candidate, the advice is not repeated, and areas
   const facts = buildReviewFacts({
     days: 7, eye: null,
     upper: {
-      neck: { current: 58.3, previous: 69.8 }, shoulder: { current: 64.1, previous: 71.2 },
+      neck: { current: 58.3, previous: 69.8 }, balance: { current: 64.1, previous: 71.2 },
       measuredMinutes: 240, sessions: 2, deviations: 40, deviationRate: 38, validRate: 90,
     },
     keyboard: { score: 64.5, previousScore: 72.8, coverage: 80, consistency: 75, judged: 2500, frequentKeys: [] },
@@ -125,7 +125,7 @@ test('a falling score gives one candidate, the advice is not repeated, and areas
   assert.deepEqual(facts.improvements, [
     '목 자세 점수가 58점으로 직전 7일보다 12점 내려갔어요. 측정을 시작할 때 기준 자세를 다시 잡아 보세요.',
     '타자 훈련 점수가 65점으로 직전 7일보다 8점 내려갔어요. 권장 손가락을 떠올리며 천천히 연습해 보세요.',
-    '어깨 자세 점수가 64점으로 직전 7일보다 7점 내려갔어요.',
+    '좌우 균형 점수가 64점으로 직전 7일보다 7점 내려갔어요.',
     '기준 자세에서 벗어나 있던 시간이 38%예요. 화면을 오래 볼 때 기준 자세를 떠올려 보세요.',
   ]);
   assert.deepEqual(facts.strengths, []);
@@ -137,20 +137,20 @@ test('a summary sees only the highlights and the candidates shown beside it, and
     '기간: 최근 7일',
     '[주요 기록]',
     '- 목 자세 점수 78점 (직전 7일 72점, 6점 오름)',
-    '- 어깨 자세 점수 86점 (직전 7일 86점, 비슷함)',
+    '- 좌우 균형 점수 86점 (직전 7일 86점, 비슷함)',
     '- 상체 측정 시간 3시간 20분, 측정 12회',
     '- 분당 깜빡임 15회 (직전 7일 17회, 2회 줄어듦)',
     '- 타자 훈련 점수 62점 (직전 7일 70점, 8점 내려감)',
     '[화면에 함께 보이는 잘한 점]',
     '- 목 자세 점수가 78점으로 직전 7일보다 6점 올랐어요.',
     '- 같은 키를 같은 손가락으로 누른 비율이 93%로 꾸준했어요.',
-    '- 어깨 자세 점수가 86점으로 높았어요.',
+    '- 좌우 균형 점수가 86점으로 높았어요.',
     '[화면에 함께 보이는 개선할 점]',
     '- 타자 훈련 점수가 62점으로 직전 7일보다 8점 내려갔어요. 권장 손가락을 떠올리며 천천히 연습해 보세요.',
     '- 자주 다른 손가락을 쓴 키(A 키 40%, ; 키 25%)를 권장 손가락으로 천천히 연습해 보세요.',
   ].join('\n'));
   assert.equal(facts.overview,
-    '최근 7일 동안 목 자세 점수는 6점 올랐고, 어깨 자세 점수는 직전과 비슷했고, 타자 훈련 점수는 8점 내려갔어요. 분당 깜빡임은 15회로 2회 줄었어요.');
+    '최근 7일 동안 목 자세 점수는 6점 올랐고, 좌우 균형 점수는 직전과 비슷했고, 타자 훈련 점수는 8점 내려갔어요. 분당 깜빡임은 15회로 2회 줄었어요.');
   assert.equal(cautionNote(facts), null);
 });
 
@@ -158,7 +158,7 @@ test('without any score the plain summary says how much was measured', () => {
   const facts = buildReviewFacts({
     days: 7, eye: null, keyboard: null,
     upper: {
-      neck: { current: null, previous: 72 }, shoulder: { current: null, previous: 75 },
+      neck: { current: null, previous: 72 }, balance: { current: null, previous: 75 },
       measuredMinutes: 22, sessions: 2, deviations: 0, deviationRate: null, validRate: 8,
     },
   });

@@ -66,7 +66,7 @@ function measuredEye(id = 'eye-one', owner = String(DEMO)): EyeBatch {
     buckets: [{ minute: startedAt, ...emptyEyeTotals(), runMs: 1000, validMs: 500, blinks: 2 }] };
 }
 async function capture(db: MysqlRecordRepository, id: string, start: number, duration: number, score: number | null,
-  mode: 'turtle' | 'shoulder' = 'turtle', version = 'v1', userId = DEMO) {
+  mode: 'turtle' | 'balance' = 'turtle', version = 'v1', userId = DEMO) {
   const recorder = new CaptureRecorder({ ...measured().record, ...emptyTotals(), id, owner: String(userId), mode, scorePolicyVersion: version,
     startedAt: start, updatedAt: start, offsetMinutes: 0, longestContinuousMs: 0 }, 0);
   for (let at = 0; at <= duration; at += 500) recorder.sample(at, {
@@ -131,14 +131,14 @@ test('MySQL record repository', { skip: url ? false : 'set MOTI_TEST_MYSQL_URL t
   await t.test('time-weighted averages preserve measured zero and separate policies, modes and users', async t => {
     const db = await database(t); const start = Date.parse('2026-09-19T10:00:00Z');
     await capture(db, 'long', start, 9000, 100); await capture(db, 'zero', start, 1000, 0); await capture(db, 'missing', start, 1000, null);
-    await capture(db, 'shoulder', start, 1000, 20, 'shoulder'); await capture(db, 'newversion', start, 1000, 10, 'turtle', 'v2');
+    await capture(db, 'balance', start, 1000, 20, 'balance'); await capture(db, 'newversion', start, 1000, 10, 'turtle', 'v2');
     await capture(db, 'other', start, 1000, 10, 'turtle', 'v1', OTHER);
     const groups = summarizeStatistics(await db.statistics(DEMO, { owner: String(DEMO), from: '2026-09-19', to: '2026-09-19' }));
     assert.equal(groups.length, 3);
     const group = groups.find(row => row.mode === 'turtle' && row.scorePolicyVersion === 'v1')!;
     assert.equal(group.average, 90); assert.equal(group.sessionCount, 3); assert.equal(group.unknownMs, 1000);
-    assert.equal(scoreDifference(group, groups.find(row => row.mode === 'shoulder')), null);
-    assert.equal((await db.statistics(DEMO, { owner: String(DEMO), from: '2026-09-19', to: '2026-09-19', mode: 'shoulder' })).length, 1);
+    assert.equal(scoreDifference(group, groups.find(row => row.mode === 'balance')), null);
+    assert.equal((await db.statistics(DEMO, { owner: String(DEMO), from: '2026-09-19', to: '2026-09-19', mode: 'balance' })).length, 1);
   });
 
   await t.test('cross-midnight observations belong to actual days, history remains on start day', async t => {

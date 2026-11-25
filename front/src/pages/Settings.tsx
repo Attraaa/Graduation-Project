@@ -1,13 +1,13 @@
 import { useState, useSyncExternalStore } from 'react';
-import { Activity, Bell, Check, Database, Eye, Palette, Trash2, User } from 'lucide-react';
+import { Activity, Bell, Check, Database, Palette, Trash2, User } from 'lucide-react';
 import { clearStatistics, getCurrentUser, updateCurrentUser } from '../utils/authStore';
 import { useDialog } from '../components/dialog/useDialog';
 import type { EyeSensitivity } from '../features/eye/eyePolicy';
 import KeyboardSettings from '../features/keyboard/KeyboardSettings';
 import AccountSecurity from '../features/settings/AccountSecurity';
-import { POSTURE_SENSITIVITY } from '../features/posture/evaluation';
+import { BALANCE_SENSITIVITY } from '../features/posture/modes/balance';
 import { BUTTON, BUTTON_DANGER, Field, INPUT, Segmented, SettingsCard, Slider, Stepper, Switch } from '../features/settings/parts';
-import { readBaseCva, readEyeSensitivity, readPostureSensitivity, writeBaseCva, writeEyeSensitivity, writePostureSensitivity } from '../features/settings/preferences';
+import { readBalanceSensitivity, readBaseCva, readEyeSensitivity, writeBalanceSensitivity, writeBaseCva, writeEyeSensitivity } from '../features/settings/preferences';
 import { BASE_CVA } from '../features/posture/modes/turtle';
 import { NOTIFICATION_SETTING_KEYS, NOTIFICATION_SETTINGS_CHANGED, readNotificationPreferences } from '../features/notifications/preferences';
 import { ALERT_SCORE, ALERT_SECONDS } from '../features/notifications/activityPolicy';
@@ -102,7 +102,7 @@ const Settings = () => {
   const [postureSeconds, setPostureSeconds] = useState(() => readNotificationPreferences().postureSeconds);
   const [keyboardThreshold, setKeyboardThreshold] = useState(() => readNotificationPreferences().keyboardThreshold);
   const [keyboardSeconds, setKeyboardSeconds] = useState(() => readNotificationPreferences().keyboardSeconds);
-  const [postureSensitivity, setPostureSensitivity] = useState(() => readPostureSensitivity());
+  const [balanceSensitivity, setBalanceSensitivity] = useState(() => readBalanceSensitivity());
   const [baseCva, setBaseCva] = useState(() => readBaseCva());
   const [eyeSensitivity, setEyeSensitivity] = useState(() => readEyeSensitivity());
 
@@ -214,25 +214,22 @@ const Settings = () => {
           {window.motiNotifications && <p role="status" className="text-xs text-muted">{deliveryStatus || notificationStatus}</p>}
         </SettingsCard>
 
-        <SettingsCard title="상체 · 자세 기준" icon={<Activity size={18} />} iconClass="bg-mode-upper-soft text-mode-upper">
-          <Slider id="settings-posture-sensitivity" label="자세 무너짐 민감도" valueText={`${postureSensitivity}%`}
-            min={POSTURE_SENSITIVITY.min} max={POSTURE_SENSITIVITY.max} step={POSTURE_SENSITIVITY.step} minLabel="둔감" maxLabel="민감"
-            value={postureSensitivity} onChange={value => { setPostureSensitivity(value); writePostureSensitivity(value); }} />
+        {/* Blink runs in the same upper-body measurement, so its sensitivity sits here instead of a card of its own. */}
+        <SettingsCard title="상체 측정 기준" icon={<Activity size={18} />} iconClass="bg-mode-upper-soft text-mode-upper">
+          <Slider id="settings-balance-sensitivity" label="좌우 균형 민감도" valueText={`${balanceSensitivity}%`}
+            min={BALANCE_SENSITIVITY.min} max={BALANCE_SENSITIVITY.max} step={BALANCE_SENSITIVITY.step} minLabel="둔감" maxLabel="민감"
+            value={balanceSensitivity} onChange={value => { setBalanceSensitivity(value); writeBalanceSensitivity(value); }} />
           <Slider id="settings-base-cva" label="기준 CVA" valueText={`${baseCva}°`}
             min={BASE_CVA.min} max={BASE_CVA.max} minLabel={`${BASE_CVA.min}°`} maxLabel={`${BASE_CVA.max}°`} value={baseCva}
             onChange={value => { setBaseCva(value); writeBaseCva(value); }} />
-        </SettingsCard>
-
-        <SettingsCard title="안구 · 깜빡임 기준" icon={<Eye size={18} />} iconClass="bg-mode-eye-soft text-mode-eye">
-          <Field label="깜빡임 민감도">
+          <div className="space-y-2">
+            <p className="text-sm font-semibold text-heading">깜빡임 민감도</p>
             <Segmented label="깜빡임 민감도" options={EYE_SENSITIVITIES} value={eyeSensitivity}
               onChange={value => { setEyeSensitivity(value); writeEyeSensitivity(value); }} />
-          </Field>
+          </div>
         </SettingsCard>
 
-        <KeyboardSettings className="lg:col-span-2" />
-
-        <SettingsCard title="데이터 관리" icon={<Database size={18} />} className="lg:col-span-2 xl:col-span-1">
+        <SettingsCard title="데이터 관리" icon={<Database size={18} />}>
           <dl className="space-y-2 text-sm">
             <div className="flex gap-3">
               <dt className="w-14 shrink-0 font-semibold text-heading">지워져요</dt>
@@ -247,6 +244,8 @@ const Settings = () => {
             <Trash2 aria-hidden="true" size={16} />통계 삭제
           </button>
         </SettingsCard>
+
+        <KeyboardSettings className="lg:col-span-2 xl:col-span-3" />
       </div>
     </div>
   );

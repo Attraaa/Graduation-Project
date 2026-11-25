@@ -19,12 +19,12 @@ const html = (component, props) => renderToStaticMarkup(createElement(component,
 
 test('day detail lists only the modes recorded that day', () => {
   const day = { date: '2026-10-04', totalMs: 35 * 60_000, hasRecords: true,
-    upper: { turtle: 80, shoulder: 88, sessions: 1, runMs: 15 * 60_000, deviations: 0 },
+    upper: { turtle: 80, balance: 88, sessions: 1, runMs: 15 * 60_000, deviations: 0 },
     keyboard: { score: null, coverage: null, sessions: 0, runMs: 0, present: false },
     eye: { rate: 16, runMs: 20 * 60_000, breaks: 0, present: true } };
   const out = html(DayDetail, { day });
   assert.match(out, /10월 4일 \(일\)/);
-  assert.match(out, /목 80 · 어깨 88/);
+  assert.match(out, /목 80 · 좌우 균형 88/);
   assert.match(out, /1회 · 15분/);
   assert.match(out, /분당 16회/);
   assert.doesNotMatch(out, /키보드/);
@@ -39,7 +39,7 @@ test('deviation hours show an empty state and name the busiest hour', () => {
 
 test('day detail can carry a hint line and the ring can show a share in percent', () => {
   const day = { date: '2026-10-04', totalMs: 60_000, hasRecords: true,
-    upper: { turtle: 80, shoulder: 88, sessions: 1, runMs: 60_000, deviations: 0 },
+    upper: { turtle: 80, balance: 88, sessions: 1, runMs: 60_000, deviations: 0 },
     keyboard: { score: null, coverage: null, sessions: 0, runMs: 0, present: false },
     eye: { rate: null, runMs: 0, breaks: 0, present: false } };
   assert.match(html(DayDetail, { day, hint: '눌러서 학습이력 보기 →' }), /눌러서 학습이력 보기 →/);

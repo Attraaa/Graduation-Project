@@ -1,22 +1,23 @@
 import type { EyeSensitivity } from '../eye/eyePolicy.ts';
-import { normalizePostureSensitivity } from '../posture/evaluation.ts';
+import { normalizeBalanceSensitivity } from '../posture/modes/balance.ts';
 import { BASE_CVA } from '../posture/modes/turtle.ts';
 
 type Store = Pick<Storage, 'getItem' | 'setItem'>;
-// New key on purpose: the old `postureAI.collapseSensitivity` value was never applied to a measurement,
-// so whatever was stored there must not silently change the rule of the next session.
-const POSTURE_KEY = 'moti.settings.postureSensitivity';
+// New key on purpose: neither the old `postureAI.collapseSensitivity` nor the removed posture-collapse slider
+// (`moti.settings.postureSensitivity`, deviation counting until 2026-11-25) means a tilt sensitivity,
+// so whatever was stored there must not silently change the balance score of the next session.
+const BALANCE_KEY = 'moti.settings.balanceSensitivity';
 const EYE_KEY = 'moti.settings.eyeSensitivity';
 const BASE_CVA_KEY = 'moti.settings.baseCva';
 const EYE_SENSITIVITIES: readonly EyeSensitivity[] = ['low', 'normal', 'high'];
 
 /** Sensitivities chosen in Settings. Each measurement mode reads its own value when a session starts. */
-export function readPostureSensitivity(store: Store = localStorage) {
-  try { return normalizePostureSensitivity(store.getItem(POSTURE_KEY)); }
-  catch { return normalizePostureSensitivity(null); }
+export function readBalanceSensitivity(store: Store = localStorage) {
+  try { return normalizeBalanceSensitivity(store.getItem(BALANCE_KEY)); }
+  catch { return normalizeBalanceSensitivity(null); }
 }
-export function writePostureSensitivity(value: number, store: Store = localStorage) {
-  store.setItem(POSTURE_KEY, String(normalizePostureSensitivity(value)));
+export function writeBalanceSensitivity(value: number, store: Store = localStorage) {
+  store.setItem(BALANCE_KEY, String(normalizeBalanceSensitivity(value)));
 }
 export function readEyeSensitivity(store: Store = localStorage): EyeSensitivity {
   try {
