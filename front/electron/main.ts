@@ -10,6 +10,7 @@ import { readKeyboardSettings, chooseKeyboardApp, updateKeyboardSettings } from 
 import { cameraSettingsUrl, canOpenCameraSettings } from './cameraWindow'
 import { isKakaoPlaceUrl } from './externalLinks'
 import { windowAppearance } from './windowAppearance'
+import { createPostureTimelineStore } from './postureTimelineStore'
 import { registerNotificationHandlers } from './notificationHandlers'
 import { OverlayWindow } from './overlayWindow'
 import { createDiagnosticLog, watchDiagnostics } from './diagnostics'
@@ -204,6 +205,10 @@ const trustedAppWindow = (event: Electron.IpcMainInvokeEvent) => {
   if (!win || event.sender !== win.webContents || event.senderFrame !== win.webContents.mainFrame
     || !trustedRecordUrl(event.senderFrame.url, recordsPageUrl)) throw new Error('허용되지 않은 앱 요청입니다.')
 }
+const timelines = createPostureTimelineStore(path.join(app.getPath('userData'), 'posture-timelines'))
+ipcMain.handle('records:posture-timeline-write', (event, batch) => { trustedAppWindow(event); return timelines.write(batch) })
+ipcMain.handle('records:posture-timelines-read', (event, owner, from, to) => { trustedAppWindow(event); return timelines.read(owner, from, to) })
+ipcMain.handle('records:posture-timelines-clear', (event, owner) => { trustedAppWindow(event); return timelines.clear(owner) })
 const clearNotifications = registerNotificationHandlers(ipcMain, {
   trusted: trustedAppWindow,
   supported: () => process.platform === 'win32' && Notification.isSupported(),

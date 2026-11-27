@@ -1,3 +1,5 @@
+import { localDateKey } from '../../../../database/contracts';
+import { saveLocalReviewResult } from '../records/localReviewResults';
 import { EyeRecorder } from '../../../../database/eyeRecorder';
 import type { EyeSample } from '../../../../database/eyeRecorder';
 import { emptyEyeTotals } from '../../../../database/eye';
@@ -36,9 +38,21 @@ async function save(entry: Active): Promise<void> {
   })();
   return entry.saving;
 }
+function finishEye(entry: Active) {
+  clearInterval(entry.timer);
+  const { collector } = entry, { record } = collector;
+  if (record.status !== 'running') return;
+  collector.finish(performance.now());
+  const rows = collector.reviewBuckets.map(({ minute, ...totals }) => ({
+    ...totals, date: localDateKey(minute, record.offsetMinutes),
+    hour: String(new Date(minute - record.offsetMinutes * 60_000).getUTCHours()).padStart(2, '0'),
+    policyVersion: record.policyVersion, sessionCount: 1,
+  }));
+  saveLocalReviewResult(record.owner, localDateKey(record.updatedAt, record.offsetMinutes), record.id, { kind: 'eye', rows });
+}
 registerRecorder({
   retry: () => Promise.all([...active].map(save)).then(() => {}),
-  finish: () => active.forEach(entry => { clearInterval(entry.timer); entry.collector.finish(performance.now()); }),
+  finish: () => active.forEach(finishEye),
   discard: owner => { for (const entry of active) if (entry.collector.record.owner === owner) {
     clearInterval(entry.timer); entry.collector.finish(performance.now()); active.delete(entry);
   } },
@@ -65,7 +79,7 @@ export function beginEyeRecording(sensitivity: EyeSensitivity = 'normal'): EyeSi
     rest: completed => { if (active.has(entry)) collector.rest(performance.now(), completed); },
     finish: () => {
       if (!active.has(entry) || collector.record.status !== 'running') return;
-      clearInterval(entry.timer); collector.finish(performance.now()); void save(entry).catch(() => {});
+      finishEye(entry); void save(entry).catch(() => {});
     },
   };
 }

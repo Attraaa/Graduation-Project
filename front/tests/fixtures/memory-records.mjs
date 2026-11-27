@@ -1,3 +1,4 @@
+import 'fake-indexeddb/auto';
 import { createHash } from 'node:crypto';
 import { parseBatch, parseQuery, localDateKey } from '../../../database/contracts.ts';
 import { parseKeyboardBatch, keyboardCountKey, keyboardSummary } from '../../../database/keyboard.ts';

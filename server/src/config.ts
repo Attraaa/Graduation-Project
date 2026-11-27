@@ -8,8 +8,8 @@ export interface ServerConfig {
     database: string;
   };
   jwt: { secret: string; expiresIn: number };
-  /** Key for the AI review (Claude). Optional: without it only /api/ai answers 503. */
-  anthropicApiKey: string | null;
+  /** Fixed private mini-PC endpoint used only for AI reviews. */
+  reviewGatewayUrl: string | null;
   /** Kakao REST API key for the nearby hospital search. Optional: without it only /api/hospitals answers 503. */
   kakaoRestApiKey: string | null;
   /** SMTP account that sends ID and password-reset mail. Optional: without it only those two routes answer 503. */
@@ -36,6 +36,14 @@ export function readConfig(env: NodeJS.ProcessEnv): ServerConfig {
   if (!Number.isSafeInteger(expiresIn) || expiresIn <= 0) {
     throw new Error('JWT_EXPIRES_IN must be a positive duration such as 30m, 1h, or 7d.');
   }
+  const reviewGatewayUrl = env.MOTI_REVIEW_GATEWAY_URL?.trim() || null;
+  if (reviewGatewayUrl) {
+    const url = new URL(reviewGatewayUrl);
+    const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
+    if ((url.protocol !== 'https:' && !(loopback && url.protocol === 'http:')) || url.username || url.password || url.search || url.hash) {
+      throw new Error('MOTI_REVIEW_GATEWAY_URL requires HTTPS or loopback HTTP.');
+    }
+  }
   const smtp = { host: env.SMTP_HOST?.trim(), user: env.SMTP_USER?.trim(), password: env.SMTP_PASS?.trim() };
   return {
     port: port('PORT', 4000),
@@ -47,7 +55,7 @@ export function readConfig(env: NodeJS.ProcessEnv): ServerConfig {
       database: env.DB_NAME ?? 'moti',
     },
     jwt: { secret, expiresIn },
-    anthropicApiKey: env.ANTHROPIC_API_KEY?.trim() || null,
+    reviewGatewayUrl,
     kakaoRestApiKey: env.KAKAO_REST_API_KEY?.trim() || null,
     mail: smtp.host && smtp.user && smtp.password
       ? { host: smtp.host, port: port('SMTP_PORT', 465), user: smtp.user, password: smtp.password, from: env.MAIL_FROM?.trim() || smtp.user }

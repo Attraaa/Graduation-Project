@@ -100,4 +100,7 @@ export const clearStatistics = async () => {
   const { discardDeletedRecordings } = await import('../features/records/recording');
   await recordValue(recordsApi().clear(owner));
   discardDeletedRecordings(owner);
+  const { clearLocalPostureTimelines } = await import('../features/records/postureTimelineRecording');
+  const { clearLocalReviewResults } = await import('../features/records/localReviewResults');
+  await Promise.all([clearLocalPostureTimelines(owner), clearLocalReviewResults(owner)]);
 };

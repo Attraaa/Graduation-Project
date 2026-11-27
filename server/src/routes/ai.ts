@@ -7,17 +7,17 @@ const HOURLY_LIMIT = 10;
 const HOUR_MS = 3_600_000;
 
 /**
- * AI 총평. reviewer가 없으면(서버에 ANTHROPIC_API_KEY 없음) 503으로 알려 줍니다.
+ * AI 총평. 미니 PC 연결이 설정되지 않으면 503으로 알려 줍니다.
  * 만든 총평은 저장하지 않고 요청한 화면에만 돌려줍니다.
  */
 export function createAiRouter(reviewer: Reviewer | null, auth: Auth) {
   const router = Router();
-  // Every review spends the server's API key, so one account gets a few per hour (kept in memory).
+  // Bound each account's use of the shared mini PC.
   const recent = new Map<number, number[]>();
   router.use(auth.requireAuth);
 
   router.post('/review', asyncHandler(async (req, res) => {
-    if (!reviewer) throw new HttpError(503, 'AI 총평이 아직 설정되지 않았어요. 서버의 server/.env에 ANTHROPIC_API_KEY를 넣어 주세요.');
+    if (!reviewer) throw new HttpError(503, '미니 PC 총평 서버가 아직 설정되지 않았어요.');
     const input = parseReviewInput(req.body);
     const now = Date.now(), userId = req.user!.userId;
     const times = (recent.get(userId) ?? []).filter(at => now - at < HOUR_MS);

@@ -18,10 +18,12 @@ test('startup rejects invalid ports and malformed token expiration', () => {
   assert.throws(() => readConfig({ ...valid, JWT_EXPIRES_IN: '0d' }), /JWT_EXPIRES_IN/);
 });
 
-test('the Anthropic API key is optional and trimmed; a blank value turns the AI review off', () => {
-  assert.equal(readConfig(valid).anthropicApiKey, null);
-  assert.equal(readConfig({ ...valid, ANTHROPIC_API_KEY: '   ' }).anthropicApiKey, null);
-  assert.equal(readConfig({ ...valid, ANTHROPIC_API_KEY: ' sk-ant-test\n' }).anthropicApiKey, 'sk-ant-test');
+test('the review gateway accepts private HTTPS and loopback HTTP', () => {
+  assert.equal(readConfig(valid).reviewGatewayUrl, null);
+  for (const url of ['https://mini.example/review', 'http://127.0.0.1:8765/review']) {
+    assert.equal(readConfig({ ...valid, MOTI_REVIEW_GATEWAY_URL: url }).reviewGatewayUrl, url);
+  }
+  assert.throws(() => readConfig({ ...valid, MOTI_REVIEW_GATEWAY_URL: 'http://external.example/review' }));
 });
 
 test('the Kakao REST API key is optional and trimmed; a blank value turns the hospital search off', () => {

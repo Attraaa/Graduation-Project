@@ -3,6 +3,7 @@ import type { KeyboardBatch, KeyboardCount, KeyboardRecord } from '../../../../d
 import { localDateKey } from '../../../../database/contracts';
 import { recordsApi, recordValue } from '../records/api';
 import { announceRecording, registerRecorder } from '../records/recording';
+import { saveLocalReviewResult } from '../records/localReviewResults';
 import { recordsChanged } from '../records/refresh';
 import { getCurrentUser } from '../../utils/authStore';
 import { ANSI_QWERTY_TOUCH_POLICY_V1 } from './fingerPolicy';
@@ -62,9 +63,17 @@ async function save(entry: Active): Promise<void> {
   })();
   return entry.saving;
 }
+function finishKeyboard(entry: Active) {
+  clearInterval(entry.timer);
+  const { collector } = entry, { record } = collector;
+  if (record.status !== 'running') return;
+  collector.finish(entry.now());
+  saveLocalReviewResult(record.owner, localDateKey(record.updatedAt, record.offsetMinutes), record.id,
+    { kind: 'keyboard', session: { record: { ...record }, counts: [...collector.counts.values()] } });
+}
 registerRecorder({
   retry: () => Promise.all([...active].map(save)).then(() => {}),
-  finish: () => active.forEach(entry => { clearInterval(entry.timer); entry.collector.finish(entry.now()); }),
+  finish: () => active.forEach(finishKeyboard),
   discard: owner => { for (const entry of active) if (entry.collector.record.owner === owner) { clearInterval(entry.timer); entry.collector.finish(entry.now()); active.delete(entry); } },
   error: () => [...active].find(entry => entry.error)?.error ?? null,
   failedForOwner: owner => [...active].some(entry => entry.collector.record.owner === owner && !!entry.error),
@@ -83,5 +92,5 @@ export function beginKeyboardRecording() {
     timer: setInterval(() => { collector.touch(now()); void save(entry).catch(() => {}); }, 5000) };
   active.add(entry); announceRecording('키보드 집계 저장 중');
   return { press: (result: KeyboardLiveResult) => { if (active.has(entry)) collector.press(result, now()); },
-    finish: () => { clearInterval(entry.timer); collector.finish(now()); void save(entry).catch(() => {}); } };
+    finish: () => { finishKeyboard(entry); void save(entry).catch(() => {}); } };
 }

@@ -1,6 +1,5 @@
 import express from 'express';
 import cors from 'cors';
-import Anthropic from '@anthropic-ai/sdk';
 import type { Pool } from 'mysql2/promise';
 import type { ServerConfig } from './config.js';
 import { createAuth } from './auth.js';
@@ -14,7 +13,7 @@ import { createAiRouter } from './routes/ai.js';
 import { createRecoveryRouter } from './routes/recovery.js';
 import { createHospitalsRouter } from './routes/hospitals.js';
 import { MysqlRecordRepository } from './repositories/records.js';
-import { createClaudeReviewer } from './services/aiReview.js';
+import { createMiniPcReviewer } from './services/aiReview.js';
 import { createSmtpMailer } from './services/mail.js';
 import { createKakaoHospitalSearch } from './services/hospitals.js';
 
@@ -31,10 +30,7 @@ export function createApp(config: ServerConfig, pool: Pool) {
   app.use('/api/sessions', createSessionsRouter(pool, auth));
   app.use('/api/statistics', createStatisticsRouter(pool, auth));
   app.use('/api/feedback', createFeedbackRouter(pool, auth));
-  // Optional: without ANTHROPIC_API_KEY the AI review answers 503 and every other route works as before.
-  const reviewer = config.anthropicApiKey
-    ? createClaudeReviewer(new Anthropic({ apiKey: config.anthropicApiKey, timeout: 40_000, maxRetries: 1 }))
-    : null;
+  const reviewer = config.reviewGatewayUrl ? createMiniPcReviewer(config.reviewGatewayUrl) : null;
   app.use('/api/ai', createAiRouter(reviewer, auth));
   // Optional: without KAKAO_REST_API_KEY the nearby hospital search answers 503 and every other route works as before.
   app.use('/api/hospitals', createHospitalsRouter(config.kakaoRestApiKey ? createKakaoHospitalSearch(config.kakaoRestApiKey) : null, auth));

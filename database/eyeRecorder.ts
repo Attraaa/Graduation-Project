@@ -53,6 +53,8 @@ export class EyeRecorder {
     this.bucket(this.record.updatedAt).breaks += completed - this.completed; this.completed = completed;
   }
   finish(at: number) { this.advance(at); this.record.status = 'finished'; }
+  /** Completed session's minute totals, including buckets that the server has already acknowledged. */
+  get reviewBuckets(): readonly EyeBucket[] { return [...this.buckets.values()]; }
   get hasPending() { return this.pending !== null || this.dirty.size > 0 || this.sequence === 0; }
   batch(generation: number): EyeBatch | null {
     if (this.pending) return this.pending;

@@ -3,12 +3,11 @@ import { once } from 'node:events';
 import test, { type TestContext } from 'node:test';
 import type { AddressInfo } from 'node:net';
 import express from 'express';
-import Anthropic from '@anthropic-ai/sdk';
 import { createAuth } from '../src/auth.js';
 import { readConfig } from '../src/config.js';
 import { handleError, HttpError } from '../src/http.js';
 import { createAiRouter } from '../src/routes/ai.js';
-import { AI_REVIEW_MODEL, createClaudeReviewer, parseReviewInput, type Reviewer, type ReviewInput } from '../src/services/aiReview.js';
+import { createMiniPcReviewer, parseReviewInput, type Reviewer, type ReviewInput } from '../src/services/aiReview.js';
 
 const auth = createAuth(readConfig({ JWT_SECRET: 'test-only-secret-012345678901234567890' }).jwt);
 const token = auth.signToken({ userId: 3, username: 'tester' });
@@ -20,7 +19,7 @@ const input: ReviewInput = {
   keyboard: { score: 71.2, previousScore: 65, coverage: 88, consistency: 93.5, judged: 1200,
     frequentKeys: [{ code: 'KeyA', differentRate: 24.5 }] },
 };
-const review = { summary: '좋아요.', strengths: ['목 점수가 올랐어요.'], improvements: ['A 키를 천천히 연습해 보세요.'], model: AI_REVIEW_MODEL };
+const review = { summary: '좋아요.', strengths: ['목 점수가 올랐어요.'], improvements: ['A 키를 천천히 연습해 보세요.'], model: 'gemma3:4b' };
 const badRequest = (error: unknown) => error instanceof HttpError && error.status === 400;
 
 async function start(t: TestContext, reviewer: Reviewer | null) {
@@ -41,18 +40,6 @@ async function start(t: TestContext, reviewer: Reviewer | null) {
   });
 }
 
-/** Stands in for the SDK client; records each request and answers with `result`. */
-function stubClient(result: Record<string, unknown> | Error) {
-  const requests: Record<string, any>[] = [];
-  const create = async (params: Record<string, any>) => {
-    requests.push(params);
-    if (result instanceof Error) throw result;
-    return { model: AI_REVIEW_MODEL, stop_reason: 'end_turn', content: [], ...result };
-  };
-  return { client: { beta: { messages: { create } } } as unknown as Anthropic, requests };
-}
-const textMessage = (text: string) => ({ content: [{ type: 'thinking', thinking: '', signature: '' }, { type: 'text', text, citations: null }] });
-
 test('review input accepts only numbers, known key codes and at least one measured mode', () => {
   assert.deepEqual(parseReviewInput(input), input);
   assert.deepEqual(parseReviewInput({ days: 30, upper: null, keyboard: { ...input.keyboard, frequentKeys: [] } }).keyboard?.frequentKeys, []);
@@ -67,12 +54,12 @@ test('review input accepts only numbers, known key codes and at least one measur
   for (const body of invalid) assert.throws(() => parseReviewInput(body), badRequest);
 });
 
-test('the review route needs a login and reports a missing API key without calling the model', async (t) => {
+test('the review route needs a login and reports a missing gateway without calling the model', async (t) => {
   const request = await start(t, null);
   assert.equal((await request(input, '')).status, 401);
   const response = await request(input);
   assert.equal(response.status, 503);
-  assert.match((await response.json()).message, /ANTHROPIC_API_KEY/);
+  assert.match((await response.json()).message, /미니 PC/);
 });
 
 test('valid input returns the review and its time; invalid input never reaches the model; ten reviews per hour', async (t) => {
@@ -90,37 +77,49 @@ test('valid input returns the review and its time; invalid input never reaches t
   assert.equal(calls.length, 10);
 });
 
-test('the Claude reviewer sends the aggregate with a structured format and keeps at most three items per list', async () => {
-  const { client, requests } = stubClient(textMessage(JSON.stringify({ summary: ' 잘했어요. ', strengths: ['a', ' ', 'b', 'c', 'd'], improvements: [] })));
-  assert.deepEqual(await createClaudeReviewer(client)(input), { summary: '잘했어요.', strengths: ['a', 'b', 'c'], improvements: [], model: AI_REVIEW_MODEL });
-  const [params] = requests;
-  assert.equal(params.model, 'claude-opus-5-5');
-  assert.equal(params.fallbacks, 'default');
-  assert.deepEqual(params.betas, ['server-side-fallback-2026-07-01']);
-  assert.equal(params.output_config.effort, 'low');
-  assert.equal(params.output_config.format.type, 'json_schema');
-  assert.ok(params.messages[0].content.includes(JSON.stringify(input)));
-});
+const local = { sideMetric: 'shoulder', sessions: 1, measuredMinutes: 5,
+  neck: { current: 80, previous: null }, side: { current: 92, previous: null },
+  latestNeckBand: { fromPoints: 80, toPoints: 85, percentOfValidTime: 64 } };
 
-test('refusals, truncated output and unreadable output become retryable 502 errors', async () => {
-  for (const result of [{ stop_reason: 'refusal' }, { stop_reason: 'max_tokens' }, textMessage('not json'), textMessage('{"summary":"  "}')]) {
-    const { client } = stubClient(result);
-    await assert.rejects(createClaudeReviewer(client)(input), (error: unknown) => error instanceof HttpError && error.status === 502);
+test('the gateway receives compact Korean facts from completed local summaries and returns the model response', async () => {
+  const safe = parseReviewInput({ days: 7, localPosture: { ...local, owner: 'private-id' } });
+  let body = '';
+  const review = await createMiniPcReviewer('https://mini.example/review', async (_url, init) => {
+    body = String(init?.body);
+    return Response.json({ summary: '목 자세는 평균 180점이었어요. 화면을 볼 때 턱이 앞으로 빠지지 않게 확인해 보세요.', model: 'gemma3:4b' });
+  })(safe);
+  assert.deepEqual(Object.keys(JSON.parse(body)), ['record']);
+  assert.match(body, /어깨 자세 점수 92점/);
+  assert.match(body, /64%/);
+  assert.doesNotMatch(body, /private-id|좌우 균형 점수|scorePolicyVersions/);
+  assert.equal(review.model, 'gemma3:4b');
+  assert.match(review.summary, /80점/);
+  assert.doesNotMatch(review.summary, /180점/);
+  assert.equal(review.adviceSource, 'model');
+  assert.match(review.summary, /턱이 앞으로 빠지지 않게/);
+  assert.throws(() => parseReviewInput({ ...input, localPosture: local }), badRequest);
+  for (const extra of [{ sideMetric: 'unknown' }, { neck: { current: 150 } }, { latestNeckBand: { fromPoints: 90, toPoints: 80, percentOfValidTime: 10 } }]) {
+    assert.throws(() => parseReviewInput({ days: 7, localPosture: { ...local, ...extra } }), badRequest);
   }
 });
 
-test('SDK failures map to messages the screen can show; other errors are not hidden', async (t) => {
-  t.mock.method(console, 'error', () => {});
-  const cases: [Error, number][] = [
-    [Anthropic.APIError.generate(401, undefined, 'invalid x-api-key', new Headers()), 503],
-    [Anthropic.APIError.generate(429, undefined, 'rate limited', new Headers()), 429],
-    [Anthropic.APIError.generate(529, undefined, 'overloaded', new Headers()), 502],
-    [new Anthropic.APIConnectionTimeoutError(), 504],
-  ];
-  for (const [failure, status] of cases) {
-    const { client } = stubClient(failure);
-    await assert.rejects(createClaudeReviewer(client)(input), (error: unknown) => error instanceof HttpError && error.status === status);
+test('a wrong model interpretation of blink units is replaced with the observed rate, difference and a useful action', async () => {
+  const reviewer = createMiniPcReviewer('https://mini.example/review', async () =>
+    Response.json({ summary: '분당 깜빡임이 9회 감소했어요.', model: 'gemma3:4b' }));
+  const answer = await reviewer({ days: 7, upper: null, keyboard: null, eye: { blinkRate: 9, previousBlinkRate: 14, validMinutes: 7 } });
+  assert.match(answer.summary, /9회로 5회 줄었어요/);
+  assert.doesNotMatch(answer.summary, /9회 감소/);
+  assert.match(answer.summary, /깜빡여 보세요/);
+  assert.equal(answer.adviceSource, 'record');
+});
+
+test('invalid gateway responses and unavailable or busy models surface actionable errors', async () => {
+  for (const [response, expected] of [
+    [Response.json({ summary: ' ', model: 'gemma3:4b' }), 502],
+    [new Response('invalid'), 502], [new Response(null, { status: 503 }), 503],
+    [new Response(null, { status: 504 }), 504], [new Response(null, { status: 500 }), 502],
+  ] as const) {
+    const reviewer = createMiniPcReviewer('https://mini.example/review', async () => response);
+    await assert.rejects(reviewer(input), (error: unknown) => error instanceof HttpError && error.status === expected);
   }
-  const { client } = stubClient(new Error('local bug'));
-  await assert.rejects(createClaudeReviewer(client)(input), /local bug/);
 });

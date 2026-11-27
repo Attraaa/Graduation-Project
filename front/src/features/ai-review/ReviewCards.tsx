@@ -34,6 +34,7 @@ export default function ReviewCards({ review }: { review: AiReview }) {
       <section aria-label="총평" className={`${CARD} space-y-3`}>
         <CardHeading icon={<Sparkles size={16} />} iconClass="bg-track text-heading">총평</CardHeading>
         <p className="leading-relaxed text-heading">{review.summary}</p>
+        {review.adviceSource === 'record' && <p className="text-xs text-muted">측정 기록에 맞춘 기본 습관 제안을 표시했어요.</p>}
       </section>
       <div className="grid gap-4 md:grid-cols-2">
         <ListCard title="잘한 점" icon={<ThumbsUp size={16} />} iconClass="bg-mode-upper-soft text-mode-upper" items={review.strengths} />

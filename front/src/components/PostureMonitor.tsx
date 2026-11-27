@@ -15,6 +15,8 @@ import type { NeckFlow } from '../features/posture/e19/flow';
 import { neckFrame } from '../features/posture/e19/frame';
 import type { FaceBuffer } from '../features/posture/e19/frame';
 import type { NeckFrame, NeckModel } from '../features/posture/e19/model';
+import { createPostureScoreTimeline } from '../features/posture/scoreTimeline';
+import { beginPostureTimeline } from '../features/records/postureTimelineRecording';
 import type { CaptureSink, CaptureStart } from '../features/records/recording';
 import { useCameraSettings } from '../features/camera/context';
 
@@ -71,10 +73,27 @@ const PostureMonitor = ({ isRunning, paused = false, referenceRequest = 0, devic
     const beginRecord = (at: number) => {
       const sessionId = crypto.randomUUID();
       const epoch = startEpoch + at - startMono;
-      return [turtleScorePolicy, balanceRule].map(policy => recordCapture?.({
-        id: `${sessionId}:${policy.mode}`, mode: policy.mode, scorePolicyVersion: policy.version,
-        habitPolicyVersion: neck.habitPolicyVersion, at, epoch,
-      }));
+      const local = beginPostureTimeline({ id: sessionId, startedAt: epoch,
+        scorePolicyVersions: { neck: turtleScorePolicy.version, shoulder: balanceRule.version }, habitPolicyVersion: neck.habitPolicyVersion });
+      const timeline = createPostureScoreTimeline(at, points => local.append(points));
+      local.onStop(time => timeline.finish(time));
+      return [turtleScorePolicy, balanceRule].map(policy => {
+        const remote = recordCapture?.({ id: `${sessionId}:${policy.mode}`, mode: policy.mode, scorePolicyVersion: policy.version,
+          habitPolicyVersion: neck.habitPolicyVersion, at, epoch });
+        return {
+          sample(time: number, value: Parameters<CaptureSink['sample']>[1]) {
+            timeline.sample(policy.mode === 'balance' ? 'shoulder' : 'neck', time, value);
+            remote?.sample(time, value);
+          },
+          finish(time: number) {
+            if (policy.mode === 'balance') {
+              timeline.finish(time);
+              local.finish(epoch + time - at);
+            }
+            remote?.finish(time);
+          },
+        };
+      });
     };
     let recording = beginRecord(startMono);
     let recordedReference: string | null = null;

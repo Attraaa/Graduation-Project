@@ -1,10 +1,9 @@
-import Anthropic from '@anthropic-ai/sdk';
+import type { LocalPostureReview } from '../../../database/localReview.ts';
+import { buildReviewFacts, cautionNote, renderSummaryInput, SHOWN_CANDIDATES } from './reviewFacts.js';
+import { pickAdvice, reviewAdvice } from './reviewAdvice.js';
 import { KEYBOARD_CODES } from '../../../database/keyboard.ts';
 import { HttpError } from '../http.js';
 import { bodyObject, decimal, integer, optional } from '../validation.js';
-
-/** AI 총평에 쓰는 Claude 모델입니다. 바꾸면 비용과 문장이 달라지고 입력 계약은 그대로입니다. */
-export const AI_REVIEW_MODEL = 'claude-opus-5-5';
 
 type Pair = { current: number | null; previous: number | null };
 /**
@@ -13,6 +12,7 @@ type Pair = { current: number | null; previous: number | null };
  */
 export interface ReviewInput {
   days: 7 | 30;
+  localPosture?: LocalPostureReview;
   upper: {
     neck: Pair; balance: Pair; measuredMinutes: number; sessions: number;
     deviations: number; deviationRate: number | null; validRate: number | null;
@@ -23,7 +23,7 @@ export interface ReviewInput {
     judged: number; frequentKeys: { code: string; differentRate: number }[];
   } | null;
 }
-export interface Review { summary: string; strengths: string[]; improvements: string[]; model: string }
+export interface Review { summary: string; strengths: string[]; improvements: string[]; model: string; adviceSource?: 'model' | 'record' }
 export type Reviewer = (input: ReviewInput) => Promise<Review>;
 
 const MAX_MINUTES = 60 * 24 * 31;
@@ -67,87 +67,53 @@ export function parseReviewInput(body: unknown): ReviewInput {
     judged: integer(item.judged, '판정한 입력 수', 0, 1_000_000_000),
     frequentKeys: frequentKeys(item.frequentKeys),
   }));
-  if (!upper && !eye && !keyboard) throw new HttpError(400, '기록이 있는 기간만 총평을 만들 수 있습니다.');
-  return { days, upper, eye, keyboard };
+  const localPosture = section(input.localPosture, (item): LocalPostureReview => {
+    if (item.sideMetric !== 'balance' && item.sideMetric !== 'shoulder') throw new HttpError(400, '상체 점수 항목이 올바르지 않습니다.');
+    const neck = pair(item.neck, '목 점수'), side = pair(item.side, '어깨 또는 좌우 균형 점수');
+    if (neck.current === null && side.current === null) throw new HttpError(400, '측정한 상체 점수가 없습니다.');
+    const latestNeckBand = section(item.latestNeckBand, band => {
+      const fromPoints = decimal(band.fromPoints, '구간 시작', 0, 100), toPoints = decimal(band.toPoints, '구간 끝', 0, 100);
+      if (fromPoints >= toPoints) throw new HttpError(400, '점수 구간이 올바르지 않습니다.');
+      return { fromPoints, toPoints, percentOfValidTime: decimal(band.percentOfValidTime, '유효 시간 비율', 0, 100) };
+    });
+    return { sideMetric: item.sideMetric, neck, side, latestNeckBand,
+      measuredMinutes: minutes(item.measuredMinutes, '측정 시간'), sessions: integer(item.sessions, '측정 횟수', 1, 100_000) };
+  });
+  if (upper && localPosture) throw new HttpError(400, '상체 집계가 중복되었습니다.');
+  if (!localPosture && !upper && !eye && !keyboard) throw new HttpError(400, '기록이 있는 기간만 총평을 만들 수 있습니다.');
+  return { days, upper, eye, keyboard, ...(localPosture ? { localPosture } : {}) };
 }
 
-const SYSTEM_PROMPT = `당신은 자세·타자 습관 기록 앱 Moti의 코치입니다. 사용자의 최근 기간 기록을 읽고 앱의 "AI 총평" 화면에 들어갈 짧은 총평을 씁니다.
-
-사용자 메시지의 JSON은 앱이 계산한 기간 집계입니다. 계산은 프로그램이 끝냈고, 당신은 그 수치를 해석해 설명합니다.
-- days: 기간 길이(7 또는 30일). previous가 붙은 값은 바로 앞 같은 길이 기간의 값입니다.
-- upper: 상체 측정. neck(목 자세 점수)·balance(좌우 균형 점수)는 0~100점 평균 점수로, 측정을 시작할 때 사용자가 잡은 자기 기준 자세와 얼마나 비슷했는지 나타냅니다. neck은 머리가 앞으로 나간 정도, balance는 고개와 어깨선이 옆으로 기운 정도를 봅니다. 실제 목 각도나 몸 상태가 아닙니다. measuredMinutes는 측정 시간(분), sessions는 측정 횟수, deviations는 기준 자세에서 2초 이상 벗어난 횟수, deviationRate는 제대로 관찰한 시간 중 기준에서 벗어나 있던 시간 비율(%), validRate는 측정 시간 중 얼굴과 어깨가 보여 실제로 분석한 시간 비율(%)입니다.
-- eye: 깜빡임 관찰. blinkRate는 제대로 관찰한 시간 기준 분당 깜빡임 횟수, validMinutes는 제대로 관찰한 시간(분)입니다. 깜빡임 횟수는 점수가 아니며 건강 상태를 판단하는 근거가 아닙니다.
-- keyboard: 타자 손가락 연습. score는 권장 손가락으로 누른 정도를 0~100으로 나타낸 훈련 점수, coverage는 손가락을 판정할 수 있었던 입력 비율(%), consistency는 같은 키를 같은 손가락으로 누른 비율(%), judged는 판정한 입력 수, frequentKeys는 권장과 다른 손가락을 자주 쓴 키(KeyboardEvent.code)와 그 키에서 다른 손가락을 쓴 비율(%)입니다.
-- 값이 null이거나 영역 전체가 null이면 그 기간에 측정하지 않았거나 표본이 부족한 것입니다.
-
-작성 규칙:
-- 주어진 수치에 근거한 내용만 씁니다. 없는 수치나 원인을 지어내지 않습니다. 측정 시간이 짧거나 판정한 입력이 적으면 조심스럽게 해석합니다.
-- 질환·증후군·위험도 같은 의학적 판단이나 진단을 하지 않습니다.
-- 직전 기간과 비교할 수 있으면 변화 방향을 짚어 줍니다.
-- 개선할 점은 다음 기간에 이 앱으로 바로 해 볼 수 있는 구체적인 행동으로 씁니다. 예: 측정을 더 자주 켜기, 기준 자세를 다시 잡기, 자주 다른 손가락을 쓴 키를 천천히 연습하기.
-- 키 이름은 KeyA 대신 'A 키'처럼 사람이 읽는 이름으로 씁니다.
-- 다정하고 담백한 해요체 한국어로 씁니다.
-
-summary에는 기간 전체를 2~3문장으로 정리합니다. strengths와 improvements에는 각각 1~3개의 짧은 문장을 담습니다. 측정한 영역이 하나뿐이면 그 영역만 다룹니다.`;
-
-// Structured output keeps the cards renderable; item counts are enforced after parsing.
-const REVIEW_SCHEMA = {
-  type: 'object',
-  properties: {
-    summary: { type: 'string' },
-    strengths: { type: 'array', items: { type: 'string' } },
-    improvements: { type: 'array', items: { type: 'string' } },
-  },
-  required: ['summary', 'strengths', 'improvements'],
-  additionalProperties: false,
-};
-
-const unreadable = () => new HttpError(502, 'AI 응답을 읽지 못했어요. 다시 시도해 주세요.');
-
-function parseReview(text: string | undefined) {
-  let value: unknown;
-  try { value = JSON.parse(text ?? ''); } catch { throw unreadable(); }
-  const review = typeof value === 'object' && value !== null ? value as Record<string, unknown> : {};
-  const lines = (items: unknown) => (Array.isArray(items) ? items : [])
-    .filter((item): item is string => typeof item === 'string').map(item => item.trim()).filter(Boolean).slice(0, 3);
-  const summary = typeof review.summary === 'string' ? review.summary.trim() : '';
-  if (!summary) throw unreadable();
-  return { summary, strengths: lines(review.strengths), improvements: lines(review.improvements) };
-}
-
-/** SDK 오류를 화면에 보여 줄 HTTP 오류로 바꿉니다. 원문은 서버 로그에만 남깁니다. */
-function failure(error: unknown) {
-  if (!(error instanceof Anthropic.APIError)) return error;
-  console.error('AI review request failed:', error.status ?? 'no response', error.message);
-  if (error instanceof Anthropic.AuthenticationError || error instanceof Anthropic.PermissionDeniedError) {
-    return new HttpError(503, 'AI API 키를 사용할 수 없어요. server/.env의 ANTHROPIC_API_KEY를 확인해 주세요.');
-  }
-  if (error instanceof Anthropic.RateLimitError) return new HttpError(429, 'AI 요청이 몰리고 있어요. 잠시 후 다시 시도해 주세요.');
-  if (error instanceof Anthropic.APIConnectionError) return new HttpError(504, 'AI 서버에 연결하지 못했어요. 잠시 후 다시 시도해 주세요.');
-  return new HttpError(502, 'AI 총평을 만들지 못했어요. 잠시 후 다시 시도해 주세요.');
-}
-
-export function createClaudeReviewer(client: Anthropic): Reviewer {
+/** Bridges the authenticated app API to the mini PC's fixed, private /review endpoint. */
+export function createMiniPcReviewer(url: string, send: typeof fetch = fetch): Reviewer {
   return async input => {
-    let response: Anthropic.Beta.BetaMessage;
+    const facts = buildReviewFacts(input);
+    const options = reviewAdvice(input);
+    const record = [renderSummaryInput(facts), '[다음 측정에서 연습할 수 있는 습관]', ...options.map(item => item.text),
+      '화면에 수치와 변화는 이미 표시됩니다. 마지막 문장에는 위 습관 중 기록에 맞는 한 가지를 골라 숫자 없이 사용자에게 직접 권해 주세요.'].join('\n');
+    const timeout = AbortSignal.timeout(95_000);
+    const offline = () => new HttpError(503, '미니 PC 총평 서버에 연결할 수 없어요. 잠시 후 다시 시도해 주세요.');
+    const timedOut = () => new HttpError(504, '총평 작성 시간이 초과됐어요. 잠시 후 다시 시도해 주세요.');
+    const invalid = () => new HttpError(502, '미니 PC가 총평을 완성하지 못했어요. 다시 시도해 주세요.');
+    let reply;
     try {
-      response = await client.beta.messages.create({
-        model: AI_REVIEW_MODEL,
-        max_tokens: 16000,
-        // A safety-classifier decline is retried on Anthropic's recommended fallback model within the same call.
-        betas: ['server-side-fallback-2026-07-01'],
-        fallbacks: 'default',
-        // Explaining numbers the app already computed does not need deep reasoning.
-        output_config: { effort: 'low', format: { type: 'json_schema', schema: REVIEW_SCHEMA } },
-        system: SYSTEM_PROMPT,
-        messages: [{ role: 'user', content: `이번 기간 집계입니다.\n${JSON.stringify(input)}` }],
-      });
+      const response = await send(url, { method: 'POST', redirect: 'error', signal: timeout,
+        headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ record }) });
+      if (response.status === 504) throw timedOut();
+      if (response.status === 429 || response.status === 503) throw new HttpError(503, '미니 PC에서 다른 총평을 작성 중이에요. 잠시 후 다시 시도해 주세요.');
+      if (!response.ok) throw invalid();
+      reply = await response.json();
     } catch (error) {
-      throw failure(error);
+      if (error instanceof HttpError) throw error;
+      if (timeout.aborted) throw timedOut();
+      if (error instanceof SyntaxError) throw invalid();
+      throw offline();
     }
-    if (response.stop_reason === 'refusal') throw new HttpError(502, 'AI가 이번 요청에는 총평을 쓰지 않았어요. 다시 시도해 주세요.');
-    if (response.stop_reason === 'max_tokens') throw unreadable();
-    const text = response.content.find((block): block is Anthropic.Beta.BetaTextBlock => block.type === 'text')?.text;
-    return { ...parseReview(text), model: response.model };
+    if (typeof reply?.summary !== 'string' || !reply.summary.trim() || reply.summary.length > 4000
+      || typeof reply.model !== 'string' || !reply.model.trim() || reply.model.length > 120) throw invalid();
+    const note = cautionNote(facts);
+    const advice = pickAdvice(reply.summary, options);
+    return { summary: [facts.overview, advice.text, note].filter(Boolean).join(' '), model: reply.model, adviceSource: advice.source,
+      strengths: facts.strengths.slice(0, SHOWN_CANDIDATES), improvements: facts.improvements.slice(0, SHOWN_CANDIDATES) };
   };
 }

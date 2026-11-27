@@ -71,9 +71,9 @@ function change(current: number, previous: number | null, days: number, unit: st
  * One score line and at most one candidate for it: a change wins over the level. Nothing is judged when the
  * sample is too thin to trust. Returns whether an improvement was added, so the next score can skip repeating advice.
  */
-function score(facts: Draft, area: Candidates, name: string, current: number | null, previous: number | null, reliable: boolean, advice: string) {
+function score(facts: Draft, area: Candidates, name: string, current: number | null, previous: number | null, reliable: boolean, advice: string, keepDecimal = false) {
   if (current === null) return false;
-  const value = Math.round(current);
+  const value = keepDecimal ? Math.round(current * 10) / 10 : Math.round(current);
   const moved = change(current, previous, facts.days, '점', SAME_SCORE, ['오름', '내려감']);
   highlight(facts, `${name} ${value}점 (${moved.text})`);
   const subject = `${name}는`;
@@ -191,6 +191,16 @@ export function buildReviewFacts(input: ReviewInput): ReviewFacts {
     clauses: [], blink: null,
   };
   const upperArea: Candidates = { strengths: [], improvements: [] }, keyboardArea: Candidates = { strengths: [], improvements: [] };
+  if (input.localPosture) {
+    const { neck, side, sideMetric, sessions, measuredMinutes, latestNeckBand } = input.localPosture;
+    const reliable = measuredMinutes >= SHORT_UPPER_MINUTES;
+    const sideName = sideMetric === 'balance' ? '좌우 균형 점수' : '어깨 자세 점수';
+    score(draft, upperArea, '목 자세 점수', neck.current, neck.previous, reliable, '화면을 볼 때 턱을 가볍게 당겨 보세요.', true);
+    score(draft, upperArea, sideName, side.current, side.previous, reliable, '양쪽 어깨에 힘을 빼 보세요.', true);
+    highlight(draft, `이 기기의 상체 측정 ${sessions}회, 총 ${duration(measuredMinutes)}`);
+    if (latestNeckBand) highlight(draft, `가장 최근 측정의 목 최빈 구간 ${latestNeckBand.fromPoints}~${latestNeckBand.toPoints}점, 유효 관찰 시간의 ${latestNeckBand.percentOfValidTime}%`);
+    if (!reliable) caution(draft, '상체', '측정 시간이 짧아 장기적인 자세 습관을 단정하기 어려워요.');
+  }
   if (input.upper) upper(draft, upperArea, input.upper);
   if (input.eye) eye(draft, input.eye);
   if (input.keyboard) keyboard(draft, keyboardArea, input.keyboard);

@@ -1,3 +1,4 @@
+import type { LocalPostureReview } from '../../../../database/localReview.ts';
 import { keyboardSummary } from '../../../../database/keyboard.ts';
 import type { KeyboardCount, KeyboardStored } from '../../../../database/keyboard.ts';
 import { minutesText, rateText } from '../dashboard/format.ts';
@@ -9,6 +10,7 @@ type Pair = { current: number | null; previous: number | null };
 /** Body of POST /api/ai/review (server/src/services/aiReview.ts): numbers and key codes only. */
 export interface AiReviewInput {
   days: PeriodDays;
+  localPosture?: LocalPostureReview;
   upper: {
     neck: Pair; balance: Pair; measuredMinutes: number; sessions: number;
     deviations: number; deviationRate: number | null; validRate: number | null;
@@ -19,7 +21,7 @@ export interface AiReviewInput {
     judged: number; frequentKeys: { code: string; differentRate: number }[];
   } | null;
 }
-export interface AiReview { summary: string; strengths: string[]; improvements: string[]; model: string; generatedAt: string }
+export interface AiReview { summary: string; strengths: string[]; improvements: string[]; model: string; generatedAt: string; adviceSource?: 'model' | 'record' }
 export type InputRow = { mode: 'upper' | 'eye' | 'keyboard'; name: string; text: string };
 
 const oneDecimal = (value: number) => Math.round(value * 10) / 10;
@@ -68,12 +70,20 @@ export function aiReviewInput(summary: StatisticsSummary, keyboard: KeyboardStor
   return input.upper || input.eye || input.keyboard ? input : null;
 }
 
-const score = (pair: Pair) => pair.current === null ? '—'
-  : `${Math.round(pair.current)}점${pair.previous === null ? '' : ` (직전 ${Math.round(pair.previous)}점)`}`;
+const score = (pair: Pair, round = Math.round) => pair.current === null ? '—'
+  : `${round(pair.current)}점${pair.previous === null ? '' : ` (직전 ${round(pair.previous)}점)`}`;
 
 /** Every value of the request in words, shown before anything is sent. */
-export function inputRows({ upper, eye, keyboard }: AiReviewInput): InputRow[] {
+export function inputRows({ upper, eye, keyboard, localPosture }: AiReviewInput): InputRow[] {
   const rows: InputRow[] = [];
+  if (localPosture) {
+    const { neck, side, sideMetric, measuredMinutes, sessions, latestNeckBand: band } = localPosture;
+    rows.push({ mode: 'upper', name: '상체', text: [
+      `목 ${score(neck, oneDecimal)}`, `${sideMetric === 'balance' ? '좌우 균형' : '어깨'} ${score(side, oneDecimal)}`,
+      `측정 ${minutesText(measuredMinutes * 60_000)} · ${sessions}회`,
+      ...(band ? [`최근 측정에서 목 ${band.fromPoints}~${band.toPoints}점 구간이 유효 시간의 ${band.percentOfValidTime}%`] : []),
+    ].join(' · ') });
+  }
   if (upper) rows.push({ mode: 'upper', name: '상체', text: [
     `목 ${score(upper.neck)}`, `좌우 균형 ${score(upper.balance)}`,
     `측정 ${minutesText(upper.measuredMinutes * 60_000)} · ${upper.sessions}회`,

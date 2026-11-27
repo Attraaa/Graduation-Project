@@ -5,13 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/server.ts",
-    "build": "tsc && esbuild src/server.ts --bundle --platform=node --format=esm --packages=external --target=node24 --outfile=dist/server.js",
+    "build": "tsc && esbuild src/server.ts src/reviewServer.ts --bundle --platform=node --format=esm --packages=external --target=node24 --outdir=dist",
     "start": "node dist/server.js",
     "seed": "tsx seed.ts",
     "test": "tsx --test test/*.test.ts"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "0.133.0",
     "bcrypt": "6.0.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",

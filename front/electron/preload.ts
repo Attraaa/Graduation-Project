@@ -1,4 +1,5 @@
 import { ipcRenderer, contextBridge } from 'electron'
+import type { PostureTimelineBatch } from '../src/features/records/postureTimelineContract'
 import type { SystemNotificationRequest } from '../src/features/notifications/contract'
 import type { OverlayCommand, OverlayResult, OverlaySnapshot, OverlayView } from '../src/features/overlay/contract'
 
@@ -67,6 +68,9 @@ contextBridge.exposeInMainWorld('motiKeyboard', {
 
 // Records are stored on the API server; main only asks the renderer to flush them before closing.
 contextBridge.exposeInMainWorld('motiRecords', {
+  writePostureTimeline: (batch: PostureTimelineBatch) => ipcRenderer.invoke('records:posture-timeline-write', batch),
+  readPostureSummaries: (owner: string, from: number, to: number) => ipcRenderer.invoke('records:posture-timelines-read', owner, from, to),
+  clearPostureTimelines: (owner: string) => ipcRenderer.invoke('records:posture-timelines-clear', owner),
   onClosing: (listener: () => Promise<boolean>) => {
     const handle = () => { void listener().then(ok => ipcRenderer.send('records:close-ready', ok)).catch(() => ipcRenderer.send('records:close-ready', false)) }
     ipcRenderer.on('records:closing', handle)

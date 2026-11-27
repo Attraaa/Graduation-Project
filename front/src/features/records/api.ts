@@ -1,8 +1,13 @@
 import type { RecordsApi, RecordsResult } from '../../../../database/contracts.ts';
 import { apiRequest } from '../../utils/apiClient';
 
-/** Electron only signals window closing so pending batches can flush to the server first. */
-declare global { interface Window { motiRecords?: { onClosing(listener: () => Promise<boolean>): () => void } } }
+import type { PostureTimelineBatch } from './postureTimelineContract';
+import type { ReviewSession } from './reviewSession';
+declare global { interface Window { motiRecords?: {
+  writePostureTimeline(batch: PostureTimelineBatch): Promise<void>;
+  readPostureSummaries(owner: string, from: number, to: number): Promise<ReviewSession[]>;
+  clearPostureTimelines(owner: string): Promise<void>;
+  onClosing(listener: () => Promise<boolean>): () => void } } }
 
 const call = async <T>(request: () => Promise<T>): Promise<RecordsResult<T>> => {
   try { return { ok: true, value: await request() }; }
