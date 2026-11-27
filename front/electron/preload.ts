@@ -1,13 +1,13 @@
 import { ipcRenderer, contextBridge } from 'electron'
 import type { PostureTimelineBatch } from '../src/features/records/postureTimelineContract'
 import type { SystemNotificationRequest } from '../src/features/notifications/contract'
-import type { OverlayCommand, OverlayResult, OverlaySnapshot, OverlayView } from '../src/features/overlay/contract'
+import type { OverlayCommand, OverlayMode, OverlayResult, OverlaySnapshot, OverlayView } from '../src/features/overlay/contract'
 
 if (process.argv.includes('--moti-overlay')) {
   contextBridge.exposeInMainWorld('motiOverlay', {
     state: () => ipcRenderer.invoke('overlay:state'), ready: () => ipcRenderer.invoke('overlay:ready'),
     command: (command: OverlayCommand) => ipcRenderer.invoke('overlay:command', command),
-    back: () => ipcRenderer.invoke('overlay:back'),
+    back: (mode?: OverlayMode) => ipcRenderer.invoke('overlay:back', mode),
     onState: (listener: (state: OverlayView) => void) => {
       const handle = (_event: Electron.IpcRendererEvent, value: OverlayView) => listener(value)
       ipcRenderer.on('overlay:state', handle); return () => { ipcRenderer.removeListener('overlay:state', handle) }
@@ -43,7 +43,7 @@ contextBridge.exposeInMainWorld('motiNotifications', {
 })
 
 contextBridge.exposeInMainWorld('motiWindow', {
-  setTheme: (theme: 'light' | 'dark') => ipcRenderer.invoke('window:set-theme', theme),
+  setTheme: (theme: 'light' | 'dark', dimmed: boolean) => ipcRenderer.invoke('window:set-theme', theme, dimmed),
 })
 
 // Diagnostics log (electron/diagnostics.ts): memory and session state once a minute, and unhandled errors.

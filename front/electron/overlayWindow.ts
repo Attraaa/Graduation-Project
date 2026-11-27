@@ -1,9 +1,10 @@
 import type { BrowserWindow, BrowserWindowConstructorOptions, IpcMain, IpcMainInvokeEvent, Rectangle, Screen } from 'electron';
-import { parseOverlayCommand, parseOverlaySnapshot, type OverlayCommand, type OverlayResult, type OverlaySnapshot, type OverlayView } from '../src/features/overlay/contract.ts';
+import { parseOverlayCommand, parseOverlaySnapshot, visibleOverlayModes, type OverlayCommand, type OverlayResult, type OverlaySnapshot, type OverlayView } from '../src/features/overlay/contract.ts';
+import { statisticsTarget } from '../src/features/session/modes.ts';
 import { trustedRecordUrl } from './recordHandlers.ts';
 
-// Mini bar: a thin title row and one row per mode (front/src/features/overlay/overlay.css).
-export const OVERLAY_SIZE = { width: 340, height: 118 };
+// One mode or the empty state fits the compact size, including the stop dialog.
+const overlaySize = (snapshot: OverlaySnapshot | null) => ({ width: 430, height: visibleOverlayModes(snapshot).length === 2 ? 232 : 144 });
 export function fitOverlay(bounds: Rectangle, area: Rectangle): Rectangle {
   const width = Math.min(bounds.width, area.width), height = Math.min(bounds.height, area.height);
   return { width, height, x: Math.round(Math.max(area.x, Math.min(bounds.x, area.x + area.width - width))), y: Math.round(Math.max(area.y, Math.min(bounds.y, area.y + area.height - height))) };
@@ -43,7 +44,10 @@ export class OverlayWindow {
       const next = parseOverlaySnapshot(input);
       if (this.snapshot?.owner === next.owner && next.sequence <= this.snapshot.sequence) return;
       if (this.snapshot && this.snapshot.owner !== next.owner) this.invalidate();
-      this.snapshot = next; this.receivedAt = Date.now(); this.push();
+      const oldHeight = overlaySize(this.snapshot).height;
+      this.snapshot = next; this.receivedAt = Date.now();
+      if (overlaySize(next).height !== oldHeight) this.reposition();
+      this.push();
       } catch { /* Invalid send() payloads cannot terminate the main process. */ }
     });
     ipc.handle('desktop:open', event => { deps.trustedOwner(event); return this.open(); });
@@ -59,16 +63,24 @@ export class OverlayWindow {
     ipc.handle('overlay:state', event => { this.trusted(event); return this.view(); });
     ipc.handle('overlay:ready', event => { this.trusted(event); this.ready?.resolve(); });
     ipc.handle('overlay:command', (event, input: unknown) => { this.trusted(event); return this.command(parseOverlayCommand(input)); });
-    ipc.handle('overlay:back', event => { this.trusted(event); this.back(); });
+    ipc.handle('overlay:back', (event, mode: unknown) => {
+      this.trusted(event);
+      if (mode === undefined) { this.back(); return; }
+      if (mode !== 'upper_body' && mode !== 'keyboard') throw Error('잘못된 통계 요청입니다.');
+      const owner = this.deps.owner();
+      if (!owner || owner.isDestroyed()) throw Error('본창 연결을 확인해 주세요.');
+      this.back();
+      owner.webContents.send('desktop:navigate', statisticsTarget(mode));
+    });
     const heartbeat = setInterval(() => this.push(), 1000); heartbeat.unref();
-    // The bar has one fixed size. Feeding getBounds() back made the frameless window lose 16×8 px on every display
-    // change on Windows (a user's bar was 276×86 after a long session), so only the position is taken from it.
-    const reposition = () => {
-      if (!this.window || this.window.isDestroyed()) return;
-      const bounds = this.window.getBounds(); this.window.setBounds(fitOverlay({ ...bounds, ...OVERLAY_SIZE }, deps.screen.getDisplayMatching(bounds).workArea));
-    };
-    deps.screen.on('display-removed', reposition);
-    deps.screen.on('display-metrics-changed', reposition);
+    deps.screen.on('display-removed', () => this.reposition());
+    deps.screen.on('display-metrics-changed', () => this.reposition());
+  }
+  private reposition() {
+    if (!this.window || this.window.isDestroyed()) return;
+    // Windows can report a smaller frameless window after a display change. Only reuse its position.
+    const bounds = this.window.getBounds();
+    this.window.setBounds(fitOverlay({ ...bounds, ...overlaySize(this.snapshot) }, this.deps.screen.getDisplayMatching(bounds).workArea));
   }
   isActive() { return this.active; }
   ownsFocusedWindow() { return !!this.window && !this.window.isDestroyed() && this.window.isFocused(); }
@@ -106,9 +118,10 @@ export class OverlayWindow {
     this.previous = { maximized: owner.isMaximized(), bounds: owner.getNormalBounds() };
     const area = this.deps.screen.getDisplayMatching(owner.getBounds()).workArea;
     const saved = this.deps.readPosition();
-    const initial = fitOverlay(saved ? { ...saved, ...OVERLAY_SIZE } : { ...OVERLAY_SIZE, x: area.x + area.width - OVERLAY_SIZE.width - 20, y: area.y + 80 }, area);
-    const w = this.deps.create({ ...initial, frame: false, transparent: false, resizable: false, maximizable: false, minimizable: false,
-      minWidth: OVERLAY_SIZE.width, maxWidth: OVERLAY_SIZE.width, minHeight: OVERLAY_SIZE.height, maxHeight: OVERLAY_SIZE.height,
+    const size = overlaySize(this.snapshot);
+    const initial = fitOverlay(saved ? { ...saved, ...size } : { ...size, x: area.x + area.width - size.width - 20, y: area.y + 80 }, area);
+    // Windows' invisible resize frame can shrink a fixed, frameless window during creation or a bounds change.
+    const w = this.deps.create({ ...initial, frame: false, thickFrame: false, transparent: false, resizable: false, maximizable: false, minimizable: false,
       alwaysOnTop: true, skipTaskbar: true, show: false, backgroundColor: '#f3f5f8', title: 'Moti · 오버레이',
       webPreferences: { preload: this.deps.preload, additionalArguments: ['--moti-overlay'], partition: 'moti-overlay', contextIsolation: true, nodeIntegration: false, backgroundThrottling: false } });
     this.window = w;

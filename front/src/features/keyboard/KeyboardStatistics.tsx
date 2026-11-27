@@ -3,12 +3,16 @@ import type { ReactNode } from 'react';
 import { keyboardSummary } from '../../../../database/keyboard';
 import type { KeyboardCount, KeyboardStored } from '../../../../database/keyboard';
 import DailyChart from '../statistics/DailyChart';
+import HourlyChart from '../statistics/HourlyChart';
+import { clockText } from '../dashboard/format';
 import StatTile from '../statistics/StatTile';
 import { CARD, ChartHeader, EmptyChart, HistoryLink } from '../statistics/parts';
 import type { PeriodDays } from '../statistics/period';
+import { previousPeriodText } from '../statistics/text';
 import { percentText, reasonText, scoreText } from './labels';
 import KeyboardKeyExploration from './KeyboardKeyExploration';
 import { keyLabel as keyText } from './keyExploration';
+import { dailyKeyboardPractice } from './dailyPractice';
 
 const dayBefore = (day: string, n: number) => new Date(Date.parse(day) - n * 86400_000).toISOString().slice(0, 10);
 const policyKey = (row: KeyboardStored) => JSON.stringify([row.record.policyVersion, row.record.recognitionVersion, row.record.nearbyCredit]);
@@ -23,6 +27,7 @@ export default function KeyboardStatistics({ data, date, days, today, detail, on
   detail: (date: string) => ReactNode; onSelectDate: (date: string) => void; onOpenHistory: () => void;
 }) {
   const [policy, setPolicy] = useState(''), [selectedKey, setSelectedKey] = useState('KeyA');
+  const dayView = days === 1;
   const from = dayBefore(date, days - 1);
   const groups = [...new Set(data.map(policyKey))];
   const selectedPolicy = groups.includes(policy) ? policy : groups.at(-1) ?? '';
@@ -31,10 +36,12 @@ export default function KeyboardStatistics({ data, date, days, today, detail, on
   const allCounts = records.flatMap(row => row.counts);
   const counts = allCounts.filter(row => row.date >= from), previous = allCounts.filter(row => row.date < from);
   const summary = keyboardSummary(counts, credit), before = keyboardSummary(previous, credit);
-  const daily = Array.from({ length: days }, (_, i) => {
+  const daily = Array.from({ length: dayView ? 0 : days }, (_, i) => {
     const day = dayBefore(date, days - i - 1), totals = keyboardSummary(counts.filter(row => row.date === day), credit);
     return { date: day, score: totals.score, coverage: totals.coverage, valid: totals.valid, unknown: totals.unknown };
   });
+  const sessions = dayView ? dailyKeyboardPractice(records, date) : [];
+  const sessionTime = (index: number) => sessions[index] ? clockText(sessions[index].at, sessions[index].offsetMinutes) : '';
   const byKey = new Map<string, KeyboardCount[]>();
   counts.forEach(row => byKey.set(row.code, [...(byKey.get(row.code) ?? []), row]));
   const differences = [...byKey].map(([code, rows]) => ({ code, ...keyboardSummary(rows, credit) }))
@@ -47,18 +54,22 @@ export default function KeyboardStatistics({ data, date, days, today, detail, on
     {groups.length > 1 && <label className="block text-sm text-heading">정책<select className="ml-2 rounded border border-border bg-surface p-2" value={selectedPolicy} onChange={event => setPolicy(event.target.value)}>{groups.map(group => <option key={group} value={group}>{JSON.parse(group).join(' · ')}</option>)}</select></label>}
     <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
       <StatTile label="훈련 점수" value={scoreText(summary.score)} detail={`판정 가능한 ${summary.valid}회 · 인접 ${credit}점`}
-        chip={change === null ? null : { text: `직전 ${days}일보다 ${change > 0 ? '+' : ''}${change.toFixed(1)}`, tone: change > 0 ? 'good' : 'neutral' }} />
+        chip={change === null ? null : { text: `${previousPeriodText(days)}보다 ${change > 0 ? '+' : ''}${change.toFixed(1)}`, tone: change > 0 ? 'good' : 'neutral' }} />
       <StatTile label="기본표 일치율" value={percentText(summary.agreement)} />
       <StatTile label="판정 가능 비율" value={percentText(summary.coverage)} detail={`보류 ${summary.unknown}회 · 미지원/단축키 ${summary.unsupported}회 별도`} />
       <StatTile label="사용 일관성" value={percentText(summary.consistency)} detail={`키·Shift 상황별 10회 이상 · 대상 ${summary.consistencyTotal}회`} />
     </div>
     <section aria-label="연습 변화" className={`${CARD} space-y-3`}>
-      <ChartHeader title="연습 변화" legend={LINES} />
-      {counts.length ? <DailyChart label="날짜별 훈련 점수와 판정 가능 비율" lines={LINES} today={today} domain={[0, 100]}
+      <ChartHeader title={dayView ? '세션별 연습 변화' : '연습 변화'} legend={LINES} />
+      {dayView ? sessions.some(session => session.score !== null || session.coverage !== null)
+        ? <HourlyChart expanded label="세션별 훈련 점수와 판정 가능 비율" data={sessions.map(({ score, coverage }, hour) => ({ hour, score, coverage }))}
+          lines={LINES} domain={[0, 100]} unit="점" labelFor={sessionTime} />
+        : <EmptyChart text={sessions.length ? '판정할 수 있는 키보드 집계가 없어요' : '이 날의 키보드 연습 기록이 없어요'} />
+        : counts.length ? <DailyChart label="날짜별 훈련 점수와 판정 가능 비율" lines={LINES} today={today} domain={[0, 100]}
         faded={faded} detail={detail} onSelectDate={onSelectDate}
         data={daily.map(row => ({ date: row.date, score: row.score, coverage: row.coverage }))} />
         : <EmptyChart text="선택한 기간의 키보드 집계가 없습니다. 키보드 학습을 시작하면 처리된 입력의 집계를 저장합니다." />}
-      <p className="text-sm text-muted">직전 {days}일 {scoreText(before.score)} ({before.valid}회, 판정 {percentText(before.coverage)}) → 현재 {scoreText(summary.score)} ({summary.valid}회, 판정 {percentText(summary.coverage)}){summary.score !== null && before.score !== null ? ` · ${Math.round(summary.score) - Math.round(before.score)}점 변화` : ''}</p>
+      <p className="text-sm text-muted">{previousPeriodText(days)} {scoreText(before.score)} ({before.valid}회, 판정 {percentText(before.coverage)}) → {dayView ? '선택한 날' : '현재'} {scoreText(summary.score)} ({summary.valid}회, 판정 {percentText(summary.coverage)}){summary.score !== null && before.score !== null ? ` · ${Math.round(summary.score) - Math.round(before.score)}점 변화` : ''}</p>
       <p className="text-xs text-muted">표본 수와 판정 가능 비율이 다른 기간의 점수 변화는 실제 개선과 다를 수 있습니다. 일관성은 같은 키·Shift 상황에서 가장 많이 쓴 손가락의 비율이며 점수에 가산하지 않습니다.</p>
     </section>
     <div className="grid gap-4 lg:grid-cols-3">

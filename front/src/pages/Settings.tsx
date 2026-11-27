@@ -1,18 +1,14 @@
 import { useState, useSyncExternalStore } from 'react';
-import { Activity, Bell, Check, Database, Palette, Trash2, User } from 'lucide-react';
+import { Bell, Check, Database, Palette, Trash2, User } from 'lucide-react';
 import { clearStatistics, getCurrentUser, updateCurrentUser } from '../utils/authStore';
 import { useDialog } from '../components/dialog/useDialog';
-import type { EyeSensitivity } from '../features/eye/eyePolicy';
 import KeyboardSettings from '../features/keyboard/KeyboardSettings';
 import AccountSecurity from '../features/settings/AccountSecurity';
-import { BALANCE_SENSITIVITY } from '../features/posture/modes/balance';
-import { BUTTON, BUTTON_DANGER, Field, INPUT, Segmented, SettingsCard, Slider, Stepper, Switch } from '../features/settings/parts';
-import { readBalanceSensitivity, readBaseCva, readEyeSensitivity, writeBalanceSensitivity, writeBaseCva, writeEyeSensitivity } from '../features/settings/preferences';
-import { BASE_CVA } from '../features/posture/modes/turtle';
+import { BUTTON, BUTTON_DANGER, Field, INPUT, Segmented, SettingsCard, Stepper, Switch } from '../features/settings/parts';
 import { NOTIFICATION_SETTING_KEYS, NOTIFICATION_SETTINGS_CHANGED, readNotificationPreferences } from '../features/notifications/preferences';
 import { ALERT_SCORE, ALERT_SECONDS } from '../features/notifications/activityPolicy';
 import { useSubmission } from '../hooks/useSubmission';
-import { notificationDeliveryMessage, reportNotificationDelivery, subscribeNotificationDelivery } from '../features/notifications/delivery';
+import { notificationDeliveryMessage, subscribeNotificationDelivery } from '../features/notifications/delivery';
 
 type Theme = 'light' | 'dark';
 // Each tile always shows its own theme, so it carries that theme's colors instead of the current tokens.
@@ -20,9 +16,7 @@ const THEMES: Record<Theme, { name: string; page: string; card: string; line: st
   light: { name: '라이트', page: '#f3f5f8', card: '#ffffff', line: '#e3e7ee', ink: '#1d2433' },
   dark: { name: '다크', page: '#0f1218', card: '#171b23', line: '#252b36', ink: '#e6e9ef' },
 };
-const FREQUENCIES = [{ id: '0', name: '발생 시' }, { id: '5', name: '5분' }, { id: '10', name: '10분' }, { id: '30', name: '30분' }];
 const SOUNDS = [{ id: 'soft', name: '끄기' }, { id: 'normal', name: '켜기' }];
-const EYE_SENSITIVITIES: { id: EyeSensitivity; name: string }[] = [{ id: 'low', name: '낮음' }, { id: 'normal', name: '보통' }, { id: 'high', name: '높음' }];
 const MODE_DOTS = ['bg-mode-upper', 'bg-mode-keyboard'];
 const keep = (key: string, value: string) => {
   localStorage.setItem(`postureAI.${key}`, value);
@@ -90,38 +84,20 @@ const Settings = () => {
   const [clearing, setClearing] = useState(false);
   const currentUser = getCurrentUser();
   const [notificationsEnabled, setNotificationsEnabled] = useState(() => readNotificationPreferences().enabled);
-  const [testingNotification, setTestingNotification] = useState(false);
-  const [notificationStatus, setNotificationStatus] = useState('');
   const deliveryStatus = useSyncExternalStore(subscribeNotificationDelivery, notificationDeliveryMessage, notificationDeliveryMessage);
   const [darkMode, setDarkMode] = useState(localStorage.getItem('postureAI.theme') === 'dark');
   const [nickname, setNickname] = useState(currentUser?.nickname ?? '');
   const [savedNickname, setSavedNickname] = useState(nickname);
-  const [alertFrequency, setAlertFrequency] = useState(() => String(readNotificationPreferences().intervalMinutes));
   const [alertStrength, setAlertStrength] = useState(() => readNotificationPreferences().silent ? 'soft' : 'normal');
   const [scoreThreshold, setScoreThreshold] = useState(() => readNotificationPreferences().scoreThreshold);
   const [postureSeconds, setPostureSeconds] = useState(() => readNotificationPreferences().postureSeconds);
   const [keyboardThreshold, setKeyboardThreshold] = useState(() => readNotificationPreferences().keyboardThreshold);
   const [keyboardSeconds, setKeyboardSeconds] = useState(() => readNotificationPreferences().keyboardSeconds);
-  const [balanceSensitivity, setBalanceSensitivity] = useState(() => readBalanceSensitivity());
-  const [baseCva, setBaseCva] = useState(() => readBaseCva());
-  const [eyeSensitivity, setEyeSensitivity] = useState(() => readEyeSensitivity());
 
   const handleTheme = (theme: Theme) => {
     setDarkMode(theme === 'dark');
     keep('theme', theme);
     document.documentElement.classList.toggle('dark-theme', theme === 'dark');
-  };
-
-  const handleNotificationTest = async () => {
-    if (!window.motiNotifications || testingNotification) return;
-    setTestingNotification(true);
-    setNotificationStatus('');
-    try {
-      const result = await window.motiNotifications.show({ kind: 'test', silent: readNotificationPreferences().silent });
-      reportNotificationDelivery(result.ok);
-      setNotificationStatus(result.ok ? 'Windows에 알림을 보냈어요. 배너가 안 보이면 Windows 알림 설정·방해 금지를 확인해 주세요.' : result.message);
-    } catch { setNotificationStatus('알림 요청에 실패했어요. 앱을 다시 실행한 뒤 시도해 주세요.'); }
-    finally { setTestingNotification(false); }
   };
 
   const handleAccountSave = async () => {
@@ -186,8 +162,8 @@ const Settings = () => {
 
         <SettingsCard title="알림" icon={<Bell size={18} />} iconClass="bg-mode-shoulder-soft text-mode-shoulder">
           <div className="flex items-center justify-between gap-3">
-            <p className="text-sm font-semibold text-heading">Windows 알림</p>
-            <Switch label="Windows 알림" checked={notificationsEnabled}
+            <p className="text-sm font-semibold text-heading">알림 켜기</p>
+            <Switch label="알림 켜기" checked={notificationsEnabled}
               onChange={on => { setNotificationsEnabled(on); keep('notifications', on ? 'on' : 'off'); }} />
           </div>
           <Field label="알림 기준">
@@ -200,33 +176,11 @@ const Settings = () => {
                 onSeconds={value => { setKeyboardSeconds(value); keep('keyboardAlertSeconds', String(value)); }} />
             </div>
           </Field>
-          <Field label="반복 알림 간격">
-            <Segmented label="반복 알림 간격" options={FREQUENCIES} value={alertFrequency}
-              onChange={value => { setAlertFrequency(value); keep('alertFrequency', value); }} />
-          </Field>
           <Field label="알림 소리">
             <Segmented label="알림 소리" options={SOUNDS} value={alertStrength}
               onChange={value => { setAlertStrength(value); keep('alertStrength', value); }} />
           </Field>
-          <p className="text-xs text-muted">다른 앱 사용 중 또는 오버레이 모드에서 알림을 받아요.</p>
-          <button type="button" disabled={!window.motiNotifications || !notificationsEnabled || testingNotification}
-            onClick={handleNotificationTest} className={`${BUTTON} w-full`}>{testingNotification ? '알림 보내는 중…' : '알림 테스트'}</button>
-          {window.motiNotifications && <p role="status" className="text-xs text-muted">{deliveryStatus || notificationStatus}</p>}
-        </SettingsCard>
-
-        {/* Blink runs in the same upper-body measurement, so its sensitivity sits here instead of a card of its own. */}
-        <SettingsCard title="상체 측정 기준" icon={<Activity size={18} />} iconClass="bg-mode-upper-soft text-mode-upper">
-          <Slider id="settings-balance-sensitivity" label="좌우 균형 민감도" valueText={`${balanceSensitivity}%`}
-            min={BALANCE_SENSITIVITY.min} max={BALANCE_SENSITIVITY.max} step={BALANCE_SENSITIVITY.step} minLabel="둔감" maxLabel="민감"
-            value={balanceSensitivity} onChange={value => { setBalanceSensitivity(value); writeBalanceSensitivity(value); }} />
-          <Slider id="settings-base-cva" label="기준 CVA" valueText={`${baseCva}°`}
-            min={BASE_CVA.min} max={BASE_CVA.max} minLabel={`${BASE_CVA.min}°`} maxLabel={`${BASE_CVA.max}°`} value={baseCva}
-            onChange={value => { setBaseCva(value); writeBaseCva(value); }} />
-          <div className="space-y-2">
-            <p className="text-sm font-semibold text-heading">깜빡임 민감도</p>
-            <Segmented label="깜빡임 민감도" options={EYE_SENSITIVITIES} value={eyeSensitivity}
-              onChange={value => { setEyeSensitivity(value); writeEyeSensitivity(value); }} />
-          </div>
+          {window.motiNotifications && deliveryStatus && <p role="status" className="text-xs text-muted">{deliveryStatus}</p>}
         </SettingsCard>
 
         <SettingsCard title="데이터 관리" icon={<Database size={18} />}>

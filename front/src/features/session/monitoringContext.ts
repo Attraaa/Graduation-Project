@@ -6,7 +6,6 @@ import type { KeyboardMonitorSnapshot } from '../keyboard/monitorTypes';
 import type { useSessionControls } from './useSessionControls';
 import type { TrendPoint } from './trend';
 
-export type MonitoringMode = 'upper_body' | 'keyboard';
 type Session = {
   controls: ReturnType<typeof useSessionControls>;
   camera: CameraContextValue;

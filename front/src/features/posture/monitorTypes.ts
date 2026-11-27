@@ -29,6 +29,7 @@ export interface MonitorSnapshot {
   neck: EvaluationSummary;
   /** 좌우 균형(2026-11-25, 어깨 점수를 대신함): 고개와 보이면 어깨선이 기준보다 기운 정도. */
   balance: EvaluationSummary;
+  runAverages: { neck: number | null; balance: number | null };
   neckModel: NeckModelView;
 }
 
@@ -37,6 +38,7 @@ export function createMonitorSnapshot(): MonitorSnapshot {
     phase: 'loading', progress: 0, reason: null, observedSeconds: 0, delta: null,
     neck: createEvaluation(turtleScorePolicy),
     balance: createEvaluation(balanceScorePolicy),
+    runAverages: { neck: null, balance: null },
     neckModel: { step: 'prep', secondsLeft: null, failure: null },
   };
 }

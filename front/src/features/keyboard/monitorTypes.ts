@@ -16,7 +16,7 @@ export interface KeyboardMonitorSnapshot {
   detectedPresses: number
   latest: KeyboardLiveResult | null
   recent: KeyboardLiveResult[]
-  /** Scores of the last 50 judged presses of this run (liveScore.ts); kept across pauses and re-mapping. */
+  /** Scores of the last 50 judged presses (liveScore.ts). Explicit position recapture clears this window. */
   scores: number[]
   counts: KeyboardCount[]
   observationStatus: 'off' | 'observing' | 'excluded' | 'error'

@@ -6,6 +6,7 @@ import HourlyChart from './HourlyChart';
 import StatTile from './StatTile';
 import { CARD, CardTitle, ChartHeader, EmptyChart, HistoryLink, Waiting } from './parts';
 import type { EyePeriod, PeriodDays } from './period';
+import { fullDayHours } from './period';
 import { percentLabel, previousRateChip } from './text';
 
 const LINES = [{ key: 'rate', name: '분당 깜빡임', color: 'var(--color-mode-eye)' }];
@@ -16,6 +17,7 @@ export default function EyePanel({ eye, days, periodDays, max, today, detail, on
   detail: (date: string) => ReactNode; onSelectDate: (date: string) => void; onOpenHistory: () => void;
 }) {
   const empty = !eye.present;
+  const dayView = periodDays === 1;
   const faded = new Set(days.filter(day => !day.eye.present).map(day => day.date));
   return (
     <div className="space-y-4">
@@ -28,21 +30,26 @@ export default function EyePanel({ eye, days, periodDays, max, today, detail, on
         <StatTile label="가까워짐 안내" value={empty ? '—' : String(eye.nearReminders)} unit="회"
           detail={empty ? undefined : `깜빡임 안내 ${eye.openReminders}회`} />
       </div>
-      <section aria-label="날짜별 깜빡임 빈도" className={`${CARD} space-y-3`}>
+      {dayView ? <section aria-label="시간대별 깜빡임 빈도" className={`${CARD} space-y-3`}>
+        <ChartHeader title="시간대별 깜빡임 빈도" legend={LINES} />
+        {eye.hourly.some(hour => hour.rate !== null)
+          ? <HourlyChart expanded label="시간대별 깜빡임 빈도" data={fullDayHours(eye.hourly)} lines={LINES} domain={[0, eye.hourlyMax]} unit="회/분" />
+          : <EmptyChart text={empty ? undefined : '시간대별 빈도를 표시하려면 한 시간대에 유효 관찰 30초 이상이 필요해요'} />}
+      </section> : <section aria-label="날짜별 깜빡임 빈도" className={`${CARD} space-y-3`}>
         <ChartHeader title="날짜별 깜빡임 빈도" legend={LINES} />
         {empty ? <EmptyChart /> : (
           <DailyChart label="날짜별 깜빡임 빈도" lines={LINES} today={today} domain={[0, max]}
             faded={faded} detail={detail} onSelectDate={onSelectDate}
             data={days.map(day => ({ date: day.date, rate: day.eye.rate }))} />
         )}
-      </section>
-      <div className="grid gap-4 lg:grid-cols-3">
-        <section aria-label="시간대별 평균 깜빡임 빈도" className={CARD}>
+      </section>}
+      <div className={`grid gap-4 ${dayView ? 'lg:grid-cols-2' : 'lg:grid-cols-3'}`}>
+        {!dayView && <section aria-label="시간대별 평균 깜빡임 빈도" className={CARD}>
           <CardTitle title="시간대별 평균 깜빡임 빈도" />
           {empty ? <Waiting /> : (
             <HourlyChart label="시간대별 깜빡임 빈도" data={eye.hourly} lines={LINES} domain={[0, eye.hourlyMax]} unit="회/분" />
           )}
-        </section>
+        </section>}
         <section aria-label="유효 관찰 비율" className={CARD}>
           <CardTitle title="유효 관찰 비율" />
           {empty ? <Waiting /> : (

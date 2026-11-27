@@ -11,7 +11,7 @@ import EyeMonitor, { type EyeUpdate } from '../eye/EyeMonitor';
 import { emptyEyeSnapshot, type EyeSnapshot } from '../eye/measurement';
 import { beginEyeRecording, type EyeSink } from '../eye/recording';
 import { beginPostureRecording } from '../records/recording';
-import { readBalanceSensitivity, readEyeSensitivity } from '../settings/preferences';
+import { UPPER_MEASUREMENT } from '../settings/preferences';
 import { readNotificationPreferences } from '../notifications/preferences';
 import { habitRule } from '../posture/evaluation';
 import { createMonitorSnapshot, type MonitorSnapshot } from '../posture/monitorTypes';
@@ -19,7 +19,8 @@ import { createFaceBuffer, type FaceBuffer } from '../posture/e19/frame';
 import { initialKeyboardSnapshot, type KeyboardMonitorSnapshot } from '../keyboard/monitorTypes';
 import { liveAverage, livePressScore } from '../keyboard/liveScore';
 import { useSessionControls } from './useSessionControls';
-import { MonitoringContext, type MonitoringMode, type MonitoringState } from './monitoringContext';
+import { MonitoringContext, type MonitoringState } from './monitoringContext';
+import type { MonitoringMode } from './modes';
 import { appendTrend, type TrendPoint } from './trend';
 import { usePostureNotifications } from '../notifications/usePostureNotifications';
 import { useActivityNotifications } from '../notifications/useActivityNotifications';
@@ -28,12 +29,10 @@ import { systemIssue } from '../notifications/issues';
 import { sessionLabel } from './presentation';
 
 const initialEye = (): EyeUpdate => ({ measurement: emptyEyeSnapshot(), phase: 'loading', message: '' });
-// Sensitivities chosen in Settings and the upper-body alert rule ("N점 이하 N초", which also counts 기준에서 벗어남),
-// read when an upper-body run starts and fixed for that run.
-// Measurement and recording always receive the same values.
+// The alert rule also counts 기준에서 벗어남. Capture it when each upper-body run starts.
 const readSensitivity = () => {
   const alert = readNotificationPreferences();
-  return { balance: readBalanceSensitivity(), eye: readEyeSensitivity(), habit: habitRule(alert.scoreThreshold, alert.postureSeconds) };
+  return { balance: UPPER_MEASUREMENT.balanceSensitivity, eye: UPPER_MEASUREMENT.eyeSensitivity, habit: habitRule(alert.scoreThreshold, alert.postureSeconds) };
 };
 export default function MonitoringProvider({ children }: { children: ReactNode }) {
   const upper = useSessionControls('upper_body');
@@ -94,6 +93,19 @@ export default function MonitoringProvider({ children }: { children: ReactNode }
     upper.start();
   };
   const startKeyboard = () => { if (keyboard.getState().running) return; systemIssue('keyboard', '', null); lastPress.current = null; setKeys(initialKeyboardSnapshot); setKeyboardTrend([]); keyboard.start(); };
+  const recalibrate = () => {
+    const { running, paused } = upper.getState();
+    if (!running || paused) return;
+    faces.clear();
+    setUpperTrend([]);
+    setReferenceRequest(value => value + 1);
+  };
+  const remapKeyboard = () => {
+    const { running, paused } = keyboard.getState();
+    if (!running || paused) return;
+    setKeyboardTrend([]);
+    setRemap(value => value + 1);
+  };
   const trackingIncident = useRef<string | null>(null);
   useEffect(() => {
     if (!upper.isRunning || upper.isPaused) { trackingIncident.current = null; systemIssue('tracking', '', null); return; }
@@ -144,8 +156,8 @@ export default function MonitoringProvider({ children }: { children: ReactNode }
     return () => window.removeEventListener('moti-stop-measurement', stop);
   }, [stopUpper, stopKeyboard]);
   const base: BaseState = {
-    upper: { controls: { ...upper, pause: () => { upper.pause(); setUpperTrend(points => appendTrend(points, { at: performance.now(), neck: null, balance: null, keyboard: null })); } }, snapshot, eye, trend: upperTrend, start: startUpper, recalibrate: () => { setUpperTrend([]); setReferenceRequest(value => value + 1); } },
-    keyboard: { controls: { ...keyboard, pause: () => { keyboard.pause(); setKeyboardTrend(points => appendTrend(points, { at: performance.now(), neck: null, balance: null, keyboard: null })); } }, snapshot: keys, trend: keyboardTrend, start: startKeyboard, remap: () => setRemap(value => value + 1) },
+    upper: { controls: { ...upper, pause: () => { upper.pause(); setUpperTrend(points => appendTrend(points, { at: performance.now(), neck: null, balance: null, keyboard: null })); } }, snapshot, eye, trend: upperTrend, start: startUpper, recalibrate },
+    keyboard: { controls: { ...keyboard, pause: () => { keyboard.pause(); setKeyboardTrend(points => appendTrend(points, { at: performance.now(), neck: null, balance: null, keyboard: null })); } }, snapshot: keys, trend: keyboardTrend, start: startKeyboard, remap: remapKeyboard },
   };
   return <CameraProvider modeId="upper_body" deviceId={upper.deviceId} cameraLabel={deviceLabel(upper)} paused={upper.isPaused} onOpen={openCamera}>
     {error && <p role="alert" className="text-sm text-danger">{error}</p>}

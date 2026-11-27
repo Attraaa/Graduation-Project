@@ -21,7 +21,7 @@ export interface OverlaySnapshot {
   owner: string;
   sequence: number;
   theme: 'light' | 'dark';
-  upper_body: OverlaySession;
+  upper_body: OverlaySession & { blinkRate: number | null };
   keyboard: OverlaySession;
   savingFailed: boolean;
 }
@@ -31,6 +31,7 @@ export interface OverlayResult { ok: boolean; message?: string }
 
 const integer = (value: unknown) => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
 const short = (value: unknown, max = 120): value is string => typeof value === 'string' && value.length <= max;
+export const visibleOverlayModes = (snapshot: OverlaySnapshot | null) => OVERLAY_MODES.filter(mode => snapshot?.[mode].running);
 const metrics = (input: unknown): OverlayMetric[] => {
   if (!Array.isArray(input) || input.length > 2) throw Error('잘못된 오버레이 상태입니다.');
   return input.map(item => {
@@ -51,7 +52,9 @@ export function parseOverlaySnapshot(input: unknown): OverlaySnapshot {
     return { run: v.run, running: v.running, paused: v.paused, seconds: v.seconds, status: v.status, detail: v.detail, error: v.error,
       metrics: metrics(v.metrics), note: v.note };
   };
-  return { owner: s.owner, sequence: s.sequence, theme: s.theme, savingFailed: s.savingFailed, upper_body: session('upper_body'), keyboard: session('keyboard') };
+  const upper = session('upper_body'), blinkRate = s.upper_body.blinkRate;
+  if (blinkRate !== null && (typeof blinkRate !== 'number' || !Number.isFinite(blinkRate) || blinkRate < 0 || blinkRate > 600)) throw Error('잘못된 오버레이 상태입니다.');
+  return { owner: s.owner, sequence: s.sequence, theme: s.theme, savingFailed: s.savingFailed, upper_body: { ...upper, blinkRate }, keyboard: session('keyboard') };
 }
 export function parseOverlayCommand(input: unknown): OverlayCommand {
   if (!input || typeof input !== 'object') throw Error('잘못된 측정 명령입니다.');

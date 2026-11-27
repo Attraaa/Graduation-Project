@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildStatistics, statisticsRange } from '../src/features/statistics/period.ts';
+import { buildStatistics, fullDayHours, statisticsRange } from '../src/features/statistics/period.ts';
 import { changeChip, percentLabel, previousRateChip, rangeText } from '../src/features/statistics/text.ts';
+import { dailyKeyboardPractice } from '../src/features/keyboard/dailyPractice.ts';
 
 const END = '2026-10-06';
 const postureRow = (over = {}) => ({ date: END, hour: '9', mode: 'turtle',
@@ -22,6 +23,26 @@ test('the current period ends at the end date and the previous period sits right
   assert.equal(month.dates[0], '2025-12-12');
   assert.equal(month.previousDates[29], '2025-12-11');
   assert.equal(month.from, '2025-11-12');
+});
+
+test('the 1-day period compares with yesterday and keeps hourly gaps and genuine zero values', () => {
+  const yesterday = '2026-10-05';
+  assert.deepEqual(statisticsRange(END, 1), { from: yesterday, to: END, dates: [END], previousDates: [yesterday] });
+  const result = build({ days: 1, posture: [postureRow({ hour: '9', scoreTimeSum: 0 }), postureRow({ date: yesterday }), postureRow({ hour: '14' })] });
+  const hours = fullDayHours(result.upper.hourly);
+  assert.equal(hours.length, 24);
+  assert.equal(hours[9].turtle, 0);
+  assert.equal(hours[11].turtle, null);
+  assert.equal(hours[14].turtle, 80);
+  assert.equal(changeChip(result.upper.turtle, 1).text, '전날보다 -40');
+});
+
+test('daily keyboard practice uses each session’s counts only on the chosen day including midnight crossings', () => {
+  const at = Date.parse(`${END}T05:00:00Z`), offsetMinutes = -540;
+  const counts = [{ date: END, verdict: 'preferred', count: 8 }, { date: '2026-10-05', verdict: 'mismatch', count: 12 }];
+  const rows = dailyKeyboardPractice([{ record: { startedAt: at, offsetMinutes, nearbyCredit: 70 }, counts },
+    { record: { startedAt: at - 86_400_000, offsetMinutes, nearbyCredit: 70 }, counts: [{ date: END, verdict: 'mismatch', count: 1 }] }], END);
+  assert.deepEqual(rows.map(({ at, score }) => [new Date(at).toISOString(), score]), [['2026-10-05T15:00:00.000Z', 0], ['2026-10-06T05:00:00.000Z', 100]]);
 });
 
 test('upper averages are valid-time weighted and compared as the integers shown', () => {

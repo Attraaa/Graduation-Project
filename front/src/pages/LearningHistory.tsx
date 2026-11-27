@@ -31,16 +31,12 @@ const LearningHistory = () => {
   const detail = useRecordDetail(selected);
   const { previous, next } = neighborDates(byDate, date, today);
   const choose = (day: string) => { setDate(day); setPicked(null); };
-  const statistics = `/statistics?end=${date}&days=7${selected ? `&mode=${selected.mode}` : ''}`;
 
   return (
     <div className="space-y-4 pb-4">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-extrabold text-heading">학습이력</h1>
         <div className="flex items-center gap-3">
-          <button type="button" onClick={() => navigate(statistics)} className="text-sm font-semibold text-secondary hover:underline">
-            이 날까지 7일 통계 →
-          </button>
           <div role="group" aria-label="달력 보기" className="flex rounded-xl bg-track p-1">
             {VIEWS.map(item => (
               <button key={item.id} type="button" aria-pressed={view === item.id} onClick={() => setView(item.id)}
@@ -71,7 +67,7 @@ const LearningHistory = () => {
             </div>
           )}
           {selected ? (
-            <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+            <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,13rem)_minmax(0,1fr)] xl:grid-cols-[minmax(0,15rem)_minmax(0,1fr)]">
               <DayRecords date={date} entries={entries} selectedKey={entryKey(selected)} onSelect={setPicked} />
               <RecordDetail entry={selected} query={detail} />
             </div>

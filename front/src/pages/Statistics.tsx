@@ -1,11 +1,10 @@
-import { useState, useSyncExternalStore } from 'react';
+import { useSyncExternalStore } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import DayDetail from '../features/dashboard/DayDetail';
 import { SourceError, SourceLoading } from '../features/dashboard/SourceState';
 import { pastDateOrNull } from '../features/dashboard/summary';
 import KeyboardStatistics from '../features/keyboard/KeyboardStatistics';
 import RecordingStatus from '../features/records/RecordingStatus';
-import StatisticsExamples from '../features/records/StatisticsExamples';
 import { recordingMessage, subscribeRecording } from '../features/records/recording';
 import { todayDateKey } from '../features/records/views';
 import EyePanel from '../features/statistics/EyePanel';
@@ -20,16 +19,23 @@ const MODES: { id: StatMode; name: string; dot: string }[] = [
   { id: 'keyboard', name: '키보드', dot: 'bg-mode-keyboard' },
   { id: 'eye', name: '안구', dot: 'bg-mode-eye' },
 ];
-const PERIODS: PeriodDays[] = [7, 30];
+const PERIODS: PeriodDays[] = [1, 7, 30];
 const isMode = (value: string | null): value is StatMode => MODES.some(mode => mode.id === value);
 
 export default function Statistics() {
-  const [params] = useSearchParams();
+  const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
   const today = todayDateKey();
-  const [end, setEnd] = useState(() => pastDateOrNull(params.get('end'), today) ?? today);
-  const [days, setDays] = useState<PeriodDays>(() => (params.get('days') === '30' ? 30 : 7));
-  const [mode, setMode] = useState<StatMode>(() => { const value = params.get('mode'); return isMode(value) ? value : 'upper'; });
+  const end = pastDateOrNull(params.get('end'), today) ?? today;
+  const requestedDays = Number(params.get('days'));
+  const days = requestedDays === 7 || requestedDays === 30 ? requestedDays : 1;
+  const requestedMode = params.get('mode');
+  const mode = isMode(requestedMode) ? requestedMode : 'upper';
+  const update = (key: 'end' | 'days' | 'mode', next: string) => setParams(current => {
+    const updated = new URLSearchParams(current);
+    updated.set(key, next);
+    return updated;
+  }, { replace: true });
   const { summary, keyboard, status, retry } = useStatisticsData(end, days);
   const saveMessage = useSyncExternalStore(subscribeRecording, recordingMessage, recordingMessage);
   const openHistory = (date: string) => navigate(`/history?date=${date}`);
@@ -45,13 +51,16 @@ export default function Statistics() {
       <header className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-extrabold text-heading">통계</h1>
         <div className="flex flex-wrap items-center gap-3">
-          <span className="text-sm text-muted">{rangeText(summary.range.dates[0], end)}</span>
+          {days === 1 ? <input type="date" aria-label="조회 날짜" value={end} max={today}
+            onChange={event => { if (pastDateOrNull(event.target.value, today)) update('end', event.target.value); }}
+            className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-heading" />
+            : <span className="text-sm text-muted">{rangeText(summary.range.dates[0], end)}</span>}
           {end !== today && (
-            <button type="button" onClick={() => setEnd(today)} className="text-sm font-semibold text-secondary hover:underline">오늘까지 보기</button>
+            <button type="button" onClick={() => update('end', today)} className="text-sm font-semibold text-secondary hover:underline">{days === 1 ? '오늘 보기' : '오늘까지 보기'}</button>
           )}
           <div role="group" aria-label="기간" className="flex rounded-xl bg-track p-1">
             {PERIODS.map(value => (
-              <button key={value} type="button" aria-pressed={days === value} onClick={() => setDays(value)}
+              <button key={value} type="button" aria-pressed={days === value} onClick={() => update('days', String(value))}
                 className={`rounded-lg px-3 py-1 text-sm font-semibold ${days === value ? 'bg-surface text-heading shadow-sm' : 'text-muted'}`}>
                 {`${value}일`}
               </button>
@@ -62,7 +71,7 @@ export default function Statistics() {
       {saveMessage.startsWith('저장 실패') && <RecordingStatus />}
       <div role="tablist" aria-label="모드" className="flex flex-wrap gap-2">
         {MODES.map(item => (
-          <button key={item.id} type="button" role="tab" aria-selected={mode === item.id} onClick={() => setMode(item.id)}
+          <button key={item.id} type="button" role="tab" aria-selected={mode === item.id} onClick={() => update('mode', item.id)}
             className={`flex items-center gap-2 rounded-full px-4 py-1.5 text-sm font-semibold ${mode === item.id ? 'bg-heading text-surface' : 'border border-border bg-surface text-heading'}`}>
             <span aria-hidden="true" className={`h-2 w-2 rounded-full ${item.dot}`} />{item.name}
           </button>
@@ -70,17 +79,7 @@ export default function Statistics() {
       </div>
       {panelStatus === 'loading' ? <SourceLoading className="h-96" />
         : panelStatus === 'error' ? <SourceError onRetry={retry} />
-        : mode === 'upper' ? (
-          <>
-            <UpperPanel upper={summary.upper} days={summary.days} periodDays={days} floor={summary.upperFloor} {...shared} />
-            <details>
-              <summary className="flex cursor-pointer list-none justify-end">
-                <span className="rounded-full border border-dashed border-border px-3 py-1 text-xs font-semibold text-muted">▸ AI 기능 예정 (예시)</span>
-              </summary>
-              <div className="mt-4"><StatisticsExamples /></div>
-            </details>
-          </>
-        )
+        : mode === 'upper' ? <UpperPanel upper={summary.upper} days={summary.days} periodDays={days} floor={summary.upperFloor} {...shared} />
         : mode === 'eye' ? <EyePanel eye={summary.eye} days={summary.days} periodDays={days} max={summary.eyeMax} {...shared} />
         : <KeyboardStatistics data={keyboard} date={end} days={days} {...shared} />}
     </div>

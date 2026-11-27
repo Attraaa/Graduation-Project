@@ -9,8 +9,9 @@ const bundle = await build({ stdin: { contents: [
   "export { default as SessionActions } from './src/features/session/SessionActions.tsx';",
   "export { default as KeyboardGuidance } from './src/features/session/KeyboardGuidance.tsx';",
   "export { default as CameraGuidance } from './src/features/posture/CameraGuidance.tsx';",
+  "export { default as MeasurementEndedDialog } from './src/features/session/MeasurementEndedDialog.tsx';",
   "export { MonitoringContext } from './src/features/session/monitoringContext.ts';",
-  "export { KeyboardCard } from './src/features/dashboard/ModeCards.tsx';",
+  "export { UpperCard, KeyboardCard } from './src/features/dashboard/ModeCards.tsx';",
   "export { createMonitorSnapshot } from './src/features/posture/monitorTypes.ts';",
   "export { emptyEyeSnapshot } from './src/features/eye/measurement.ts';",
 ].join('\n'), resolveDir: process.cwd() }, bundle: true, write: false, platform: 'node', format: 'cjs', jsx: 'automatic', external: ['react', 'react-dom'] });
@@ -103,4 +104,27 @@ test('the home keyboard card shows only its three numbers, without small caption
   assert.match(out, />90<small[^>]*>점</);
   assert.match(out, />10<span[^>]*>회</);
   assert.doesNotMatch(out, /세션 평균|보류 \d|확인한 입력/);
+});
+
+test('recapture is available on the corresponding home card while measuring', () => {
+  const camera = { runtime: { current: { canvas: null, overlay: null } }, open() {} };
+  for (const [Card, label] of [[app.UpperCard, '상체 기준 다시 잡기'], [app.KeyboardCard, '키보드 위치 다시 잡기']]) {
+    for (const [running, paused] of [[false, false], [true, false], [true, true]]) {
+      const current = state(running, paused);
+      current.upper.camera = current.keyboard.camera = camera;
+      current.keyboard.snapshot = { ...current.keyboard.snapshot, scores: [], counts: [] };
+      const html = render(Card, current);
+      const button = html.match(new RegExp(`<button[^>]*aria-label="${label}"[^>]*>`))?.[0];
+      assert.equal(!!button, running);
+      assert.equal(button?.includes('disabled=""') ?? false, paused);
+    }
+  }
+});
+
+test('the stop dialog names the stopped mode and distinguishes an active or paused second mode', () => {
+  const html = remaining => renderToStaticMarkup(createElement(app.MeasurementEndedDialog, { mode: 'keyboard', remaining }));
+  assert.match(html(null), /키보드 측정이 종료되었습니다[^]*닫기[^]*통계로 이동하기/);
+  assert.doesNotMatch(html(null), /상체 측정/);
+  assert.match(html({ mode: 'upper_body', paused: false }), /상체 측정은 계속 진행 중입니다/);
+  assert.match(html({ mode: 'upper_body', paused: true }), /상체 측정은 일시정지 상태입니다/);
 });

@@ -6,7 +6,8 @@ import { readNotificationPreferences } from '../src/features/notifications/prefe
 import { notificationContent } from '../src/features/notifications/contract.ts';
 import { registerNotificationHandlers } from '../electron/notificationHandlers.ts';
 
-const settings = { enabled: true, intervalMinutes: 0, silent: false, scoreThreshold: 70, postureSeconds: 3, keyboardThreshold: 70, keyboardSeconds: 3 };
+const settings = { enabled: true, silent: false, scoreThreshold: 70, postureSeconds: 3, keyboardThreshold: 70, keyboardSeconds: 3 };
+const toast = { kind: 'blink', silent: false };
 const snapshot = (continuousMs, neck = {}, balance = {}) => {
   const empty = createMonitorSnapshot();
   return { ...empty, phase: 'observing',
@@ -16,16 +17,16 @@ const snapshot = (continuousMs, neck = {}, balance = {}) => {
 
 test('notification preferences validate existing stored values, including legacy strong sound', () => {
   const store = values => ({ getItem: key => values[key] ?? null });
-  assert.deepEqual(readNotificationPreferences(store({})), { ...settings, intervalMinutes: 10 });
+  assert.deepEqual(readNotificationPreferences(store({})), settings);
   assert.deepEqual(readNotificationPreferences(store({ 'postureAI.notifications': 'off', 'postureAI.alertFrequency': '5', 'postureAI.alertStrength': 'soft', 'postureAI.scoreThreshold': '40',
     'postureAI.alertSeconds': '10', 'postureAI.keyboardThreshold': '90', 'postureAI.keyboardAlertSeconds': '30' })),
-  { enabled: false, intervalMinutes: 5, silent: true, scoreThreshold: 40, postureSeconds: 10, keyboardThreshold: 90, keyboardSeconds: 30 });
+  { enabled: false, silent: true, scoreThreshold: 40, postureSeconds: 10, keyboardThreshold: 90, keyboardSeconds: 30 });
   assert.deepEqual(readNotificationPreferences(store({ 'postureAI.alertFrequency': 'bad', 'postureAI.alertStrength': 'strong', 'postureAI.scoreThreshold': 'NaN',
-    'postureAI.alertSeconds': 'soon', 'postureAI.keyboardThreshold': '' })), { ...settings, intervalMinutes: 10 });
+    'postureAI.alertSeconds': 'soon', 'postureAI.keyboardThreshold': '' })), settings);
   assert.equal(readNotificationPreferences(store({ 'postureAI.scoreThreshold': '999' })).scoreThreshold, 95);
   assert.deepEqual(readNotificationPreferences(store({ 'postureAI.keyboardThreshold': '12', 'postureAI.alertSeconds': '0', 'postureAI.keyboardAlertSeconds': '600' })),
-    { ...settings, intervalMinutes: 10, keyboardThreshold: 40, postureSeconds: 1, keyboardSeconds: 60 });
-  assert.deepEqual(readNotificationPreferences({ getItem() { throw Error(); } }), { ...settings, intervalMinutes: 10 });
+    { ...settings, keyboardThreshold: 40, postureSeconds: 1, keyboardSeconds: 60 });
+  assert.deepEqual(readNotificationPreferences({ getItem() { throw Error(); } }), settings);
 });
 
 test('low score includes the threshold and zero, requires the chosen observed seconds, and combines both parts', () => {
@@ -52,21 +53,20 @@ test('a confirmed habit deviation alone does not alert; only the score held for 
   assert.match(notificationContent(request).body, /목 60점 · 점수 저하/);
 });
 
-test('cooldown applies across recovered episodes; repeat intervals never delay the first alert', () => {
+test('coaching alerts once per episode and a new episode observes a five-second cooldown', () => {
   const alerts = createPostureAlerts();
   const low = t => snapshot(t, { currentScore: 50 });
-  const repeat = { ...settings, intervalMinutes: 5, silent: true };
-  assert.equal(alerts.sample(low(0), repeat, 0), null);
-  const first = alerts.sample(low(3000), repeat, 3000);
+  const quiet = { ...settings, silent: true };
+  assert.equal(alerts.sample(low(0), quiet, 0), null);
+  const first = alerts.sample(low(3000), quiet, 3000);
   assert.equal(first.silent, true); alerts.acknowledge(first, 3000);
-  assert.equal(alerts.sample(low(302999), repeat, 302999), null);
-  const repeated = alerts.sample(low(303000), repeat, 303000);
-  assert.ok(repeated); alerts.acknowledge(repeated, 303000);
-  alerts.sample(snapshot(303100), settings, 303100);
-  assert.equal(alerts.sample(low(303200), settings, 303200), null);
-  // Held again for three seconds, but ten seconds have not passed since the last alert.
-  assert.equal(alerts.sample(low(306200), settings, 306200), null);
-  assert.ok(alerts.sample(low(313000), settings, 313000));
+  assert.equal(alerts.sample(low(3100), quiet, 3100), null);
+  alerts.sample(snapshot(3200), settings, 3200);
+  assert.equal(alerts.sample(low(3300), settings, 3300), null);
+  assert.equal(alerts.sample(low(7999), settings, 7999), null);
+  const second = alerts.sample(low(8000), settings, 8000);
+  assert.ok(second); alerts.acknowledge(second, 8000);
+  assert.equal(alerts.sample(low(500_000), settings, 500_000), null);
 });
 
 test('pause, disabled alerts and unavailable observations cannot accumulate warning time', () => {
@@ -119,59 +119,58 @@ function harness({ trusted = true, supported = true, outcome = 'show', allowed =
 }
 
 test('native IPC validates trusted sender and payload before creating a toast', async () => {
-  await assert.rejects(harness({ trusted: false }).show({ kind: 'test', silent: false }), /untrusted/);
-  for (const input of [null, {}, { kind: 'test', silent: 'no' }, { kind: 'posture', silent: false, parts: [] },
+  await assert.rejects(harness({ trusted: false }).show(toast), /untrusted/);
+  for (const input of [null, {}, { kind: 'test', silent: false }, { kind: 'blink', silent: 'no' }, { kind: 'posture', silent: false, parts: [] },
     { kind: 'posture', silent: false, parts: [{ part: 'neck', score: NaN }] },
     { kind: 'posture', silent: false, parts: [{ part: 'neck', score: 101 }] },
     { kind: 'posture', silent: false, parts: [{ part: 'eye', score: 60 }] },
     { kind: 'posture', silent: false, parts: [{ part: 'neck', score: 60 }, { part: 'neck', score: 60 }] },
   ]) await assert.rejects(harness().show(input));
   const unavailable = harness({ supported: false });
-  assert.equal((await unavailable.show({ kind: 'test', silent: false })).ok, false);
+  assert.equal((await unavailable.show(toast)).ok, false);
   assert.equal(unavailable.notifications.length, 0);
 });
 
 test('native toast shows fixed Moti text, sound preference, click focuses app, clear closes it', async () => {
   const native = harness();
-  assert.equal((await native.show({ kind: 'test', silent: true })).ok, true);
+  assert.equal((await native.show({ ...toast, silent: true })).ok, true);
   assert.equal(native.notifications[0].options.silent, true);
-  assert.equal(native.notifications[0].options.title, 'Moti · 알림 테스트');
+  assert.match(native.notifications[0].options.title, /깜빡여 주세요/);
   native.notifications[0].click(); assert.equal(native.focused(), 1);
   native.clear(); assert.equal(native.notifications[0].closed, true);
   native.notifications[0].click(); assert.equal(native.focused(), 1);
-  assert.equal((await native.show({ kind: 'test', silent: false })).ok, false);
+  assert.equal((await native.show(toast)).ok, false);
 });
 
 test('native delivery failures, exceptions, and cancellation are reported instead of false success', async () => {
-  for (const outcome of ['failed', 'throw']) assert.equal((await harness({ outcome }).show({ kind: 'test', silent: false })).ok, false);
+  for (const outcome of ['failed', 'throw']) assert.equal((await harness({ outcome }).show(toast)).ok, false);
   const pending = harness({ outcome: null });
-  const result = pending.show({ kind: 'test', silent: false }); pending.clear();
+  const result = pending.show(toast); pending.clear();
   assert.equal((await result).ok, false);
 });
 
-test('a test notification cannot throttle away the first real posture warning', async () => {
+test('a blink alert cannot throttle away the first posture warning', async () => {
   const native = harness();
-  assert.equal((await native.show({ kind: 'test', silent: false })).ok, true);
+  assert.equal((await native.show(toast)).ok, true);
   assert.equal((await native.show({ kind: 'posture', silent: false, parts: [{ part: 'neck', score: 60 }] })).ok, true);
-  assert.equal(native.notifications[0].closed, true);
+  assert.equal(native.notifications[0].closed, false);
   assert.match(native.notifications[1].options.body, /목 60점/);
 });
 
 test('missing native delivery events time out without reporting success', async context => {
   context.mock.timers.enable({ apis: ['setTimeout'] });
   const pending = harness({ outcome: null });
-  const result = pending.show({ kind: 'test', silent: false });
+  const result = pending.show(toast);
   context.mock.timers.tick(5000);
   assert.equal((await result).ok, false);
   pending.clear();
 });
 
-test('foreground suppression does not consume native delivery rate limits; an explicit test still works', async () => {
+test('foreground suppression does not consume native delivery rate limits', async () => {
   let allowed = false;
   const native = harness({ allowed: () => allowed });
   const request = { kind: 'posture', silent: true, parts: [{ part: 'neck', score: 50 }] };
   assert.equal((await native.show(request)).status, 'suppressed'); assert.equal(native.notifications.length, 0);
-  assert.equal((await native.show({ kind: 'test', silent: true })).ok, true);
   allowed = true; assert.equal((await native.show(request)).ok, true);
 });
 

@@ -12,6 +12,7 @@ import AppLayout from './components/layout/AppLayout';
 import LearningHistory from './pages/LearningHistory';
 import { DialogProvider } from './components/AppDialog';
 import WindowTitleBar from './components/layout/WindowTitleBar';
+import { MODAL_VISIBILITY_EVENT } from './components/dialog/modalEvents';
 import './components/dialog/modal.css';
 import SystemNotifications from './features/notifications/SystemNotifications';
 
@@ -20,13 +21,15 @@ function App() {
     const theme = localStorage.getItem('postureAI.theme') ?? 'light';
     document.documentElement.classList.toggle('dark-theme', theme === 'dark');
     const syncTheme = () => {
-      void window.motiWindow?.setTheme(document.documentElement.classList.contains('dark-theme') ? 'dark' : 'light')
+      const theme = document.documentElement.classList.contains('dark-theme') ? 'dark' : 'light';
+      void window.motiWindow?.setTheme(theme, !!document.querySelector('dialog:modal'))
         .catch(error => console.error('창 테마 적용 실패', error));
     };
     syncTheme();
     const observer = new MutationObserver(syncTheme);
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
-    return () => observer.disconnect();
+    document.addEventListener(MODAL_VISIBILITY_EVENT, syncTheme);
+    return () => { observer.disconnect(); document.removeEventListener(MODAL_VISIBILITY_EVENT, syncTheme); };
   }, []);
 
   return (

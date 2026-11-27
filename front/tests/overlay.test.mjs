@@ -4,7 +4,7 @@ import { EventEmitter } from 'node:events';
 import { createRequire } from 'node:module';
 import { build } from 'esbuild';
 import { OverlayWindow, fitOverlay } from '../electron/overlayWindow.ts';
-import { commandAllowed, overlayTime, parseOverlayCommand, parseOverlaySnapshot } from '../src/features/overlay/contract.ts';
+import { commandAllowed, overlayTime, parseOverlayCommand, parseOverlaySnapshot, visibleOverlayModes } from '../src/features/overlay/contract.ts';
 import { createIssueQueue } from '../src/features/notifications/issues.ts';
 
 const session = { run: 1, running: true, paused: false, seconds: 65.5, status: '관찰 중', detail: '목 80점', error: false,
@@ -14,7 +14,7 @@ const bundle = await build({ entryPoints: ['src/features/overlay/snapshot.ts'], 
 const compiled = { exports: {} };
 new Function('module', 'exports', 'require', bundle.outputFiles[0].text)(compiled, compiled.exports, createRequire(import.meta.url));
 const { overlaySnapshot } = compiled.exports;
-const snapshot = (sequence = 1, owner = 'owner-1') => ({ owner, sequence, theme: 'light', savingFailed: false, upper_body: { ...session }, keyboard: { ...session, running: false } });
+const snapshot = (sequence = 1, owner = 'owner-1') => ({ owner, sequence, theme: 'light', savingFailed: false, upper_body: { ...session, blinkRate: 14.2 }, keyboard: { ...session, running: false } });
 class Window extends EventEmitter {
   destroyed = false; minimized = false; maximized = false; focused = false; shown = 0;
   bounds = { x: 20, y: 30, width: 1100, height: 800 };
@@ -44,8 +44,9 @@ function harness() {
 test('overlay wire contracts strip extra fields and reject invalid/stale-shaped input', () => {
   const s = parseOverlaySnapshot({ ...snapshot(), token: 'never-forward' });
   assert.equal(Object.hasOwn(s, 'token'), false);
-  const metric = parseOverlaySnapshot({ ...snapshot(), upper_body: { ...session, metrics: [{ label: '목', value: '80', low: true, color: 'red' }] } }).upper_body.metrics[0];
+  const metric = parseOverlaySnapshot({ ...snapshot(), upper_body: { ...snapshot().upper_body, metrics: [{ label: '목', value: '80', low: true, color: 'red' }] } }).upper_body.metrics[0];
   assert.deepEqual(metric, { label: '목', value: '80', low: true });
+  for (const blinkRate of [undefined, -1, '14.2', Infinity]) assert.throws(() => parseOverlaySnapshot({ ...snapshot(), upper_body: { ...snapshot().upper_body, blinkRate } }));
   const three = [1, 2, 3].map(n => ({ label: `m${n}`, value: '1', low: false }));
   for (const input of [null, {}, { ...snapshot(), sequence: -1 }, { ...snapshot(), theme: 'other' }, { ...snapshot(), upper_body: { ...session, seconds: NaN } }, { ...snapshot(), upper_body: { ...session, running: false, paused: true } },
     { ...snapshot(), upper_body: { ...session, metrics: three } }, { ...snapshot(), upper_body: { ...session, metrics: [{ label: '목', value: 80, low: false }] } },
@@ -76,7 +77,8 @@ test('overlay numbers turn red at or below the alert score as shown, and guidanc
   const s = overlaySnapshot(monitoring(), 'owner-1', 1, 'light', false, alertScores());
   assert.deepEqual(parseOverlaySnapshot(s), s);
   assert.deepEqual(s.upper_body.metrics, [{ label: '목', value: '70', low: true }, { label: '균형', value: '88', low: false }]);
-  assert.equal(s.upper_body.note, '깜빡임 14.2');
+  assert.equal(s.upper_body.blinkRate, 14.2);
+  assert.equal(s.upper_body.note, '');
   assert.match(s.upper_body.detail, /목 70점 · 좌우 균형 88점 · 깜빡임 14.2회\/분/);
   // The same last-50 average as the home card: (8 x 100 + 2 x 0) / 10.
   assert.deepEqual(s.keyboard.metrics, [{ label: '키보드', value: '80', low: false }]);
@@ -96,9 +98,12 @@ test('overlay numbers turn red at or below the alert score as shown, and guidanc
     assert.equal(overlaySnapshot(calibrating({ step: 'failed', failure, secondsLeft: 2 }), 'o', 1, 'light', false, alertScores()).upper_body.detail, `${text} · 2초 뒤 다시 시작`);
   assert.deepEqual([guided.keyboard.metrics, guided.keyboard.note], [[], '']);
   assert.match(guided.keyboard.detail, /미승인 앱/);
+  const mapping = overlaySnapshot(monitoring({ keyboard: { phase: 'mapping', message: '키보드 위치를 찾는 중이에요.' } }), 'o', 1, 'light', false, alertScores());
+  assert.deepEqual([mapping.keyboard.detail, mapping.keyboard.metrics], ['키보드 위치를 찾는 중이에요.', []]);
 
   const idle = overlaySnapshot(monitoring({ upperControls: { isRunning: false, elapsedSeconds: 0 }, keyboardControls: { isRunning: false, elapsedSeconds: 0 } }), 'o', 1, 'light', false, alertScores());
   assert.deepEqual(idle.upper_body.metrics.map(m => [m.value, m.low]), [['—', false], ['—', false]]);
+  assert.equal(idle.upper_body.blinkRate, null);
   assert.deepEqual([idle.upper_body.status, idle.upper_body.note, idle.keyboard.metrics[0].value, idle.keyboard.note], ['준비됨', '', '—', '']);
 });
 
@@ -108,6 +113,7 @@ test('open waits for rendered initial state, opens once, and back restores witho
   assert.equal(h.owner.minimized, false); h.childCall('overlay:ready'); await opening;
   assert.equal(h.owner.minimized, true); assert.equal(h.controller.isActive(), true);
   assert.equal(h.children[0].bounds.webPreferences.nodeIntegration, false);
+  assert.equal(h.children[0].bounds.thickFrame, false);
   assert.deepEqual(h.children[0].webContents.openHandler(), { action: 'deny' });
   h.childCall('overlay:back'); assert.equal(h.controller.isActive(), false); assert.equal(h.owner.minimized, false);
   assert.equal(h.owner.focused, true); assert.equal(h.children[0].destroyed, true);
@@ -157,13 +163,34 @@ test('failed overlay readiness leaves the owner available; display changes keep 
   h.controller.shutdown();
 });
 
-test('a display change puts a shrunken bar back to its fixed size and keeps its place', async () => {
+test('the overlay grows for two modes, shrinks for one and repairs its size after a display change', async () => {
   const h = harness(); h.call('desktop:publish', snapshot()); const open = h.controller.open(); h.childCall('overlay:ready'); await open;
   const w = h.children[0];
-  assert.deepEqual([w.bounds.minWidth, w.bounds.maxWidth, w.bounds.minHeight, w.bounds.maxHeight], [340, 340, 118, 118]);
+  assert.deepEqual([w.bounds.width, w.bounds.height], [430, 144]);
+  const both = { ...snapshot(2), keyboard: { ...session, paused: true } };
+  assert.deepEqual(visibleOverlayModes(both), ['upper_body', 'keyboard']);
+  h.call('desktop:publish', both);
+  assert.deepEqual([w.bounds.width, w.bounds.height], [430, 232]);
+  const keys = { ...both, sequence: 3, upper_body: { ...both.upper_body, running: false } };
+  assert.deepEqual(visibleOverlayModes(keys), ['keyboard']);
+  h.call('desktop:publish', keys);
+  assert.deepEqual([w.bounds.width, w.bounds.height], [430, 144]);
   w.bounds = { x: 325, y: 474, width: 276, height: 86 };  // what Windows reported after a long session
   h.screen.emit('display-metrics-changed');
-  assert.deepEqual(w.getBounds(), { x: 325, y: 474, width: 340, height: 118 });
+  assert.deepEqual(w.getBounds(), { x: 325, y: 474, width: 430, height: 144 });
+  h.controller.shutdown();
+});
+
+test('the overlay restores the main window and opens only the selected mode statistics route', async () => {
+  const h = harness(); h.call('desktop:publish', snapshot());
+  for (const [mode, target] of [['upper_body', '/statistics?mode=upper'], ['keyboard', '/statistics?mode=keyboard']]) {
+    const open = h.controller.open(); h.childCall('overlay:ready'); await open;
+    assert.throws(() => h.childCall('overlay:back', '/settings'), /잘못된 통계 요청/);
+    assert.equal(h.owner.minimized, true);
+    h.childCall('overlay:back', mode);
+    assert.equal(h.owner.minimized, false);
+    assert.deepEqual(h.owner.webContents.messages.at(-1), ['desktop:navigate', target]);
+  }
   h.controller.shutdown();
 });
 

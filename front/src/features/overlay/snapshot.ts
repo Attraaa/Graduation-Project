@@ -38,19 +38,20 @@ export function overlaySnapshot(all: MonitoringState, owner: string, sequence: n
       detail += eyes ? ` · 눈 깜빡임 ${upper.eye.measurement.calibrationBlinks}/3` : ' · 눈을 편하게 뜨고 정면 유지';
       note = eyes ? `깜빡임 보정 ${upper.eye.measurement.calibrationBlinks}/3` : '깜빡임 보정 중';
     } else if (upper.eye.phase === 'error') { detail += ' · 깜빡임 분석 연결 확인'; note = '깜빡임 확인 필요'; }
-    else if (rate !== null) { detail += ` · 깜빡임 ${rate.toFixed(1)}회/분`; note = `깜빡임 ${rate.toFixed(1)}`; }
+    else if (rate !== null) detail += ` · 깜빡임 ${rate.toFixed(1)}회/분`;
   }
   const upperMetrics = guidance ? [] : [metric('목', neck, thresholds.posture), metric('균형', balance, thresholds.posture)];
 
   const counts = keyboardSummary(keyboard.snapshot.counts);
   const average = keyboard.controls.isRunning ? liveAverage(keyboard.snapshot.scores) : null;
   const excluded = keyboard.snapshot.observationStatus === 'excluded';
-  const keyboardGuidance = keyboard.controls.failed || excluded;
+  const keyboardPreparing = keyboard.controls.isRunning && keyboard.snapshot.phase !== 'ready';
+  const keyboardGuidance = keyboard.controls.failed || excluded || keyboardPreparing;
   const keyboardDetail = keyboard.controls.failed ? '카메라·분석기 확인 후 다시 시작해 주세요.' : excluded ? '미승인 앱 · 이 앱의 입력은 관찰하지 않습니다.'
-    : `최근 평균 ${score(average)} · 판정한 입력 ${counts.valid}회`;
+    : keyboardPreparing ? keyboard.snapshot.message || '카메라와 분석기를 준비하고 있어요.' : `최근 평균 ${score(average)} · 판정한 입력 ${counts.valid}회`;
   return {
     owner, sequence, theme, savingFailed,
-    upper_body: session('upper', detail, upperMetrics, note),
+    upper_body: { ...session('upper', detail, upperMetrics, note), blinkRate: upper.controls.isRunning ? upper.eye.measurement.recentBlinksPerMinute : null },
     keyboard: session('keyboard', keyboardDetail, keyboardGuidance ? [] : [metric('키보드', average, thresholds.keyboard)],
       keyboardGuidance || !keyboard.controls.isRunning ? '' : `판정 ${counts.valid}회`),
   };

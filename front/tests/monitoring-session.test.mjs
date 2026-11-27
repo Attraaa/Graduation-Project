@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createSessionClock } from '../src/features/session/sessionClock.ts';
-import { appendTrend } from '../src/features/session/trend.ts';
+import { appendTrend, liveTimeAxis, liveTimeLabel } from '../src/features/session/trend.ts';
+import { addPostureSegment, emptyScoreTotals, measurementDuration, measurementSummary, postureRunAverages } from '../src/features/session/measurementSummary.ts';
 import { livePressScore } from '../src/features/keyboard/liveScore.ts';
 import { keyboardTotalsSummary } from '../../database/keyboard.ts';
 
@@ -24,6 +25,28 @@ test('live trends preserve zero, insert immediate missing/pause boundaries and s
   assert.equal(appendTrend(points, point(399, 90)), points);
   points = appendTrend(points, point(400_000, 90));
   assert.equal(points.length, 1);
+});
+
+test('live axis uses whole minute marks anchored to the final frame, even with jitter and short sessions', () => {
+  const point = at => ({ at, neck: null, balance: null, keyboard: 80 });
+  const { end, ticks, domain } = liveTimeAxis([point(78.5), point(298988.25)]);
+  assert.deepEqual(domain, [end - 300_000, end]);
+  assert.deepEqual(ticks.map(tick => liveTimeLabel(tick, end)), ['5분 전', '4분 전', '3분 전', '2분 전', '1분 전', '최근']);
+  assert.deepEqual(liveTimeAxis([point(140.2)]).ticks.map(tick => liveTimeLabel(tick, 140.2)), ['1분 전', '최근']);
+  assert.equal(liveTimeLabel(end - 74_900, end), '1분 15초 전');
+});
+
+test('stop summary combines recapture segments with valid-time weighting and uses whole-session keyboard totals', () => {
+  const score = (averageScore, validMs) => ({ averageScore, validMs });
+  const first = addPostureSegment(emptyScoreTotals(), { neck: score(0, 3000), balance: score(null, 0) });
+  const averages = postureRunAverages(first, { neck: score(80, 1000), balance: score(null, 0) });
+  assert.deepEqual(averages, { neck: 20, balance: null });
+  const counts = ['preferred', 'mismatch'].map(verdict => ({ count: 1, verdict }));
+  const all = { upper: { snapshot: { runAverages: averages }, eye: { measurement: { blinksPerMinute: 0, recentBlinksPerMinute: 12 } } },
+    keyboard: { snapshot: { counts, scores: [100] } } };
+  assert.deepEqual(measurementSummary(all, 'upper_body', 67.1).metrics.map(metric => metric.value), [20, null, 0]);
+  assert.deepEqual(measurementSummary(all, 'keyboard', 61.9).metrics.map(metric => metric.value), [50, 2, 100]);
+  assert.equal(measurementDuration(3662.3), '1시간 1분 2초');
 });
 test('single-input keyboard values use the existing 100/70/0 aggregation and never score unknown input', () => {
   assert.equal(livePressScore(null), null);

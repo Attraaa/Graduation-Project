@@ -5,6 +5,7 @@ import { getCurrentUser } from '../../utils/authStore';
 import { createIssueQueue, SYSTEM_ISSUE_EVENT, type IssueEvent } from './issues';
 import { useNotificationEnvironment } from './useNotificationEnvironment';
 import { reportNotificationDelivery } from './delivery';
+import { statisticsTarget } from '../session/modes';
 
 export default function SystemNotifications() {
   const navigate = useNavigate();
@@ -44,7 +45,7 @@ export default function SystemNotifications() {
     };
     const off = window.motiDesktop?.onNavigate(target => {
       const card = ({ '/dashboard?mode=upper_body': '상체 모니터링', '/dashboard?mode=keyboard': '키보드 모니터링' } as Record<string, string>)[target];
-      if (!card && !['/dashboard', '/login'].includes(target)) return;
+      if (!card && !['/dashboard', '/login', statisticsTarget('upper_body'), statisticsTarget('keyboard')].includes(target)) return;
       navigation.current(target);
       // Mode alerts show that mode's home card; the plain home target is the storage notice.
       if (card) window.setTimeout(() => document.querySelector(`section[aria-label="${card}"]`)?.scrollIntoView({ block: 'start' }), 150);

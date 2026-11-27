@@ -52,7 +52,9 @@ export default function RecordDetail({ entry, query }: {
         <h2 className="font-bold text-heading">
           {`${MODE_NAME[entry.mode]} · ${clockText(entry.startedAt, entry.offsetMinutes)} – ${clockText(entry.endedAt, entry.offsetMinutes)}`}
         </h2>
-        <span className="text-xs text-muted">{entry.interrupted ? '중단됨' : entry.running ? '기록 중' : '정상 종료'}</span>
+        {(entry.interrupted || entry.running || entry.legacy) && <span className="shrink-0 text-xs text-muted">
+          {[entry.interrupted ? '중단됨' : entry.running ? '기록 중' : '', entry.legacy ? '이전 기준' : ''].filter(Boolean).join(' · ')}
+        </span>}
       </div>
       <div className={`grid gap-x-4 gap-y-3 border-b border-border pb-4 ${stats.length === 4 ? 'grid-cols-2 @xl:grid-cols-4' : 'grid-cols-3'}`}>
         {stats.map(stat => <MetricTile key={stat.label} label={stat.label} value={stat.value} unit={stat.unit} />)}

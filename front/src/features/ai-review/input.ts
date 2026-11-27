@@ -7,9 +7,10 @@ import type { PeriodDays, StatisticsSummary } from '../statistics/period.ts';
 import { percentLabel } from '../statistics/text.ts';
 
 type Pair = { current: number | null; previous: number | null };
+export type AiReviewDays = Exclude<PeriodDays, 1>;
 /** Body of POST /api/ai/review (server/src/services/aiReview.ts): numbers and key codes only. */
 export interface AiReviewInput {
-  days: PeriodDays;
+  days: AiReviewDays;
   localPosture?: LocalPostureReview;
   upper: {
     neck: Pair; balance: Pair; measuredMinutes: number; sessions: number;
@@ -50,7 +51,7 @@ function keyboardPeriod(rows: KeyboardStored[], from: string): AiReviewInput['ke
 }
 
 /** The numbers Statistics shows for the same period, as the whole AI request. Null when nothing was measured. */
-export function aiReviewInput(summary: StatisticsSummary, keyboard: KeyboardStored[], days: PeriodDays): AiReviewInput | null {
+export function aiReviewInput(summary: StatisticsSummary, keyboard: KeyboardStored[], days: AiReviewDays): AiReviewInput | null {
   const { upper, eye } = summary;
   const input: AiReviewInput = {
     days,

@@ -79,7 +79,7 @@ const posture = (over = {}) => ({ id: 's1:turtle', owner: '7', mode: 'turtle',
   longestContinuousMs: 0, status: 'finished',
   runMs: 18 * 60_000, validMs: 18 * 60_000, scoreTimeSum: 18 * 60_000 * 70, deviationMs: 0, deviationEpisodeCount: 1, ...over });
 
-test('record rows show the upper line, local times, and the interrupted and legacy tags', () => {
+test('record rows leave scores and record status to the detail panel', () => {
   const old = posture({ id: 'old:turtle', scorePolicyVersion: 'reference-similarity-turtle-v1', status: 'interrupted',
     startedAt: Date.parse('2026-10-02T00:00:00Z'), updatedAt: Date.parse('2026-10-02T00:05:00Z'),
     runMs: 5 * 60_000, validMs: 5 * 60_000, scoreTimeSum: 5 * 60_000 * 60 });
@@ -87,14 +87,11 @@ test('record rows show the upper line, local times, and the interrupted and lega
   const entries = entriesByDate([posture(), balance, old], [], ['2026-10-02']).get('2026-10-02');
   const out = html(DayRecords, { date: '2026-10-02', entries, selectedKey: 'upper:s1', onSelect: () => {} });
   assert.match(out, /10월 2일 \(금\) 기록/);
-  assert.match(out, /2회 · 23분/);
-  assert.match(out, /상체<\/b> · 목 70 · 좌우 균형 86/);
-  assert.match(out, /10:05 – 10:23 \(18분\)/);
-  assert.match(out, />중단됨</);
-  assert.match(out, />이전 기준</);
-  assert.doesNotMatch(out, /지금과 다른 점수 기준으로 측정한 기록이에요/);
-  const current = html(DayRecords, { date: '2026-10-02', entries: entries.filter(entry => !entry.legacy), selectedKey: null, onSelect: () => {} });
-  assert.doesNotMatch(current, /이전 기준/);
+  assert.match(out, /2회</);
+  assert.match(out, /상체<\/b><span[^>]*>10:05 – 10:23</);
+  assert.doesNotMatch(out, /목 70|좌우 균형 86|\(18분\)|중단됨|이전 기준/);
+  const detail = html(RecordDetail, { entry: entries.find(entry => entry.interrupted), query: {} });
+  assert.match(detail, /중단됨 · 이전 기준/);
 });
 
 test('record detail: every record type shows a few whole numbers without boxes, then one picture', () => {
@@ -110,7 +107,7 @@ test('record detail: every record type shows a few whole numbers without boxes, 
   const upper = detail('upper');
   assert.deepEqual(numbers(upper), ['목 70', '좌우 균형 86', '기준에서 벗어남 2', '제대로 측정 100']);
   assert.match(upper, />분별 점수</);
-  assert.doesNotMatch(upper, /rounded-xl bg-surface-muted/);
+  assert.doesNotMatch(upper, /rounded-xl bg-surface-muted|정상 종료/);
   const eye = detail('eye', { mode: 'eye', detail: { record: eyeRecord, buckets: [] } });
   assert.deepEqual(numbers(eye), ['깜빡임 빈도 14', '깜빡임 125', '유효 관찰 시간 9분', '눈 휴식 완료 1']);
   assert.match(eye, />분별 깜빡임 빈도</);

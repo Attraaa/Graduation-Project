@@ -2,10 +2,9 @@ import { ALERT_SCORE, ALERT_SECONDS } from './activityPolicy.ts';
 
 type Store = Pick<Storage, 'getItem'>;
 export const NOTIFICATION_SETTINGS_CHANGED = 'moti-notification-settings-changed';
-export const NOTIFICATION_SETTING_KEYS = ['notifications', 'alertFrequency', 'alertStrength', 'scoreThreshold', 'alertSeconds', 'keyboardThreshold', 'keyboardAlertSeconds'];
+export const NOTIFICATION_SETTING_KEYS = ['notifications', 'alertStrength', 'scoreThreshold', 'alertSeconds', 'keyboardThreshold', 'keyboardAlertSeconds'];
 export interface NotificationPreferences {
   enabled: boolean;
-  intervalMinutes: 0 | 5 | 10 | 30;
   silent: boolean;
   /** Upper body: a neck or balance score at or below this for `postureSeconds` of observed time alerts. */
   scoreThreshold: number;
@@ -22,10 +21,8 @@ const bounded = (raw: string | null, range: { min: number; max: number; default:
 
 export function readNotificationPreferences(store: Store = localStorage): NotificationPreferences {
   const read = (key: string) => { try { return store.getItem(`postureAI.${key}`); } catch { return null; } };
-  const interval = Number(read('alertFrequency') ?? 10);
   return {
     enabled: read('notifications') !== 'off',
-    intervalMinutes: interval === 0 || interval === 5 || interval === 30 ? interval : 10,
     silent: read('alertStrength') === 'soft',
     scoreThreshold: bounded(read('scoreThreshold'), ALERT_SCORE),
     postureSeconds: bounded(read('alertSeconds'), ALERT_SECONDS),

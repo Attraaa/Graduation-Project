@@ -37,13 +37,11 @@ test('switch exposes its name and state', () => {
   assert.match(html(Switch, { label: '자세 경고 알림', checked: false, onChange() {} }), /aria-checked="false"/);
 });
 
-test('settings page shows the seven cards with defaults when nothing is stored', () => {
+test('settings page shows the six cards with fixed coaching and without obsolete controls', () => {
   const out = page({});
-  const titles = ['계정', '비밀번호 · 이메일', '화면 테마', '알림', '상체 측정 기준', '데이터 관리', '키보드 · 승인 앱 관찰'];
-  // In this order, so the two-column grid has no gap; blink sensitivity sits in the upper-body card (2026-11-25).
+  const titles = ['계정', '비밀번호 · 이메일', '화면 테마', '알림', '데이터 관리', '키보드 · 승인 앱 관찰'];
   assert.deepEqual([...out.matchAll(/<section aria-label="([^"]+)"/g)].map(match => match[1]).filter(title => titles.includes(title)), titles);
-  assert.doesNotMatch(out, /<section aria-label="안구 · 깜빡임 기준"/);
-  assert.match(out, /<section aria-label="상체 측정 기준"[^]*?좌우 균형 민감도[^]*?기준 CVA[^]*?깜빡임 민감도[^]*?<\/section>/);
+  assert.doesNotMatch(out, /상체 측정 기준|좌우 균형 민감도|기준 CVA|깜빡임 민감도|반복 알림 간격|알림 테스트|다른 앱 사용 중|Windows 알림/);
   // Passwords are never typed on the page itself; each change opens a window that checks who is asking.
   assert.doesNotMatch(out, /type="password"/);
   assert.match(out, />이메일 변경<\/button><button[^>]*>비밀번호 재설정</);
@@ -52,30 +50,23 @@ test('settings page shows the seven cards with defaults when nothing is stored',
   assert.doesNotMatch(out, /등록된 이메일이 없어요/);
   assert.match(out, /aria-pressed="true" aria-label="라이트 테마"/);
   assert.match(out, /aria-pressed="false" aria-label="다크 테마"/);
-  assert.match(out, /role="switch" aria-checked="true"/);
-  assert.match(out, /aria-pressed="true"[^>]*>10분</);
+  assert.match(out, /role="switch" aria-checked="true" aria-label="알림 켜기"/);
   assert.match(out, /aria-label="알림 소리"[^]*?aria-pressed="true"[^>]*>켜기</);
-  assert.match(out, /<button[^>]*disabled=""[^>]*>알림 테스트<\/button>/);
   // No small footnotes under the cards (user request 2026-11-23).
   assert.doesNotMatch(out, /Windows 데스크톱 앱에서 사용할 수 있어요|다음 측정부터 적용|화면을 이동해도 관찰은 계속돼요/);
-  assert.match(out, /id="settings-balance-sensitivity" type="range" min="10" max="100" step="10"[^>]*value="50"/);
-  assert.match(out, />50%</);
-  assert.match(out, /aria-label="깜빡임 민감도"[^]*?aria-pressed="true"[^>]*>보통</);
   // Alerts: "N점 이하 N초 유지 시" per mode in the alert card (2026-11-25), not a score slider in the upper-body card.
   for (const [name, score, seconds] of [['상체', 70, 3], ['키보드', 70, 3]]) {
     assert.match(out, new RegExp(`aria-label="${name} 알림 점수"[^]*?>${score}(<!-- -->)?점<`));
     assert.match(out, new RegExp(`aria-label="${name} 알림 시간"[^]*?>${seconds}(<!-- -->)?초<`));
   }
-  assert.match(out, /<section aria-label="알림"[^]*?>상체<[^]*?이하[^]*?유지 시[^]*?>키보드<[^]*?<section aria-label="상체 측정 기준"/);
+  assert.match(out, /<section aria-label="알림"[^]*?>상체<[^]*?이하[^]*?유지 시[^]*?>키보드<[^]*?<section aria-label="데이터 관리"/);
   assert.doesNotMatch(out, /경고 점수 기준/);
-  assert.match(out, /id="settings-base-cva" type="range" min="40" max="60" step="1"[^>]*value="50"/);
-  assert.match(out, />50°</);
   assert.match(out, /승인 앱 설정은 데스크톱 앱에서 사용할 수 있습니다/);
   assert.match(out, /통계 삭제</);
   assert.doesNotMatch(out, /변경사항 저장/);
 });
 
-test('settings page reflects the stored account, theme, alert and sensitivity values', () => {
+test('settings page reflects stored account, theme and alerts with old sensitivity and frequency choices hidden', () => {
   const out = page({
     'moti.session': JSON.stringify({ token: 't', user: { id: '7', username: 'moti_user', nickname: '정섭' } }),
     'postureAI.theme': 'dark', 'postureAI.notifications': 'off', 'postureAI.alertFrequency': '30',
@@ -83,24 +74,15 @@ test('settings page reflects the stored account, theme, alert and sensitivity va
     'postureAI.keyboardThreshold': '90', 'postureAI.keyboardAlertSeconds': '30',
     'moti.settings.balanceSensitivity': '80', 'moti.settings.eyeSensitivity': 'high', 'moti.settings.baseCva': '52',
   });
-  assert.match(out, />52°</);
   assert.match(out, />아이디 moti_user</);
   assert.match(out, />정<\/span>/);
   assert.match(out, /id="settings-nickname"[^>]*value="정섭"/);
   assert.match(out, /aria-pressed="true" aria-label="다크 테마"/);
   assert.match(out, /role="switch" aria-checked="false"/);
-  assert.match(out, /aria-pressed="true"[^>]*>30분</);
   assert.match(out, /aria-label="알림 소리"[^]*?aria-pressed="true"[^>]*>켜기</);
   for (const [name, score, seconds] of [['상체', 85, 10], ['키보드', 90, 30]]) {
     assert.match(out, new RegExp(`aria-label="${name} 알림 점수"[^]*?>${score}(<!-- -->)?점<`));
     assert.match(out, new RegExp(`aria-label="${name} 알림 시간"[^]*?>${seconds}(<!-- -->)?초<`));
   }
-  assert.match(out, />80%</);
-  assert.match(out, /aria-label="깜빡임 민감도"[^]*?aria-pressed="true"[^>]*>높음</);
-});
-
-test('neither old slider value becomes the balance sensitivity', () => {
-  const out = page({ 'postureAI.collapseSensitivity': '20', 'moti.settings.postureSensitivity': '30' });
-  assert.match(out, />50%</);
-  assert.doesNotMatch(out, />(20|30)%</);
+  assert.doesNotMatch(out, /52°|80%|30분|깜빡임 민감도/);
 });

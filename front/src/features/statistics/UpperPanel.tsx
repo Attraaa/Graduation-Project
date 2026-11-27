@@ -8,6 +8,7 @@ import HourlyChart from './HourlyChart';
 import StatTile from './StatTile';
 import { CARD, CardTitle, ChartHeader, EmptyChart, HistoryLink, Waiting } from './parts';
 import type { PeriodDays, UpperPeriod } from './period';
+import { fullDayHours } from './period';
 import { changeChip, percentLabel } from './text';
 
 const LINES = [
@@ -21,6 +22,7 @@ export default function UpperPanel({ upper, days, periodDays, floor, today, deta
   detail: (date: string) => ReactNode; onSelectDate: (date: string) => void; onOpenHistory: () => void;
 }) {
   const empty = !upper.present;
+  const dayView = periodDays === 1;
   const ticks = Array.from({ length: Math.round((100 - floor) / 10) + 1 }, (_, index) => floor + index * 10);
   const faded = new Set(days.filter(day => day.upper.sessions === 0).map(day => day.date));
   return (
@@ -32,21 +34,26 @@ export default function UpperPanel({ upper, days, periodDays, floor, today, deta
         <StatTile label="기준에서 벗어남" value={empty ? '—' : String(upper.deviations)} unit="회"
           detail={upper.deviationRate === null ? undefined : `벗어나 있던 시간 ${percentLabel(upper.deviationRate)}`} />
       </div>
-      <section aria-label="날짜별 점수" className={`${CARD} space-y-3`}>
+      {dayView ? <section aria-label="시간대별 평균 점수" className={`${CARD} space-y-3`}>
+        <ChartHeader title="시간대별 평균 점수" legend={LINES} />
+        {upper.hourly.some(hour => hour.turtle !== null || hour.balance !== null)
+          ? <HourlyChart expanded label="시간대별 목·좌우 균형 점수" data={fullDayHours(upper.hourly)} lines={LINES} domain={[0, 100]} unit="점" />
+          : <EmptyChart />}
+      </section> : <section aria-label="날짜별 점수" className={`${CARD} space-y-3`}>
         <ChartHeader title="날짜별 점수" legend={LINES} />
         {empty ? <EmptyChart /> : (
           <DailyChart label="날짜별 목·좌우 균형 점수" lines={LINES} today={today} domain={[floor, 100]} ticks={ticks}
             faded={faded} detail={detail} onSelectDate={onSelectDate}
             data={days.map(day => ({ date: day.date, turtle: day.upper.turtle, balance: day.upper.balance }))} />
         )}
-      </section>
-      <div className="grid gap-4 lg:grid-cols-2">
-        <section aria-label="시간대별 평균 점수" className={CARD}>
+      </section>}
+      <div className={`grid gap-4 ${dayView ? 'lg:grid-cols-3' : 'lg:grid-cols-2'}`}>
+        {!dayView && <section aria-label="시간대별 평균 점수" className={CARD}>
           <CardTitle title="시간대별 평균 점수" />
           {empty ? <Waiting /> : (
             <HourlyChart label="시간대별 목·좌우 균형 점수" data={upper.hourly} lines={LINES} domain={[upper.hourlyFloor, 100]} unit="점" />
           )}
-        </section>
+        </section>}
         <section aria-label="기준 이탈이 잦은 시간" className={CARD}>
           <CardTitle title="기준 이탈이 잦은 시간" />
           {empty ? <Waiting /> : <DeviationHours hours={upper.deviationHours} />}

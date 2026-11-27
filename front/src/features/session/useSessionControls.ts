@@ -48,9 +48,11 @@ export function useSessionControls(modeId?: string) {
     current.current.running = false;
     current.current.paused = false;
     clock.current.pause();
-    setElapsedSeconds(clock.current.seconds());
+    const duration = clock.current.seconds();
+    setElapsedSeconds(duration);
     setIsRunning(false);
     setIsPaused(false);
+    return duration;
   }, []);
   const pause = useCallback(() => {
     if (!current.current.running || current.current.paused) return;

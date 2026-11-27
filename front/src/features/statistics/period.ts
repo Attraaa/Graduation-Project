@@ -6,7 +6,7 @@ import type { KeyboardStored } from '../../../../database/keyboard.ts';
 import { dayValues, deviationHours, latestPolicyGroups, periodDates, scoreFloor, sessionIdOf, shiftDate } from '../dashboard/summary.ts';
 import type { DashboardDay, DeviationHour } from '../dashboard/summary.ts';
 
-export type PeriodDays = 7 | 30;
+export type PeriodDays = 1 | 7 | 30;
 export interface StatisticsRange { from: string; to: string; dates: string[]; previousDates: string[] }
 export interface ScoreChange { current: number | null; previous: number | null; change: number | null }
 // Type aliases, not interfaces, so the rows fit the charts' index-signature data type.
@@ -43,6 +43,11 @@ export function statisticsRange(end: string, days: PeriodDays): StatisticsRange 
   const dates = periodDates(end, days);
   const previousDates = periodDates(shiftDate(end, -days), days);
   return { from: previousDates[0], to: end, dates, previousDates };
+}
+
+export function fullDayHours<T extends { hour: number }>(rows: T[]) {
+  const byHour = new Map(rows.map(row => [row.hour, row]));
+  return Array.from({ length: 24 }, (_, hour) => byHour.get(hour) ?? { hour });
 }
 
 const sum = <T>(rows: T[], pick: (row: T) => number) => rows.reduce((value, row) => value + pick(row), 0);

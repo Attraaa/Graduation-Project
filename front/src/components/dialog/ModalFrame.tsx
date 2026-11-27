@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef, type ReactNode } from 'react';
+import { MODAL_VISIBILITY_EVENT } from './modalEvents';
 
 /** Native modal isolation also covers keyboard focus and nested dialogs. */
 export default function ModalFrame({ children, onDismiss, className = '', ...label }: {
@@ -16,9 +17,11 @@ export default function ModalFrame({ children, onDismiss, className = '', ...lab
     if (!dialog) return;
     const previous = document.activeElement;
     dialog.showModal();
+    document.dispatchEvent(new Event(MODAL_VISIBILITY_EVENT));
     dialog.querySelector<HTMLElement>('[data-modal-autofocus], [autofocus], input:not([disabled]), button[type="submit"]')?.focus();
     return () => {
       dialog.close();
+      document.dispatchEvent(new Event(MODAL_VISIBILITY_EVENT));
       if (previous instanceof HTMLElement && previous.isConnected) previous.focus();
     };
   }, []);

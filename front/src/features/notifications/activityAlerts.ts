@@ -3,7 +3,7 @@ import { LIVE_SCORE_WINDOW, liveAverage, livePressScore } from '../keyboard/live
 import type { KeyboardMonitorSnapshot } from '../keyboard/monitorTypes';
 import type { SystemNotificationRequest } from './contract';
 import type { NotificationPreferences } from './preferences';
-import { MIN_ALERT_INTERVAL_MS } from './postureAlerts.ts';
+import { ALERT_COOLDOWN_MS } from './activityPolicy.ts';
 
 export type ActivityNotificationRequest = Extract<SystemNotificationRequest, { kind: 'keyboard' | 'blink' }>;
 const FRESH_OBSERVATION_MS = 2000;
@@ -25,8 +25,8 @@ function createEpisode() {
       lastShownAt = now; notified = true; return true;
     },
     propose(request: ActivityNotificationRequest, settings: NotificationPreferences, now: number) {
-      if (!active || !settings.enabled || (settings.intervalMinutes === 0 && notified)) return null;
-      if (lastShownAt !== null && now - lastShownAt < Math.max(MIN_ALERT_INTERVAL_MS, settings.intervalMinutes * 60_000)) return null;
+      if (!active || !settings.enabled || notified) return null;
+      if (lastShownAt !== null && now - lastShownAt < ALERT_COOLDOWN_MS) return null;
       proposals.set(request, generation); return request;
     },
   };

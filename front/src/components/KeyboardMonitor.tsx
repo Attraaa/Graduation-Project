@@ -415,8 +415,14 @@ export default function KeyboardMonitor({ isRunning, paused = false, deviceId, r
   useEffect(() => {
     if (previousRemap.current === remapRequest) return
     previousRemap.current = remapRequest
-    if (isRunning) { setManualPending(false); setGrid({ ...displayedGrid(runtime.current.profile), source: 'automatic', flipX: false, flipY: false, turns: 0 }); remapRef.current() }
-  }, [isRunning, remapRequest, runtime, setGrid, setManualPending])
+    if (!isRunning) return
+    const { profile, editing } = runtime.current
+    setManualPending(false)
+    setGrid({ ...displayedGrid(profile), source: 'automatic', flipX: false, flipY: false, turns: 0 })
+    // Changing a manual grid already invalidates the mapping unless an edit is in progress.
+    if (profile.grid.source === 'automatic' || editing) remapRef.current()
+    publish({ scores: [] })
+  }, [isRunning, remapRequest, runtime, setGrid, setManualPending, publish])
 
   useEffect(() => {
     if (isRunning && webcamError) publish({ phase: 'error', message: webcamError })

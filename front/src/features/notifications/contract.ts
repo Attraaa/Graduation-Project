@@ -3,8 +3,7 @@ import { eyePolicy } from '../eye/eyePolicy.ts';
 
 export interface PostureAlertPart { part: 'neck' | 'balance'; score: number }
 export type IssueCode = 'upper-analysis' | 'keyboard-analysis' | 'keyboard-area' | 'eye-analysis' | 'tracking' | 'storage' | 'auth';
-export type SystemNotificationRequest = { kind: 'test'; silent: boolean }
-  | { kind: 'posture'; silent: boolean; parts: PostureAlertPart[] }
+export type SystemNotificationRequest = { kind: 'posture'; silent: boolean; parts: PostureAlertPart[] }
   | { kind: 'keyboard'; silent: boolean; score: number }
   | { kind: 'blink'; silent: boolean }
   | { kind: 'issue'; silent: boolean; code: IssueCode };
@@ -29,9 +28,6 @@ export function notificationContent(input: unknown) {
   if (!input || typeof input !== 'object') throw new Error('잘못된 알림 요청입니다.');
   const value = input as Record<string, unknown>;
   if (typeof value.silent !== 'boolean') throw new Error('잘못된 알림 소리 설정입니다.');
-  if (value.kind === 'test') return {
-    title: 'Moti · 알림 테스트', body: 'Windows 시스템 알림이 연결되었습니다. 자세·키보드·깜빡임 안내도 이곳에 표시됩니다.', silent: value.silent,
-  };
   if (value.kind === 'keyboard') {
     if (typeof value.score !== 'number' || !Number.isFinite(value.score) || value.score < 0 || value.score > 100) throw Error('잘못된 키보드 알림입니다.');
     return { title: 'Moti · 손가락 사용을 확인해 주세요', body: `최근 ${LIVE_SCORE_WINDOW}회 유효 판정의 평균 훈련 점수가 ${Math.round(value.score)}점이에요. 권장 손가락을 확인해 주세요.`, silent: value.silent };

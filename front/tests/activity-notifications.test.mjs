@@ -8,7 +8,7 @@ import { notificationContent, notificationTarget } from '../src/features/notific
 import { registerNotificationHandlers } from '../electron/notificationHandlers.ts';
 
 // The posture alert score (95) must not apply to the keyboard, whose own is 70 for 3 s here.
-const settings = { enabled: true, intervalMinutes: 0, silent: true, scoreThreshold: 95, postureSeconds: 3, keyboardThreshold: 70, keyboardSeconds: 3 };
+const settings = { enabled: true, silent: true, scoreThreshold: 95, postureSeconds: 3, keyboardThreshold: 70, keyboardSeconds: 3 };
 /** Snapshots as KeyboardMonitor publishes them: each new judged press joins the last-50 window shown at home. */
 function typing() {
   let scores = [], last = 0;
@@ -136,25 +136,25 @@ test('blink pause, OFF and reference/run reset invalidate old proposals and requ
   alerts.reset(); alerts.observe(eye(), 3); assert.ok(alerts.sample(settings, 3));
 });
 
-test('separate channels share the configured interval without consuming each other or suppressed/failed proposals', () => {
+test('separate channels neither consume one another nor count suppressed or failed proposals', () => {
   const keyboard = createKeyboardAlerts(), blink = createBlinkAlerts(), press = typing();
-  const repeat = { ...settings, intervalMinutes: 5 };
   fill(keyboard, press); keyboard.observe(press(51), 3000); blink.observe(eye(), 3000);
-  const failed = keyboard.sample(repeat, 3000); assert.ok(keyboard.sample(repeat, 3001));
-  const shown = blink.sample(repeat, 3000); blink.acknowledge(shown, 3000);
-  assert.ok(keyboard.sample(repeat, 3001)); assert.equal(blink.sample(repeat, 3001), null);
-  keyboard.acknowledge(failed, 3001); assert.equal(keyboard.sample(repeat, 3002), null);
-  keyboard.observe(press(52), 303_001); blink.observe(eye(), 303_001);
-  assert.ok(keyboard.sample(repeat, 303_001)); assert.ok(blink.sample(repeat, 303_001));
+  const failed = keyboard.sample(settings, 3000); assert.ok(keyboard.sample(settings, 3001));
+  const shown = blink.sample(settings, 3000); blink.acknowledge(shown, 3000);
+  assert.ok(keyboard.sample(settings, 3001)); assert.equal(blink.sample(settings, 3001), null);
+  keyboard.acknowledge(failed, 3001); assert.equal(keyboard.sample(settings, 3002), null);
+  keyboard.observe(press(52), 4000); blink.observe(eye(), 4000);
+  assert.equal(keyboard.sample(settings, 4000), null); assert.equal(blink.sample(settings, 4000), null);
 });
 
-test('once-per-episode and minimum 10s rate survive quick recovery; late acknowledgements cannot consume a new episode', () => {
+test('once-per-episode and a 5s cooldown survive quick recovery; late acknowledgements cannot consume a new episode', () => {
   const alerts = createBlinkAlerts(); alerts.observe(eye(), 0); const old = alerts.sample(settings, 0);
   alerts.observe(eye(false), 1); assert.equal(alerts.acknowledge(old, 1), false);
   alerts.observe(eye(), 2); const first = alerts.sample(settings, 2); alerts.acknowledge(first, 2);
   alerts.observe(eye(), 1000); assert.equal(alerts.sample(settings, 1000), null);
   alerts.observe(eye(false), 1001); alerts.observe(eye(), 1002); assert.equal(alerts.sample(settings, 1002), null);
-  alerts.observe(eye(), 10_002); assert.ok(alerts.sample(settings, 10_002));
+  alerts.observe(eye(), 5001); assert.equal(alerts.sample(settings, 5001), null);
+  alerts.observe(eye(), 5002); assert.ok(alerts.sample(settings, 5002));
 });
 
 test('main validates keyboard averages and owns fixed text and navigation for both coaching kinds', () => {

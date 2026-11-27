@@ -2,24 +2,23 @@ import { useEffect, useRef, useState } from 'react';
 import { Sparkles } from 'lucide-react';
 import { requestAiReview } from '../features/ai-review/api';
 import { inputRows } from '../features/ai-review/input';
-import type { AiReview as Review } from '../features/ai-review/input';
+import type { AiReview as Review, AiReviewDays } from '../features/ai-review/input';
 import ReviewCards from '../features/ai-review/ReviewCards';
 import { SourceError, SourceLoading } from '../features/dashboard/SourceState';
 import { todayDateKey } from '../features/records/views';
 import { BUTTON, BUTTON_STRONG } from '../features/settings/parts';
 import { CARD } from '../features/statistics/parts';
-import type { PeriodDays } from '../features/statistics/period';
 import { useReviewInput } from '../features/ai-review/useReviewInput';
 import NearbyHospitals from '../features/hospitals/NearbyHospitals';
 
-const PERIODS: PeriodDays[] = [7, 30];
+const PERIODS: AiReviewDays[] = [7, 30];
 const DOTS = { upper: 'bg-mode-upper', eye: 'bg-mode-eye', keyboard: 'bg-mode-keyboard' };
 type Result = { key: string } & ({ status: 'loading' } | { status: 'done'; review: Review } | { status: 'error'; message: string });
 
 /** AI 총평. Where it finally belongs is still open, so it has its own menu for now. */
 export default function AiReview() {
   const today = todayDateKey();
-  const [days, setDays] = useState<PeriodDays>(7);
+  const [days, setDays] = useState<AiReviewDays>(7);
   const { owner, input, loading, failed, retry } = useReviewInput(today, days);
   const [result, setResult] = useState<Result | null>(null);
   const pending = useRef<AbortController | null>(null);

@@ -21,7 +21,7 @@ export function registerNotificationHandlers(ipc: Pick<IpcMain, 'handle'>, deps:
   };
   ipc.handle('notifications:clear', (event, kind: unknown) => {
     deps.trusted(event);
-    if (kind !== undefined && kind !== 'test' && kind !== 'posture' && kind !== 'keyboard' && kind !== 'blink' && kind !== 'issue') throw Error('잘못된 알림 정리 요청입니다.');
+    if (kind !== undefined && kind !== 'posture' && kind !== 'keyboard' && kind !== 'blink' && kind !== 'issue') throw Error('잘못된 알림 정리 요청입니다.');
     clear(kind);
   });
   ipc.handle('notifications:show', async (event, input: unknown): Promise<SystemNotificationResult> => {
@@ -30,12 +30,11 @@ export function registerNotificationHandlers(ipc: Pick<IpcMain, 'handle'>, deps:
     const request = input as SystemNotificationRequest;
     const kind = request.kind;
     const key = kind === 'issue' ? `issue:${request.code}` : kind;
-    if (kind !== 'test' && deps.allowed && !deps.allowed()) return { ok: false, status: 'suppressed', message: '현재 화면에서 상태를 확인할 수 있어 알림을 생략했습니다.' };
+    if (deps.allowed && !deps.allowed()) return { ok: false, status: 'suppressed', message: '현재 화면에서 상태를 확인할 수 있어 알림을 생략했습니다.' };
     if (!deps.supported()) return { ok: false, message: '이 실행 환경에서는 Windows 시스템 알림을 지원하지 않습니다.' };
     if (Date.now() - (lastRequestAt.get(key) ?? -Infinity) < 1000) return { ok: false, status: 'failed', message: '잠시 후 알림을 다시 시도해 주세요.' };
     lastRequestAt.set(key, Date.now());
     clearKey(key);
-    if (kind !== 'test') clear('test');
     if (kind === 'issue') { clear('posture'); clear('keyboard'); clear('blink'); }
     return new Promise(resolve => {
       let settled = false;

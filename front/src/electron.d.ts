@@ -1,5 +1,5 @@
 import type { SystemNotificationRequest, SystemNotificationResult } from './features/notifications/contract'
-import type { OverlayCommand, OverlayResult, OverlaySnapshot, OverlayView } from './features/overlay/contract'
+import type { OverlayCommand, OverlayMode, OverlayResult, OverlaySnapshot, OverlayView } from './features/overlay/contract'
 
 declare global {
   interface Window {
@@ -8,7 +8,7 @@ declare global {
       ready: () => Promise<void>
       onState: (listener: (state: OverlayView) => void) => () => void
       command: (command: OverlayCommand) => Promise<OverlayResult>
-      back: () => Promise<void>
+      back: (mode?: OverlayMode) => Promise<void>
     }
     motiDesktop?: {
       publish: (snapshot: OverlaySnapshot | null) => void
@@ -23,7 +23,7 @@ declare global {
       presentation: () => Promise<{ overlay: boolean; automaticAllowed: boolean }>
       onPresentation: (listener: (value: { overlay: boolean; automaticAllowed: boolean }) => void) => () => void
     }
-    motiWindow?: { setTheme: (theme: 'light' | 'dark') => Promise<void> }
+    motiWindow?: { setTheme: (theme: 'light' | 'dark', dimmed: boolean) => Promise<void> }
     /** Diagnostics log (electron/diagnostics.ts): a one-minute sample and unhandled errors. Main window only. */
     motiDiagnostics?: { sample: (value: unknown) => void; error: (value: unknown) => void }
     motiKeyboard?: {

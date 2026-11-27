@@ -1,9 +1,7 @@
 import type { MonitorSnapshot } from '../posture/monitorTypes.ts';
 import type { NotificationPreferences } from './preferences.ts';
 import type { PostureAlertPart, SystemNotificationRequest } from './contract.ts';
-
-// "발생 시" sends once per episode; even repeated recoveries cannot flood Windows.
-export const MIN_ALERT_INTERVAL_MS = 10_000;
+import { ALERT_COOLDOWN_MS } from './activityPolicy.ts';
 
 /**
  * A neck or balance score at or below the alert score for the chosen seconds of observed time alerts (Settings).
@@ -47,9 +45,8 @@ export function createPostureAlerts() {
       }
       if (!candidate) { if (candidateActive) generation++; notifiedEpisode = false; }
       candidateActive = candidate;
-      if (!parts.length || (settings.intervalMinutes === 0 && notifiedEpisode)) return null;
-      const interval = Math.max(MIN_ALERT_INTERVAL_MS, settings.intervalMinutes * 60_000);
-      if (lastAlertAt !== null && now - lastAlertAt < interval) return null;
+      if (!parts.length || notifiedEpisode) return null;
+      if (lastAlertAt !== null && now - lastAlertAt < ALERT_COOLDOWN_MS) return null;
       const request: SystemNotificationRequest = { kind: 'posture', silent: settings.silent, parts };
       proposals.set(request, generation);
       return request;

@@ -19,6 +19,7 @@ import { createPostureScoreTimeline } from '../features/posture/scoreTimeline';
 import { beginPostureTimeline } from '../features/records/postureTimelineRecording';
 import type { CaptureSink, CaptureStart } from '../features/records/recording';
 import { useCameraSettings } from '../features/camera/context';
+import { addPostureSegment, emptyScoreTotals, postureRunAverages } from '../features/session/measurementSummary';
 
 interface PostureMonitorProps {
   isRunning: boolean;
@@ -27,7 +28,7 @@ interface PostureMonitorProps {
   deviceId: string;
   onUpdate: (snapshot: MonitorSnapshot) => void;
   recordCapture?: (start: CaptureStart) => CaptureSink;
-  /** "좌우 균형 민감도" from Settings; fixed for the whole run. */
+  /** 좌우 균형 민감도 for this run. */
   balanceSensitivity?: number;
   /** "기준에서 벗어남" rule: the upper-body alert setting "N점 이하 N초" read at start; fixed for the whole run. */
   habitRule?: HabitPolicy;
@@ -45,9 +46,10 @@ const PostureMonitor = ({ isRunning, paused = false, referenceRequest = 0, devic
     if (previousReference.current !== referenceRequest) { previousReference.current = referenceRequest; recollect.current(); }
   }, [referenceRequest]);
   const latest = useRef<MonitorSnapshot>(createMonitorSnapshot());
-  const publish = useCallback((snapshot: MonitorSnapshot) => {
-    latest.current = snapshot;
-    onUpdate(snapshot);
+  const previousSegments = useRef(emptyScoreTotals());
+  const publish = useCallback((snapshot: Omit<MonitorSnapshot, 'runAverages'>, notify = true) => {
+    latest.current = { ...snapshot, runAverages: postureRunAverages(previousSegments.current, snapshot) };
+    if (notify) onUpdate(latest.current);
   }, [onUpdate]);
   const { videoRef, startWebcam, stopWebcam, webcamError } = useWebcam();
   const { canvasRef, initMediaPipe, startProcessing, stopProcessing, aiError, isLoaded } = useMediaPipe();
@@ -56,6 +58,7 @@ const PostureMonitor = ({ isRunning, paused = false, referenceRequest = 0, devic
 
   useEffect(() => {
     if (!isRunning) return;
+    previousSegments.current = emptyScoreTotals();
     const abort = new AbortController();
     let calibration = createCalibration();
     let lastUiAt = -Infinity;
@@ -140,6 +143,7 @@ const PostureMonitor = ({ isRunning, paused = false, referenceRequest = 0, devic
     recollect.current = () => {
       const at = performance.now();
       recording.forEach(sink => sink?.finish(at));
+      previousSegments.current = addPostureSegment(previousSegments.current, { neck, balance });
       recording = beginRecord(at); recordedReference = null;
       restartNeck(); observation = createObservation();
       neck = createEvaluation(turtleScorePolicy, habit); balance = createEvaluation(balanceRule, habit);
@@ -255,6 +259,7 @@ const PostureMonitor = ({ isRunning, paused = false, referenceRequest = 0, devic
         const referenceKey = reference ? `${reference.completedAtMs}:${reference.widthPx}:${reference.heightPx}` : null;
         if (recordedReference && recordedReference !== referenceKey) {
           recording.forEach(sink => sink?.finish(capturedAtMs));
+          previousSegments.current = addPostureSegment(previousSegments.current, { neck, balance });
           recording = beginRecord(capturedAtMs);
           neck = createEvaluation(turtleScorePolicy, habit);
           balance = createEvaluation(balanceRule, habit);
@@ -275,7 +280,7 @@ const PostureMonitor = ({ isRunning, paused = false, referenceRequest = 0, devic
         // Neck: E19 about 10 times a second under its own checks only (like the research tool).
         if (ready && !inferring && capturedAtMs - lastInferAt >= NECK_FLOW.sampleMs - 5) inferNeck(input, capturedAtMs);
         const current = flow!;
-        const snapshot: MonitorSnapshot = {
+        const snapshot: Omit<MonitorSnapshot, 'runAverages'> = {
           // Unavailable only when neither the neck nor the balance can be measured.
           phase: ready ? (observation.delta || neck.currentScore !== null || balance.currentScore !== null ? 'observing' : 'unavailable') : 'calibrating',
           progress: current.step === 'collect' ? Math.min(1, (capturedAtMs - current.since) / collectMs) : current.step === 'computing' || ready ? 1 : 0,
@@ -288,9 +293,7 @@ const PostureMonitor = ({ isRunning, paused = false, referenceRequest = 0, devic
         if (receivedAtMs - lastUiAt >= 200 || (observation.delta === null && latest.current.delta !== null)) {
           lastUiAt = receivedAtMs;
           publish(snapshot);
-        } else {
-          latest.current = snapshot;
-        }
+        } else publish(snapshot, false);
       }, abort.signal);
       if (abort.signal.aborted) return;
       if (!pose) {

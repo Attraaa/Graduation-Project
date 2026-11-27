@@ -241,14 +241,15 @@ ipcMain.handle('keyboard-settings:choose', async event => {
   try { return await chooseKeyboardApp(win!) } finally { nativeDialogs--; presentationChanged() }
 })
 ipcMain.handle('keyboard-settings:update', (event, input: unknown) => { trustedAppWindow(event); return updateKeyboardSettings(input) })
-ipcMain.handle('window:set-theme', (event, theme: unknown) => {
+ipcMain.handle('window:set-theme', (event, theme: unknown, dimmed: unknown) => {
   trustedAppWindow(event)
+  if (typeof dimmed !== 'boolean') throw Error('잘못된 창 제목 표시줄 상태입니다.')
   const appearance = windowAppearance(theme)
   windowTheme = theme as 'light' | 'dark'
   for (const window of [win, cameraWindow]) {
     if (!window || window.isDestroyed()) continue
     window.setBackgroundColor(appearance.backgroundColor)
-    window.setTitleBarOverlay(appearance.titleBarOverlay)
+    window.setTitleBarOverlay(window === win && dimmed ? windowAppearance(theme, true).titleBarOverlay : appearance.titleBarOverlay)
   }
 })
 

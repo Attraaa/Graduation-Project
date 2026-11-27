@@ -7,13 +7,6 @@ const BUTTON_BASE = 'inline-flex h-10 shrink-0 items-center justify-center gap-1
 export const BUTTON = `${BUTTON_BASE} border border-border bg-surface text-heading hover:bg-nav-active`;
 export const BUTTON_STRONG = `${BUTTON_BASE} bg-heading text-surface hover:opacity-90`;
 export const BUTTON_DANGER = `${BUTTON_BASE} bg-danger text-white hover:brightness-95`;
-// Written out in full: Tailwind only generates classes it can read as plain text.
-const RANGE = 'block h-2 w-full cursor-pointer appearance-none rounded-full'
-  + ' [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:appearance-none'
-  + ' [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-mode-upper'
-  + ' [&::-webkit-slider-thumb]:bg-[#fff] [&::-webkit-slider-thumb]:shadow'
-  + ' [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:cursor-pointer [&::-moz-range-thumb]:rounded-full'
-  + ' [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-mode-upper [&::-moz-range-thumb]:bg-[#fff] [&::-moz-range-thumb]:shadow';
 
 /** One settings widget with an icon, title, and content. */
 export function SettingsCard({ title, icon, iconClass = 'bg-track text-heading', className = '', children }: {
@@ -100,27 +93,6 @@ export function Stepper({ label, value, steps, unit, onChange }: {
       <output aria-live="polite" className="min-w-11 text-center text-sm font-bold tabular-nums text-heading">{value}{unit}</output>
       <button type="button" aria-label={`${label} 높이기`} disabled={higher === undefined} onClick={() => { if (higher !== undefined) onChange(higher); }}
         className={`${button} rounded-r-xl`}><Plus size={14} /></button>
-    </div>
-  );
-}
-
-/** A range with its value chip and end labels. The filled part follows the 20px thumb's centre. */
-export function Slider({ id, label, valueText, min, max, step = 1, minLabel, maxLabel, value, onChange }: {
-  id: string; label: string; valueText: string; min: number; max: number; step?: number; minLabel: string; maxLabel: string;
-  value: number; onChange: (value: number) => void;
-}) {
-  const ratio = (value - min) / (max - min);
-  const stop = `calc(${ratio * 100}% + ${(0.5 - ratio) * 20}px)`;
-  return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between gap-2">
-        <label htmlFor={id} className="text-sm font-semibold text-heading">{label}</label>
-        <output htmlFor={id} className="rounded-md bg-mode-upper-soft px-1.5 py-0.5 text-xs font-semibold tabular-nums text-heading">{valueText}</output>
-      </div>
-      <input id={id} type="range" min={min} max={max} step={step} value={value} onChange={event => onChange(Number(event.target.value))}
-        style={{ background: `linear-gradient(to right, var(--color-mode-upper) ${stop}, var(--color-track) ${stop})` }}
-        className={RANGE} />
-      <div className="flex justify-between text-xs text-muted"><span>{minLabel}</span><span>{maxLabel}</span></div>
     </div>
   );
 }

@@ -11,7 +11,7 @@ const bundle = await build({ stdin: { contents: "export { default } from './src/
   platform: 'node', format: 'cjs', jsx: 'automatic', external: ['react', 'react-dom'] });
 const compiled = { exports: {} };
 new Function('module', 'exports', 'require', bundle.outputFiles[0].text)(compiled, compiled.exports, createRequire(import.meta.url));
-const render = (snapshot, eye, isRunning = true, baseCva = 50) => renderToStaticMarkup(createElement(compiled.exports.default, { snapshot, eye, isRunning, baseCva }));
+const render = (snapshot, eye, isRunning = true) => renderToStaticMarkup(createElement(compiled.exports.default, { snapshot, eye, isRunning }));
 const text = html => html.replace(/<[^>]+>/g, '');
 
 test('two dials and a half gauge show only the current neck score with estimated CVA, balance score and blink rate', () => {
@@ -24,7 +24,6 @@ test('two dials and a half gauge show only the current neck score with estimated
   // Neck score 0 = load 150 % → CVA 50 − 40.11 = 9.89°.
   for (const value of ['0점목 점수추정 CVA 10°', '85점좌우 균형', '0.0회/분깜빡임 빈도']) assert.ok(shown.includes(value), value);
   assert.doesNotMatch(shown, /세션 평균|안구 점수|종합 점수|거북목|정상|진단/);
-  assert.ok(text(render(snapshot, eye, true, 55)).includes('추정 CVA 15°'));
   // Neck score 60 = load 60 % → 50 − 17.25 = 32.75°.
   assert.ok(text(render({ ...snapshot, neck: { ...snapshot.neck, currentScore: 60 } }, eye)).includes('60점목 점수추정 CVA 33°'));
   assert.equal((render(snapshot, eye, false).match(/>—</g) ?? []).length, 4);

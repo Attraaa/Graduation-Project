@@ -6,11 +6,11 @@ import { localReviewRevision, subscribeLocalReview } from '../records/reviewRefr
 import { readLocalReviewResults } from '../records/localReviewResults';
 import { localPostureReview } from '../records/reviewSession';
 import { useRecordQuery } from '../records/useRecordQuery';
-import { buildStatistics, statisticsRange, type PeriodDays } from '../statistics/period';
+import { buildStatistics, statisticsRange } from '../statistics/period';
 import { useStatisticsData } from '../statistics/useStatisticsData';
-import { aiReviewInput, type AiReviewInput } from './input';
+import { aiReviewInput, type AiReviewDays, type AiReviewInput } from './input';
 
-export function useReviewInput(today: string, days: PeriodDays) {
+export function useReviewInput(today: string, days: AiReviewDays) {
   const owner = getCurrentUser()?.id ?? '';
   const cloud = useStatisticsData(today, days);
   const { from, to, dates } = statisticsRange(today, days);

@@ -11,14 +11,14 @@ export default function ScoreDial({ label, value, digits = 0, strokeClass, detai
 }) {
   const filled = value === null ? 0 : (Math.max(0, Math.min(100, value)) / 100) * CIRCUMFERENCE;
   return <div className="flex min-w-0 flex-col items-center gap-2 text-center">
-    <div className="relative size-[104px] shrink-0">
+    <div className="relative size-[var(--monitor-meter-size,6.5rem)] shrink-0">
       <svg viewBox="0 0 120 120" className="size-full" aria-hidden="true">
         <circle cx="60" cy="60" r="52" fill="none" strokeWidth="9" className="stroke-track" />
         {value !== null && <circle cx="60" cy="60" r="52" fill="none" strokeWidth="9" strokeLinecap="round" className={strokeClass}
           strokeDasharray={`${filled} ${CIRCUMFERENCE}`} transform="rotate(-90 60 60)" />}
       </svg>
-      <p className="absolute inset-0 flex items-center justify-center text-[30px] font-black leading-none tabular-nums text-heading">
-        {value === null ? '—' : value.toFixed(digits)}{value !== null && <small className="ml-0.5 mt-3 text-[11px] font-semibold text-muted">점</small>}
+      <p className="absolute inset-0 flex items-center justify-center text-[clamp(1.125rem,calc(var(--monitor-meter-size,6.5rem)*0.29),1.875rem)] font-black leading-none tabular-nums text-heading">
+        {value === null ? '—' : value.toFixed(digits)}{value !== null && <small className="ml-0.5 mt-[0.35em] text-[11px] font-semibold text-muted">점</small>}
       </p>
     </div>
     <div className="min-w-0">

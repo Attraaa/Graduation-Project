@@ -541,3 +541,7 @@ macOS `bash scripts/moti.sh check`에서 타입·린트, 프론트 264개(상세
 먼저 서버 소스·빌드·환경 파일과 DB 전체(`mysqldump`, 17개 테이블)를 `/home/ubuntu/moti-backups/20261125-155324-before-balance/`에 접근 권한 600으로 남겼습니다. 새 `dist/server.js`와 `database/contracts.ts`, `server/src/services/aiReview.ts`, `server/schema.sql`을 바꾸고 서비스를 재시작했습니다. 바로 이어서 사용자 승인으로 `posture_records`의 `shoulder` 기록 174개(사용자 6명, 2026-10-03~11-25)를 한 트랜잭션에서 지웠고, 연결된 `posture_buckets` 352행과 `posture_batches` 60,489행이 함께 지워졌습니다(ON DELETE CASCADE). 목 기록 174개는 그대로이고 연결이 끊긴 행은 없습니다.
 
 반영 후 서비스는 정상 실행 중이고 서버 안팎에서 `/health`가 `ok`, 로그인 없는 기록 조회가 401로 응답했습니다. 로그인한 계정의 실제 저장·조회와 새 앱의 `balance` 기록 저장은 확인하지 않았습니다. 예전 버전 앱은 이제 상체 기록 저장이 거부되므로 새 버전으로 바꿔야 합니다. 이전 `/api/sessions` 경로의 표(`sessions` 등)는 손대지 않았습니다.
+
+## 학습·오버레이 레이아웃 브라우저 검사
+
+`front`에서 `npm run test:layout`을 실행하면 Chromium의 임시 프로필과 로컬 대역 데이터로 학습 두 카드의 정렬, 시간축, 종료 요약, 오버레이 모드 수, 1·7·30일 통계, 학습이력과 알림 설정을 검사합니다. 최소 데스크톱 창 크기(800×600)를 포함해 측정을 시작하거나 일시정지할 때 카드가 나란히 놓이고 버튼과 그래프가 스크롤 없이 보이는지 확인합니다. `MOTI_TEST_CHROMIUM`으로 브라우저 실행 경로를 지정할 수 있고, `MOTI_UI_ARTIFACTS`에 폴더를 지정하면 PNG 시안을 함께 남깁니다.
