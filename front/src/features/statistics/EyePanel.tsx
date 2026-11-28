@@ -38,7 +38,7 @@ export default function EyePanel({ eye, days, periodDays, max, today, detail, on
       </section> : <section aria-label="날짜별 깜빡임 빈도" className={`${CARD} space-y-3`}>
         <ChartHeader title="날짜별 깜빡임 빈도" legend={LINES} />
         {empty ? <EmptyChart /> : (
-          <DailyChart label="날짜별 깜빡임 빈도" lines={LINES} today={today} domain={[0, max]}
+          <DailyChart label="날짜별 깜빡임 빈도" lines={LINES} today={today} domain={[0, max]} unit="회/분"
             faded={faded} detail={detail} onSelectDate={onSelectDate}
             data={days.map(day => ({ date: day.date, rate: day.eye.rate }))} />
         )}

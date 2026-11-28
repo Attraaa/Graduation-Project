@@ -104,37 +104,38 @@ const Register = () => {
         </div>
 
         <form onSubmit={handleRegister} className="space-y-4">
-          <input
+          <label className="block space-y-1 text-sm font-semibold text-heading"><span>닉네임</span><input
             type="text"
             name="nickname"
-            placeholder="닉네임"
+            autoComplete="nickname"
             className="w-full rounded-2xl border-2 border-gray-200 bg-gray-50 px-4 py-4 font-bold text-gray-700 outline-none transition focus:border-[#1cb0f6] focus:bg-white"
             value={formData.nickname}
             onChange={handleChange}
             required
-          />
+          /></label>
           <div>
-            <input
+            <label className="block space-y-1 text-sm font-semibold text-heading"><span>아이디</span><input
               type="text"
               name="userId"
-              placeholder="아이디"
+              autoComplete="username" aria-describedby={idMessage ? 'register-id-status' : undefined}
               className="w-full rounded-2xl border-2 border-gray-200 bg-gray-50 px-4 py-4 font-bold text-gray-700 outline-none transition focus:border-[#1cb0f6] focus:bg-white"
               value={formData.userId}
               onChange={handleChange}
               required
-            />
+            /></label>
             {idMessage && (
-              <p className={`mt-2 text-sm font-bold ${idMessage.includes('가능') ? 'text-[#58cc02]' : 'text-[#ff4b4b]'}`}>
+              <p id="register-id-status" role="status" className={`mt-2 text-sm font-bold ${idMessage.includes('가능') ? 'text-primary-soft-text' : 'text-danger-text'}`}>
                 {idMessage}
               </p>
             )}
           </div>
           <div>
+            <label htmlFor="register-email" className="mb-1 block text-sm font-semibold text-heading">이메일</label>
             <div className="flex gap-2">
               <input
                 type="email"
                 name="email"
-                placeholder="이메일"
+                id="register-email" aria-describedby={emailNotice ? 'register-email-status register-email-help' : 'register-email-help'}
                 autoComplete="email"
                 className="min-w-0 flex-1 rounded-2xl border-2 border-gray-200 bg-gray-50 px-4 py-4 font-bold text-gray-700 outline-none transition focus:border-[#1cb0f6] focus:bg-white"
                 value={formData.email}
@@ -151,42 +152,41 @@ const Register = () => {
               </button>
             </div>
             {emailNotice && (
-              <p role="status" className={`mt-2 text-sm font-bold ${emailNotice.ok ? 'text-gray-500' : 'text-[#ff4b4b]'}`}>{emailNotice.text}</p>
+              <p id="register-email-status" role="status" className={`mt-2 text-sm font-bold ${emailNotice.ok ? 'text-muted' : 'text-danger-text'}`}>{emailNotice.text}</p>
             )}
             {codeSent && (
-              <input
+              <label className="mt-3 block space-y-1 text-sm font-semibold text-heading"><span>인증 코드 6자리</span><input
                 type="text"
                 name="code"
-                placeholder="인증 코드 6자리"
                 inputMode="numeric"
                 autoComplete="one-time-code"
                 maxLength={6}
-                className="mt-3 w-full rounded-2xl border-2 border-gray-200 bg-gray-50 px-4 py-4 font-bold text-gray-700 outline-none transition focus:border-[#1cb0f6] focus:bg-white"
+                className="w-full rounded-2xl border-2 border-gray-200 bg-gray-50 px-4 py-4 font-bold text-gray-700 outline-none transition focus:border-[#1cb0f6] focus:bg-white"
                 value={formData.code}
                 onChange={handleChange}
                 required
-              />
+              /></label>
             )}
-            <p className="mt-2 text-sm font-bold text-gray-500">아이디를 찾거나 비밀번호를 재설정할 때 이 이메일로 보내 드려요.</p>
+            <p id="register-email-help" className="mt-2 text-sm font-bold text-muted">아이디를 찾거나 비밀번호를 재설정할 때 이 이메일로 보내 드려요.</p>
           </div>
-          <input
+          <label className="block space-y-1 text-sm font-semibold text-heading"><span>비밀번호</span><input
             type="password"
             name="password"
-            placeholder="비밀번호"
+            autoComplete="new-password"
             className="w-full rounded-2xl border-2 border-gray-200 bg-gray-50 px-4 py-4 font-bold text-gray-700 outline-none transition focus:border-[#1cb0f6] focus:bg-white"
             value={formData.password}
             onChange={handleChange}
             required
-          />
-          <input
+          /></label>
+          <label className="block space-y-1 text-sm font-semibold text-heading"><span>비밀번호 확인</span><input
             type="password"
             name="confirmPassword"
-            placeholder="비밀번호 확인"
+            autoComplete="new-password"
             className="w-full rounded-2xl border-2 border-gray-200 bg-gray-50 px-4 py-4 font-bold text-gray-700 outline-none transition focus:border-[#1cb0f6] focus:bg-white"
             value={formData.confirmPassword}
             onChange={handleChange}
             required
-          />
+          /></label>
 
           <div className="space-y-3 pt-6">
             <Button type="submit" variant="secondary" fullWidth disabled={busy}>

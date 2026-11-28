@@ -20,11 +20,13 @@ import { beginPostureTimeline } from '../features/records/postureTimelineRecordi
 import type { CaptureSink, CaptureStart } from '../features/records/recording';
 import { useCameraSettings } from '../features/camera/context';
 import { addPostureSegment, emptyScoreTotals, postureRunAverages } from '../features/session/measurementSummary';
+import { cameraPostureId } from '../features/session/cameraRecordId';
 
 interface PostureMonitorProps {
   isRunning: boolean;
   paused?: boolean;
   referenceRequest?: number;
+  cameraRun?: string;
   deviceId: string;
   onUpdate: (snapshot: MonitorSnapshot) => void;
   recordCapture?: (start: CaptureStart) => CaptureSink;
@@ -36,7 +38,7 @@ interface PostureMonitorProps {
   faces?: FaceBuffer;
 }
 
-const PostureMonitor = ({ isRunning, paused = false, referenceRequest = 0, deviceId, onUpdate, recordCapture, balanceSensitivity, habitRule = HABIT_POLICY, faces }: PostureMonitorProps) => {
+const PostureMonitor = ({ isRunning, paused = false, referenceRequest = 0, cameraRun, deviceId, onUpdate, recordCapture, balanceSensitivity, habitRule = HABIT_POLICY, faces }: PostureMonitorProps) => {
   const pausedRef = useRef(paused);
   const interrupt = useRef<() => void>(() => {});
   const recollect = useRef<() => void>(() => {});
@@ -81,7 +83,7 @@ const PostureMonitor = ({ isRunning, paused = false, referenceRequest = 0, devic
       const timeline = createPostureScoreTimeline(at, points => local.append(points));
       local.onStop(time => timeline.finish(time));
       return [turtleScorePolicy, balanceRule].map(policy => {
-        const remote = recordCapture?.({ id: `${sessionId}:${policy.mode}`, mode: policy.mode, scorePolicyVersion: policy.version,
+        const remote = recordCapture?.({ id: `${cameraRun ? cameraPostureId(cameraRun, sessionId) : sessionId}:${policy.mode}`, mode: policy.mode, scorePolicyVersion: policy.version,
           habitPolicyVersion: neck.habitPolicyVersion, at, epoch });
         return {
           sample(time: number, value: Parameters<CaptureSink['sample']>[1]) {
@@ -98,13 +100,14 @@ const PostureMonitor = ({ isRunning, paused = false, referenceRequest = 0, devic
         };
       });
     };
-    let recording = beginRecord(startMono);
+    let recording: ReturnType<typeof beginRecord> = [];
     let recordedReference: string | null = null;
     let removeTrackListener = () => {};
     let watchdog: ReturnType<typeof setInterval> | undefined;
     let lastFrameAt: number | null = null;
     let capturedGeneration = 0;
     let capturedVideoTime = -1;
+    let layout = '';
     let resumeAt = 0;
     // E19: 3초 준비 → 5초 기록 → 보정(실패하면 이유 안내 뒤 다시). null이면 다음 프레임에서 새로 시작합니다.
     let model: NeckModel | null = null;
@@ -153,20 +156,23 @@ const PostureMonitor = ({ isRunning, paused = false, referenceRequest = 0, devic
     const calibrate = (frames: readonly NeckFrame[]) => {
       // The pose reference (calibration.ts) must come from the same 5 s; otherwise show why and start again.
       const token = flowToken, reference = calibration.reference;
+      const generation = capturedGeneration;
+      const isCurrent = () => !abort.signal.aborted && token === flowToken && generation === runtime.current.generation;
       calibrating = true;
-      const result = reference ? model!.calibrate(frames) : Promise.resolve({ ok: false as const, reason: referenceFailure(calibration.reason) });
+      const result = reference ? model!.calibrate(frames, isCurrent) : Promise.resolve({ ok: false as const, reason: referenceFailure(calibration.reason) });
       void result.then(info => {
-        if (abort.signal.aborted || token !== flowToken) return;
+        if (!isCurrent()) return;
         flow = finishNeckFlow(performance.now(), info);
         if (info.ok) { loadFilter.reset(); balanceRef = balanceReference(frames); balanceFilter.reset(); balanceClock = startNeckClock(); }
         else calibration = createCalibration();
-      }, fail).finally(() => { calibrating = false; });
+      }, () => { if (isCurrent()) fail(); }).finally(() => { calibrating = false; });
     };
     const inferNeck = (input: NeckFrame, at: number) => {
       const token = flowToken;
+      const generation = capturedGeneration;
       inferring = true; lastInferAt = at;
       void model!.infer(input).then(result => {
-        if (abort.signal.aborted || token !== flowToken || at <= neckInterruptedAt) return;
+        if (abort.signal.aborted || token !== flowToken || generation !== runtime.current.generation || at <= neckInterruptedAt) return;
         if (!result.measuring) interruptNeck(at);
         else {
           neckClock = tickNeckClock(neckClock, at);
@@ -174,9 +180,13 @@ const PostureMonitor = ({ isRunning, paused = false, referenceRequest = 0, devic
           neck = advanceEvaluation(neck, { observedSeconds: neckClock.seconds }, turtleScorePolicy, habit, { score, deviation: neckDeviation(score) });
         }
         recording[0]?.sample(at, neck);
-      }, fail).finally(() => { inferring = false; });
+      }, () => { if (token === flowToken && generation === runtime.current.generation) fail(); }).finally(() => { inferring = false; });
     };
     const setup = async () => {
+      // StrictMode replays effect setup and immediately disposes the first attempt.
+      await Promise.resolve();
+      if (abort.signal.aborted) return;
+      recording = beginRecord(startMono);
       const stream = await startWebcam(deviceId || undefined);
       if (abort.signal.aborted) return;
       if (!stream) {
@@ -241,11 +251,15 @@ const PostureMonitor = ({ isRunning, paused = false, referenceRequest = 0, devic
           landmarks: results.poseLandmarks, widthPx: video.videoWidth, heightPx: video.videoHeight,
           sourceId: `${track.id}:${capturedGeneration}`, timestampMs: capturedAtMs,
         };
-        const input = neckFrame(capturedAtMs, results.poseLandmarks, faces?.match(capturedAtMs, capturedVideoTime) ?? null, video.videoWidth, video.videoHeight);
+        const frameLayout = `${frame.sourceId}:${frame.widthPx}:${frame.heightPx}`;
+        if (layout !== frameLayout) {
+          layout = frameLayout;
+          restartNeck();
+          observation = interruptObservation(observation);
+        }
+        const input = neckFrame(capturedAtMs, results.poseLandmarks,
+          faces?.match(capturedAtMs, capturedVideoTime, undefined, capturedGeneration) ?? null, video.videoWidth, video.videoHeight);
         const collectMs = model.config.calibration.window_sec * 1000;
-        // A new camera identity or image size invalidates the reference, as before: calibrate again.
-        const held = calibration.reference;
-        if (flow?.step === 'ready' && held && (held.sourceId !== frame.sourceId || held.widthPx !== frame.widthPx || held.heightPx !== frame.heightPx)) restartNeck();
         if (flow?.step !== 'ready') {
           // Count the 3 s prep from when results arrive: the first MediaPipe frame can take seconds to warm up.
           flow = advanceNeckFlow(flow ?? startNeckFlow(receivedAtMs), capturedAtMs, input, collectMs);
@@ -310,7 +324,7 @@ const PostureMonitor = ({ isRunning, paused = false, referenceRequest = 0, devic
         await video.play();
         if (!abort.signal.aborted) {
           lastFrameAt = performance.now();
-          startProcessing(video, () => { capturedGeneration = runtime.current.generation; capturedVideoTime = runtime.current.videoTime; return previewRef.current ?? video; }, () => !pausedRef.current);
+          startProcessing(video, () => { capturedGeneration = runtime.current.frameGeneration ?? -1; capturedVideoTime = runtime.current.videoTime; return previewRef.current ?? video; }, () => !pausedRef.current);
           watchdog = setInterval(() => {
             if (!abort.signal.aborted && !pausedRef.current && lastFrameAt !== null && performance.now() - lastFrameAt > 1500 && latest.current.phase !== 'error') {
               canvasRef.current?.getContext('2d')?.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
@@ -337,7 +351,7 @@ const PostureMonitor = ({ isRunning, paused = false, referenceRequest = 0, devic
       detach();
       void stopProcessing();
     };
-  }, [isRunning, deviceId, publish, videoRef, canvasRef, startWebcam, stopWebcam, initMediaPipe, startProcessing, stopProcessing, recordCapture, connect, detach, runtime, balanceSensitivity, habitRule, faces]);
+  }, [isRunning, deviceId, publish, videoRef, canvasRef, startWebcam, stopWebcam, initMediaPipe, startProcessing, stopProcessing, recordCapture, connect, detach, runtime, balanceSensitivity, habitRule, faces, cameraRun]);
 
   useEffect(() => {
     // Flush the last computed interval on stop, but never publish from an old keyed session's cleanup.

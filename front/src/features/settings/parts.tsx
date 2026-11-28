@@ -6,7 +6,7 @@ export const INPUT = 'h-10 w-full rounded-xl border border-border bg-surface-mut
 const BUTTON_BASE = 'inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-xl px-4 text-sm font-semibold transition disabled:cursor-default disabled:opacity-40';
 export const BUTTON = `${BUTTON_BASE} border border-border bg-surface text-heading hover:bg-nav-active`;
 export const BUTTON_STRONG = `${BUTTON_BASE} bg-heading text-surface hover:opacity-90`;
-export const BUTTON_DANGER = `${BUTTON_BASE} bg-danger text-white hover:brightness-95`;
+export const BUTTON_DANGER = `${BUTTON_BASE} bg-button-danger text-white hover:brightness-95`;
 
 /** One settings widget with an icon, title, and content. */
 export function SettingsCard({ title, icon, iconClass = 'bg-track text-heading', className = '', children }: {

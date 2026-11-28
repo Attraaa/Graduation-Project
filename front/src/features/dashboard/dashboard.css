@@ -1,0 +1,39 @@
+@media (width < 48rem) {
+  .dashboard-card[data-compact-visible='false'] { display: none; }
+
+  .dashboard-card[data-compact-visible='true'] {
+    display: grid;
+    min-height: min-content;
+    grid-template-rows: auto auto minmax(min-content, 1fr) minmax(6rem, 1.2fr);
+  }
+
+  .dashboard-card .monitoring-preview { display: grid; min-height: min-content; }
+
+  /* The guide can grow with wrapped text while the camera keeps a useful minimum height. */
+  .dashboard-card .monitoring-preview::before {
+    content: '';
+    grid-area: 1 / 1;
+    min-height: 5.5rem;
+  }
+
+  .dashboard-card .monitoring-guidance {
+    position: relative;
+    grid-area: 1 / 1;
+    align-self: end;
+  }
+}
+
+@media (32rem <= width < 48rem) and (height < 33rem) {
+  .dashboard-card[data-compact-visible='true'] {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+    grid-template-rows: auto auto minmax(min-content, 1fr);
+  }
+
+  .dashboard-card > header { grid-column: 1 / -1; }
+  .dashboard-card > .dashboard-metrics { grid-column: 1; }
+
+  .dashboard-card > .dashboard-trend {
+    grid-area: 2 / 2 / 4 / 3;
+    border-left: 1px solid var(--color-border);
+  }
+}

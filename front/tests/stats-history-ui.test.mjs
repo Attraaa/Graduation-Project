@@ -4,13 +4,14 @@ import { build } from 'esbuild';
 import { createRequire } from 'node:module';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { MemoryRouter } from 'react-router-dom';
 import { entriesByDate } from '../src/features/history/calendar.ts';
 import { CURRENT_POLICIES } from '../src/features/history/currentPolicies.ts';
 import { eyeMinutes } from '../src/features/history/detail.ts';
 
 async function load(entry) {
   const bundle = await build({ entryPoints: [entry], bundle: true, write: false, loader: { '.css': 'empty' },
-    platform: 'node', format: 'cjs', jsx: 'automatic', external: ['react', 'react-dom'] });
+    platform: 'node', format: 'cjs', jsx: 'automatic', external: ['react', 'react-dom', 'react-router-dom'] });
   const compiled = { exports: {} };
   new Function('module', 'exports', 'require', bundle.outputFiles[0].text)(compiled, compiled.exports, createRequire(import.meta.url));
   return compiled.exports.default;
@@ -21,7 +22,7 @@ const DayRecords = await load('src/features/history/DayRecords.tsx');
 const EmptyDay = await load('src/features/history/EmptyDay.tsx');
 const RecordDetail = await load('src/features/history/RecordDetail.tsx');
 const KeyboardKeyExploration = await load('src/features/keyboard/KeyboardKeyExploration.tsx');
-const html = (component, props) => renderToStaticMarkup(createElement(component, props));
+const html = (component, props) => renderToStaticMarkup(createElement(MemoryRouter, null, createElement(component, props)));
 
 test('key heatmap colours follow the whole score shown: 90 or more green, 70–89 yellow, below 70 red', () => {
   const row = (code, verdict, count) => ({ date: '2026-10-02', code, context: 'plain', finger: 'left:index', verdict,

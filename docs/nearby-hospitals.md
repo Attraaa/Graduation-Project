@@ -10,8 +10,8 @@
 
 ## 흐름
 
-- 화면: `front/src/features/hospitals/NearbyHospitals.tsx`. 서버 호출은 `api.ts`, 지도 SDK 로딩은 `kakaoMap.ts`입니다.
-- 서버: `GET /api/hospitals?department=<진료과>&query=<동네·주소>` 또는 `&lat=<위도>&lng=<경도>`입니다. 로그인한 사용자만 쓸 수 있습니다(`server/src/routes/hospitals.ts`, `services/hospitals.ts`).
+- 화면은 `front/src/features/hospitals/NearbyHospitals.tsx`에 있습니다. 지도 SDK는 로그인 화면과 출처가 격리된 iframe에서 실행됩니다. 지도에는 검색 중심 좌표와 병원 이름·좌표만 전달합니다.
+- 로그인한 앱은 `POST /api/hospitals`의 JSON 본문에 `department`와 `query` 또는 `lat`·`lng`를 보냅니다. 기존 설치본의 GET 요청도 호환됩니다. 새 설치본을 배포하기 전에 POST 경로가 있는 서버를 먼저 반영합니다.
   - 입력한 위치는 카카오 주소 검색으로 먼저 찾고, 없으면 키워드(장소 이름) 검색으로 중심 좌표를 정합니다. 둘 다 없으면 404입니다.
   - 병원은 키워드 검색으로 찾습니다(`query`=진료과, `category_group_code=HP8`, 반경 5,000m, 거리순, 15개).
   - 응답 형식은 `{ center: { lat, lng, label }, hospitals: [{ id, name, category, address, phone, distance, lat, lng, url }] }`입니다. 장소 링크는 https로 바꿔 돌려줍니다.
@@ -26,7 +26,7 @@
 
 ## 위치와 개인정보
 
-- 입력한 위치와 현재 위치는 그 검색에만 씁니다. 서버와 기기 어디에도 저장하지 않고, 서버 로그에도 남기지 않습니다.
+- 새 설치본은 위치를 URL에 넣지 않습니다. 기존 설치본의 위치도 프록시 로그에 남지 않도록 병원 경로에는 `$request_uri`나 `$args` 대신 경로 `$uri`, 응답 상태, 처리 시간만 기록하는 포맷을 적용합니다.
 - 현재 위치는 화면에서 소수점 둘째 자리(약 1km)로 반올림해 보내고, 서버도 한 번 더 반올림합니다. 입력한 위치는 사용자가 적은 글자를 그대로 카카오에 보냅니다.
 - 위치는 Moti 서버를 거쳐 카카오 로컬 API로 전달되며, 카카오의 처리 방침이 적용됩니다.
 

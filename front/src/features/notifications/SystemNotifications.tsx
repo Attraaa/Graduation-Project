@@ -46,7 +46,7 @@ export default function SystemNotifications() {
     const off = window.motiDesktop?.onNavigate(target => {
       const card = ({ '/dashboard?mode=upper_body': '상체 모니터링', '/dashboard?mode=keyboard': '키보드 모니터링' } as Record<string, string>)[target];
       if (!card && !['/dashboard', '/login', statisticsTarget('upper_body'), statisticsTarget('keyboard')].includes(target)) return;
-      navigation.current(target);
+      navigation.current(target, target.startsWith('/statistics?') ? { state: { focusStatisticsTab: true } } : undefined);
       // Mode alerts show that mode's home card; the plain home target is the storage notice.
       if (card) window.setTimeout(() => document.querySelector(`section[aria-label="${card}"]`)?.scrollIntoView({ block: 'start' }), 150);
       else if (target === '/dashboard') window.setTimeout(() => document.querySelector('[data-recording-status]')?.scrollIntoView({ block: 'center' }), 150);

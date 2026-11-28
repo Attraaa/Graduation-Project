@@ -1,11 +1,9 @@
-import { useSyncExternalStore } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useLayoutEffect, useRef, type KeyboardEvent } from 'react';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import DayDetail from '../features/dashboard/DayDetail';
 import { SourceError, SourceLoading } from '../features/dashboard/SourceState';
 import { pastDateOrNull } from '../features/dashboard/summary';
 import KeyboardStatistics from '../features/keyboard/KeyboardStatistics';
-import RecordingStatus from '../features/records/RecordingStatus';
-import { recordingMessage, subscribeRecording } from '../features/records/recording';
 import { todayDateKey } from '../features/records/views';
 import EyePanel from '../features/statistics/EyePanel';
 import UpperPanel from '../features/statistics/UpperPanel';
@@ -25,6 +23,7 @@ const isMode = (value: string | null): value is StatMode => MODES.some(mode => m
 export default function Statistics() {
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
+  const { state } = useLocation();
   const today = todayDateKey();
   const end = pastDateOrNull(params.get('end'), today) ?? today;
   const requestedDays = Number(params.get('days'));
@@ -36,14 +35,32 @@ export default function Statistics() {
     updated.set(key, next);
     return updated;
   }, { replace: true });
-  const { summary, keyboard, status, retry } = useStatisticsData(end, days);
-  const saveMessage = useSyncExternalStore(subscribeRecording, recordingMessage, recordingMessage);
-  const openHistory = (date: string) => navigate(`/history?date=${date}`);
+  const { summary, keyboard, status, retrySource } = useStatisticsData(end, days);
+  const tabs = useRef<Partial<Record<StatMode, HTMLButtonElement | null>>>({});
+  useLayoutEffect(() => {
+    if (state?.focusStatisticsTab) tabs.current[mode]?.focus({ preventScroll: true });
+  }, [mode, state]);
+  const switchTab = (event: KeyboardEvent<HTMLButtonElement>) => {
+    const index = MODES.findIndex(item => item.id === mode);
+    let next: number;
+    switch (event.key) {
+      case 'ArrowLeft': next = (index + MODES.length - 1) % MODES.length; break;
+      case 'ArrowRight': next = (index + 1) % MODES.length; break;
+      case 'Home': next = 0; break;
+      case 'End': next = MODES.length - 1; break;
+      default: return;
+    }
+    event.preventDefault();
+    update('mode', MODES[next].id);
+    tabs.current[MODES[next].id]?.focus();
+  };
+  const openHistory = (date: string) => navigate(`/history?date=${date}`, { state: { focusHistoryDate: true } });
   const detail = (date: string) => {
     const day = summary.days.find(item => item.date === date);
     return day?.hasRecords ? <DayDetail day={day} hint="눌러서 학습이력 보기 →" /> : null;
   };
-  const panelStatus = mode === 'upper' ? status.posture : mode === 'eye' ? status.eye : status.keyboard;
+  const source = mode === 'upper' ? 'posture' : mode;
+  const panelStatus = status[source];
   const shared = { today, detail, onSelectDate: openHistory, onOpenHistory: () => openHistory(end) };
 
   return (
@@ -56,7 +73,7 @@ export default function Statistics() {
             className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-heading" />
             : <span className="text-sm text-muted">{rangeText(summary.range.dates[0], end)}</span>}
           {end !== today && (
-            <button type="button" onClick={() => update('end', today)} className="text-sm font-semibold text-secondary hover:underline">{days === 1 ? '오늘 보기' : '오늘까지 보기'}</button>
+            <button type="button" onClick={() => update('end', today)} className="text-sm font-semibold text-secondary-text hover:underline">{days === 1 ? '오늘 보기' : '오늘까지 보기'}</button>
           )}
           <div role="group" aria-label="기간" className="flex rounded-xl bg-track p-1">
             {PERIODS.map(value => (
@@ -68,20 +85,24 @@ export default function Statistics() {
           </div>
         </div>
       </header>
-      {saveMessage.startsWith('저장 실패') && <RecordingStatus />}
       <div role="tablist" aria-label="모드" className="flex flex-wrap gap-2">
         {MODES.map(item => (
-          <button key={item.id} type="button" role="tab" aria-selected={mode === item.id} onClick={() => update('mode', item.id)}
+          <button key={item.id} ref={element => { tabs.current[item.id] = element; }} type="button" role="tab" aria-selected={mode === item.id}
+            id={`stats-tab-${item.id}`} aria-controls={`stats-panel-${item.id}`} tabIndex={mode === item.id ? 0 : -1}
+            onKeyDown={switchTab} onClick={() => update('mode', item.id)}
             className={`flex items-center gap-2 rounded-full px-4 py-1.5 text-sm font-semibold ${mode === item.id ? 'bg-heading text-surface' : 'border border-border bg-surface text-heading'}`}>
             <span aria-hidden="true" className={`h-2 w-2 rounded-full ${item.dot}`} />{item.name}
           </button>
         ))}
       </div>
-      {panelStatus === 'loading' ? <SourceLoading className="h-96" />
-        : panelStatus === 'error' ? <SourceError onRetry={retry} />
-        : mode === 'upper' ? <UpperPanel upper={summary.upper} days={summary.days} periodDays={days} floor={summary.upperFloor} {...shared} />
-        : mode === 'eye' ? <EyePanel eye={summary.eye} days={summary.days} periodDays={days} max={summary.eyeMax} {...shared} />
-        : <KeyboardStatistics data={keyboard} date={end} days={days} {...shared} />}
+      {MODES.map(item => <section key={item.id} role="tabpanel" id={`stats-panel-${item.id}`}
+        aria-labelledby={`stats-tab-${item.id}`} hidden={mode !== item.id}>
+        {mode === item.id && (panelStatus === 'loading' ? <SourceLoading className="h-96" />
+          : panelStatus === 'error' ? <SourceError onRetry={retrySource[source]} />
+          : mode === 'upper' ? <UpperPanel upper={summary.upper} days={summary.days} periodDays={days} floor={summary.upperFloor} {...shared} />
+          : mode === 'eye' ? <EyePanel eye={summary.eye} days={summary.days} periodDays={days} max={summary.eyeMax} {...shared} />
+          : <KeyboardStatistics data={keyboard} date={end} days={days} {...shared} />)}
+      </section>)}
     </div>
   );
 }

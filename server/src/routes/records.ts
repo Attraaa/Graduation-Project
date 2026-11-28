@@ -35,7 +35,7 @@ export function createRecordsRouter(repository: RecordStore, auth: Auth) {
   };
 
   router.get('/generation', asyncHandler(async (req, res) => {
-    res.json({ generation: await repository.generation(req.user!.userId) });
+    res.json({ generation: await repository.generation(req.user!.userId), keyboardInputQuality: true });
   }));
 
   router.delete('/', asyncHandler(async (req, res) => {

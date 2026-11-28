@@ -16,9 +16,10 @@ import type { FaceSample } from '../posture/e19/frame';
 
 export type EyeUpdate = { measurement: EyeSnapshot; phase: 'loading' | 'calibrating' | 'observing' | 'unavailable' | 'error'; message: string };
 
-export default function EyeMonitor({ active, deviceId, reference, eyeReference, sensitivity = 'normal', onUpdate, onSample, onFace, shared = false, paused = false }: {
+export default function EyeMonitor({ active, deviceId, reference, eyeReference, retryRequest = 0, sensitivity = 'normal', onUpdate, onSample, onFace, shared = false, paused = false }: {
   onSample: (at: number, snapshot: EyeSnapshot) => void;
-  active: boolean; deviceId: string; reference: number; eyeReference: number; sensitivity?: EyeSensitivity; onUpdate: (update: EyeUpdate) => void;
+  active: boolean; deviceId: string; reference: number; eyeReference: number; retryRequest?: number;
+  sensitivity?: EyeSensitivity; onUpdate: (update: EyeUpdate) => void;
   /** Hands each face result (with the head matrix) to the upper-body neck model; blink measurement does not use it. */
   onFace?: (sample: FaceSample) => void;
   shared?: boolean; paused?: boolean;
@@ -109,7 +110,8 @@ export default function EyeMonitor({ active, deviceId, reference, eyeReference, 
         const process = (now: number) => {
           if (cancelled) return;
           try {
-            if (!pausedRef.current && !document.hidden && video.readyState >= 2 && video.currentTime !== lastVideoTime && (lastFrameAt === null || now - lastFrameAt >= 30)) {
+            if (!pausedRef.current && !document.hidden && video.readyState >= 2 && video.currentTime !== lastVideoTime
+              && (!shared || runtime.current.frameGeneration === runtime.current.generation) && (lastFrameAt === null || now - lastFrameAt >= 30)) {
               const signature = { deviceId: `${activeDeviceId}:${imageSignature(runtime.current.profile)}:${runtime.current.profile.resolution}:${runtime.current.profile.exposureMode}:${runtime.current.profile.exposure}`, width: video.videoWidth, height: video.videoHeight };
               if (eyeCameraChanged(cameraSignature.current, signature)) {
                 engine.recalibrateEyes();
@@ -118,7 +120,8 @@ export default function EyeMonitor({ active, deviceId, reference, eyeReference, 
               cameraSignature.current = signature;
               const videoTime = runtime.current.videoTime;
               const result = model.detectForVideo((shared ? runtime.current.canvas : previewRef.current) ?? video, now);
-              onFace?.({ t: now, videoTime, faces: result.faceLandmarks, matrices: result.facialTransformationMatrixes ?? [] });
+              onFace?.({ t: now, videoTime, generation: runtime.current.generation,
+                faces: result.faceLandmarks, matrices: result.facialTransformationMatrixes ?? [] });
               const { observation, reason } = readEyes(result, video.videoWidth, video.videoHeight);
               const current = engine.sample(now, observation);
               onSample(now, current);
@@ -161,7 +164,7 @@ export default function EyeMonitor({ active, deviceId, reference, eyeReference, 
       engine.sample(performance.now(), null);
       runner.stop();
     };
-  }, [active, shared, deviceId, onUpdate, onSample, onFace, startWebcam, stopWebcam, videoRef, connect, detach, runtime]);
+  }, [active, shared, deviceId, onUpdate, onSample, onFace, startWebcam, stopWebcam, videoRef, connect, detach, runtime, retryRequest]);
   if (shared) return null;
   return (
     <div className="relative overflow-hidden rounded-2xl bg-surface-muted">

@@ -11,15 +11,18 @@ const Login = () => {
   const { notify } = useDialog();
   const [userId, setUserId] = useState('');
   const [password, setPassword] = useState('');
+  const [loginError, setLoginError] = useState('');
   const { busy: submitting, run } = useSubmission();
   const passwordInput = useRef<HTMLInputElement>(null);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     await run(async signal => {
+      setLoginError('');
       const result = await loginUser(userId, password, signal);
       if (signal.aborted) return;
       if (!result.ok) {
+        setLoginError(result.message);
         await notify({ title: '로그인 실패', message: result.message, tone: 'warning' });
         if (!signal.aborted) passwordInput.current?.focus();
         return;
@@ -43,23 +46,24 @@ const Login = () => {
 
         <form onSubmit={handleLogin} className="space-y-6">
           <div className="space-y-4">
-            <input
+            <label className="block space-y-1 text-sm font-semibold text-heading"><span>아이디</span><input
               type="text"
-              placeholder="아이디"
+              autoComplete="username" aria-describedby={loginError ? 'login-error' : undefined}
               className="w-full rounded-2xl border-2 border-gray-200 bg-gray-50 px-4 py-4 font-bold text-gray-700 outline-none transition focus:border-[#1cb0f6] focus:bg-white"
               value={userId}
               onChange={(e) => setUserId(e.target.value)}
               required
-            />
-            <input
+            /></label>
+            <label className="block space-y-1 text-sm font-semibold text-heading"><span>비밀번호</span><input
               type="password"
               ref={passwordInput}
-              placeholder="비밀번호"
+              autoComplete="current-password" aria-describedby={loginError ? 'login-error' : undefined}
               className="w-full rounded-2xl border-2 border-gray-200 bg-gray-50 px-4 py-4 font-bold text-gray-700 outline-none transition focus:border-[#1cb0f6] focus:bg-white"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-            />
+            /></label>
+            {loginError && <p id="login-error" className="sr-only">{loginError}</p>}
           </div>
 
           <div className="flex justify-center gap-4 text-sm font-bold text-gray-600">
@@ -73,10 +77,8 @@ const Login = () => {
               시작하기
             </Button>
             
-            <Link to="/register" className="block">
-              <Button type="button" variant="outline" fullWidth>
-                회원가입
-              </Button>
+            <Link to="/register" className="btn-duo block w-full border-b-2 border-border bg-surface px-4 py-3 text-center text-heading hover:bg-surface-muted">
+              회원가입
             </Link>
           </div>
         </form>

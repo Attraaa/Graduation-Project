@@ -15,10 +15,11 @@ import WindowTitleBar from './components/layout/WindowTitleBar';
 import { MODAL_VISIBILITY_EVENT } from './components/dialog/modalEvents';
 import './components/dialog/modal.css';
 import SystemNotifications from './features/notifications/SystemNotifications';
+import { readPreference } from './utils/localPreferences';
 
 function App() {
   useEffect(() => {
-    const theme = localStorage.getItem('postureAI.theme') ?? 'light';
+    const theme = readPreference('postureAI.theme');
     document.documentElement.classList.toggle('dark-theme', theme === 'dark');
     const syncTheme = () => {
       const theme = document.documentElement.classList.contains('dark-theme') ? 'dark' : 'light';

@@ -11,6 +11,8 @@ DROP TABLE IF EXISTS `user`;
 
 -- 기존 서버 테이블도 초기화 (재생성 위해)
 DROP TABLE IF EXISTS email_verification_codes;
+DROP TABLE IF EXISTS request_leases;
+DROP TABLE IF EXISTS request_limits;
 DROP TABLE IF EXISTS password_reset_codes;
 DROP TABLE IF EXISTS eye_batches;
 DROP TABLE IF EXISTS eye_buckets;
@@ -38,8 +40,22 @@ CREATE TABLE users (
   nickname      VARCHAR(100) NOT NULL,                  -- 화면 표시 이름
   email         VARCHAR(255),                           -- 이메일 (UML: email)
   password_hash VARCHAR(255) NOT NULL,                  -- bcrypt 해시 (UML: password)
+  session_version INT UNSIGNED NOT NULL DEFAULT 0,
   settings      JSON,
   created_at    DATETIME     NOT NULL DEFAULT NOW()     -- (UML: create_date)
+);
+
+CREATE TABLE request_limits (
+  bucket_id BINARY(32) NOT NULL PRIMARY KEY,
+  expires_at BIGINT UNSIGNED NOT NULL,
+  hits INT UNSIGNED NOT NULL DEFAULT 0,
+  INDEX idx_request_limits_expires (expires_at)
+);
+
+CREATE TABLE request_leases (
+  slot VARCHAR(80) CHARACTER SET ascii COLLATE ascii_bin NOT NULL PRIMARY KEY,
+  holder CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  expires_at BIGINT UNSIGNED NOT NULL
 );
 
 -- 2. 학습 세션 (UML: session, start_date 제거)

@@ -33,7 +33,7 @@ export class OverlayWindow {
   private ready: { resolve: () => void; reject: (error: Error) => void } | null = null;
   private pending = new Map<string, { owner: string; resolve: (value: OverlayResult) => void; timer: ReturnType<typeof setTimeout> }>();
   private completed = new Map<string, OverlayResult>();
-  private previous: { maximized: boolean; bounds: Rectangle } | null = null;
+  private previous: { maximized: boolean; bounds: Rectangle; displayId: number; area: Rectangle } | null = null;
 
   constructor(ipc: Pick<IpcMain, 'handle' | 'on'>, deps: Dependencies) {
     this.deps = deps;
@@ -115,8 +115,9 @@ export class OverlayWindow {
     const owner = this.deps.owner();
     if (!owner || owner.isDestroyed() || !this.view().connected) return Promise.reject(Error('측정 화면이 준비된 뒤 다시 시도해 주세요.'));
     this.deps.beforeOpen();
-    this.previous = { maximized: owner.isMaximized(), bounds: owner.getNormalBounds() };
-    const area = this.deps.screen.getDisplayMatching(owner.getBounds()).workArea;
+    const display = this.deps.screen.getDisplayMatching(owner.getBounds());
+    const area = display.workArea;
+    this.previous = { maximized: owner.isMaximized(), bounds: owner.getNormalBounds(), displayId: display.id, area };
     const saved = this.deps.readPosition();
     const size = overlaySize(this.snapshot);
     const initial = fitOverlay(saved ? { ...saved, ...size } : { ...size, x: area.x + area.width - size.width - 20, y: area.y + 80 }, area);
@@ -149,8 +150,15 @@ export class OverlayWindow {
     if (!owner || owner.isDestroyed()) return;
     if (owner.isMinimized()) owner.restore();
     if (this.previous) {
-      if (this.previous.maximized) owner.maximize();
-      else { if (owner.isMaximized()) owner.unmaximize(); owner.setBounds(this.previous.bounds); }
+      if (this.previous.maximized && !owner.isMaximized()) owner.maximize();
+      if (!this.previous.maximized) {
+        if (owner.isMaximized()) owner.unmaximize();
+        const { id, workArea } = this.deps.screen.getDisplayMatching(this.previous.bounds);
+        const before = this.previous.area;
+        if (id !== this.previous.displayId || before.x !== workArea.x || before.y !== workArea.y || before.width !== workArea.width || before.height !== workArea.height) {
+          owner.setBounds(fitOverlay(this.previous.bounds, workArea));
+        }
+      }
     }
     if (focus) { owner.show(); owner.focus(); } else owner.showInactive();
     this.previous = null;

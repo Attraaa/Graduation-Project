@@ -16,7 +16,7 @@ import { imageSignature, validQuad } from '../features/camera/profile'
 import { analysisGrid, automaticQuad, displayedGrid } from '../features/camera/grid'
 import { beginKeyboardRecording } from '../features/keyboard/recording'
 import { addLiveScore } from '../features/keyboard/liveScore'
-import { keyboardCountKey } from '../../../database/keyboard'
+import { keyboardCountKey, parseInputQuality } from '../../../database/keyboard'
 import type { KeyboardCount } from '../../../database/keyboard'
 import { localDateKey } from '../../../database/contracts'
 
@@ -151,6 +151,16 @@ export default function KeyboardMonitor({ isRunning, paused = false, deviceId, r
     let mapped = false
     let removeTrackListener = () => {}
     let sink: ReturnType<typeof beginKeyboardRecording> | null = null
+    const updateQuality = (payload: unknown) => {
+      if (abort.signal.aborted) return
+      try {
+        const incoming = parseInputQuality(payload)
+        const current = snapshotRef.current.quality
+        if (current && (incoming.observed < current.observed || incoming.processed < current.processed || incoming.dropped < current.dropped)) return
+        sink?.quality(incoming)
+        publish({ quality: incoming })
+      } catch { /* Older analyzers send no quality data. */ }
+    }
     let revision = 0
     let removeHaltListener = () => {}
     // Automatic recognition of this mapping round: when its first attempt went out and whether one has failed yet.
@@ -354,8 +364,10 @@ export default function KeyboardMonitor({ isRunning, paused = false, deviceId, r
         publish({ observationStatus: payload.status, ...(payload.status !== 'observing' ? { latest: null, recent: [] } : {}) })
         if (payload.status === 'error') fail('승인 앱의 권한을 확인할 수 없어 관찰을 중지했습니다.')
       })
-      socket.on('press_result', (payload: RuntimePressPayload) => {
+      socket.on('input_quality', updateQuality)
+      socket.on('press_result', (payload: RuntimePressPayload & { quality?: unknown }) => {
         if (abort.signal.aborted || pausedRef.current || !mapped || runtime.current.editing) return
+        if (payload.quality) updateQuality(payload.quality)
         const result = adaptRuntimePress(payload)
         sink?.press(result)
         const row: KeyboardCount = { date: localDateKey(Date.now(), new Date().getTimezoneOffset()), code: result.code,

@@ -11,7 +11,9 @@ export interface KeyboardRecord {
   id: string; owner: string; startedAt: number; updatedAt: number; offsetMinutes: number;
   status: 'running' | 'finished' | 'interrupted'; policyVersion: string; recognitionVersion: string;
   nearbyCredit: number; total: number;
+  quality?: KeyboardInputQuality;
 }
+export interface KeyboardInputQuality { observed: number; processed: number; dropped: number; maxQueueWaitMs: number }
 export interface KeyboardBatch {
   schemaVersion: 1; generation: number; sequence: number; record: KeyboardRecord; counts: KeyboardCount[];
 }
@@ -55,13 +57,22 @@ function date(value: unknown) {
   return result;
 }
 export function parseKeyboardRecord(input: unknown): KeyboardRecord {
-  const row = object(input, ['id', 'owner', 'startedAt', 'updatedAt', 'offsetMinutes', 'status', 'policyVersion', 'recognitionVersion', 'nearbyCredit', 'total']);
+  const hasQuality = !!input && typeof input === 'object' && 'quality' in input;
+  const row = object(input, ['id', 'owner', 'startedAt', 'updatedAt', 'offsetMinutes', 'status', 'policyVersion', 'recognitionVersion', 'nearbyCredit', 'total',
+    ...(hasQuality ? ['quality'] : [])]);
   const startedAt = integer(row.startedAt, 8e12), updatedAt = integer(row.updatedAt, 8e12);
   if (updatedAt < startedAt || typeof row.offsetMinutes !== 'number' || !Number.isInteger(row.offsetMinutes) || Math.abs(row.offsetMinutes) > 840) throw new Error('키보드 시간 범위가 잘못되었습니다.');
   if (!['running', 'finished', 'interrupted'].includes(String(row.status))) throw new Error('키보드 기록 상태가 잘못되었습니다.');
   return { id: recordText(row.id), owner: recordText(row.owner), startedAt, updatedAt, offsetMinutes: row.offsetMinutes,
     status: row.status as KeyboardRecord['status'], policyVersion: recordText(row.policyVersion), recognitionVersion: recordText(row.recognitionVersion),
-    nearbyCredit: integer(row.nearbyCredit, 100), total: integer(row.total) };
+    nearbyCredit: integer(row.nearbyCredit, 100), total: integer(row.total), ...(hasQuality ? { quality: parseInputQuality(row.quality) } : {}) };
+}
+
+export function parseInputQuality(input: unknown): KeyboardInputQuality {
+  const row = object(input, ['observed', 'processed', 'dropped', 'maxQueueWaitMs']);
+  const observed = integer(row.observed), processed = integer(row.processed), dropped = integer(row.dropped);
+  if (dropped > observed || processed > observed - dropped) throw new Error('키보드 입력 품질 합계가 일치하지 않습니다.');
+  return { observed, processed, dropped, maxQueueWaitMs: integer(row.maxQueueWaitMs) };
 }
 export const keyboardCountKey = (row: Omit<KeyboardCount, 'count'>) => JSON.stringify([row.date, row.code, row.context, row.finger, row.verdict, row.reason]);
 export function parseKeyboardBatch(input: unknown): KeyboardBatch {

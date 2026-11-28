@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="ko">
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' https://dapi.kakao.com https://t1.daumcdn.net https://t1.kakaocdn.net; style-src 'unsafe-inline' https://t1.daumcdn.net https://t1.kakaocdn.net; img-src https: data: blob:; connect-src https://dapi.kakao.com https://t1.daumcdn.net https://t1.kakaocdn.net; base-uri 'none'; form-action 'none'">
+<style>html,body,#map{width:100%;height:100%;margin:0;overflow:hidden}</style>
+<div id="map" aria-label="병원 위치"></div>
+<script>
+(() => {
+  const box = document.getElementById('map');
+  let select = () => {};
+  let chosen = '';
+  let initialized = false;
+  const send = (type, id) => parent.postMessage({ type, id }, '*');
+  const fail = () => send('moti-map:failed');
+  function draw(maps, center, places) {
+    const anchor = new maps.LatLng(center.lat, center.lng);
+    const map = new maps.Map(box, { center: anchor, level: 5 });
+    const info = new maps.InfoWindow();
+    const bounds = new maps.LatLngBounds();
+    const pins = new Map();
+    places.forEach(({ id, name, lat, lng }) => {
+      const position = new maps.LatLng(lat, lng);
+      const marker = new maps.Marker({ map, position, title: name });
+      pins.set(id, { name, position, marker });
+      bounds.extend(position);
+      maps.event.addListener(marker, 'click', () => { select(id); send('moti-map:selected', id); });
+    });
+    const fit = () => { if (pins.size > 1) map.setBounds(bounds); else map.setCenter(pins.values().next().value?.position ?? anchor); };
+    select = id => {
+      const item = pins.get(id);
+      if (!item) return;
+      const name = document.createElement('div');
+      name.style.cssText = 'padding:4px 8px;font:600 12px sans-serif;color:#1f2937;white-space:nowrap';
+      name.textContent = item.name;
+      info.setContent(name);
+      info.open(map, item.marker);
+      map.panTo(item.position);
+    };
+    const resize = new ResizeObserver(() => { map.relayout(); fit(); });
+    resize.observe(box);
+    fit();
+    select(chosen);
+  }
+  addEventListener('message', event => {
+    if (event.source !== parent || !event.data || typeof event.data !== 'object') return;
+    const { type, key, center, places, id } = event.data;
+    if (type === 'moti-map:select') { chosen = id; select(id); return; }
+    if (type !== 'moti-map:init' || initialized || typeof key !== 'string' || !center || !Array.isArray(places)) return;
+    initialized = true;
+    chosen = id;
+    const script = document.createElement('script');
+    const timeout = setTimeout(fail, 8000);
+    script.src = 'https://dapi.kakao.com/v2/maps/sdk.js?appkey=' + encodeURIComponent(key) + '&autoload=false';
+    script.onerror = () => { clearTimeout(timeout); fail(); };
+    script.onload = () => {
+      const maps = window.kakao?.maps;
+      if (!maps) { clearTimeout(timeout); fail(); return; }
+      maps.load(() => {
+        clearTimeout(timeout);
+        try { draw(maps, center, places); } catch { fail(); }
+      });
+    };
+    document.head.append(script);
+  });
+  send('moti-map:ready');
+})();
+</script>
+</html>

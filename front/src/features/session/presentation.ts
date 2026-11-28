@@ -18,5 +18,6 @@ export function keyboardGuidance(snapshot: KeyboardMonitorSnapshot, controls: { 
   if (snapshot.recognition === 'waiting') return [{ tone: 'warn', badge: 'alert', text: snapshot.message || '카메라 설정에서 키보드 영역을 맞춰 주세요.' }];
   if (snapshot.phase !== 'ready') return [{ tone: 'info', text: snapshot.message || '손과 키보드가 보이도록 카메라를 맞춰 주세요.' }];
   if (snapshot.observationStatus === 'excluded') return [{ tone: 'warn', text: '미승인 앱 · 이 앱의 입력은 관찰하지 않습니다.' }];
+  if (snapshot.quality?.dropped) return [{ tone: 'warn', text: `분석 부하로 입력 ${snapshot.quality.dropped}회를 건너뛰었어요. 이 입력은 점수에서 제외돼요.` }];
   return !snapshot.latest && !snapshot.detectedPresses && snapshot.message ? [{ tone: 'info', text: snapshot.message }] : [];
 }

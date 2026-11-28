@@ -8,6 +8,7 @@ import { readConfig } from '../src/config.js';
 import { handleError, HttpError } from '../src/http.js';
 import { createAiRouter } from '../src/routes/ai.js';
 import { createMiniPcReviewer, parseReviewInput, type Reviewer, type ReviewInput } from '../src/services/aiReview.js';
+import { memoryRequestLimits, type RequestLimits } from '../src/services/requestLimits.js';
 
 const auth = createAuth(readConfig({ JWT_SECRET: 'test-only-secret-012345678901234567890' }).jwt);
 const token = auth.signToken({ userId: 3, username: 'tester' });
@@ -22,10 +23,10 @@ const input: ReviewInput = {
 const review = { summary: '좋아요.', strengths: ['목 점수가 올랐어요.'], improvements: ['A 키를 천천히 연습해 보세요.'], model: 'gemma3:4b' };
 const badRequest = (error: unknown) => error instanceof HttpError && error.status === 400;
 
-async function start(t: TestContext, reviewer: Reviewer | null) {
+async function start(t: TestContext, reviewer: Reviewer | null, limits?: RequestLimits) {
   const app = express();
   app.use(express.json());
-  app.use('/api/ai', createAiRouter(reviewer, auth));
+  app.use('/api/ai', createAiRouter(reviewer, auth, limits));
   app.use(handleError);
   const server = app.listen(0, '127.0.0.1');
   await once(server, 'listening');
@@ -75,6 +76,35 @@ test('valid input returns the review and its time; invalid input never reaches t
   for (let count = 1; count < 10; count += 1) assert.equal((await request(input)).status, 200);
   assert.equal((await request(input)).status, 429);
   assert.equal(calls.length, 10);
+});
+
+test('identical in-flight reviews share one generation; the active budget is shared between API instances', async t => {
+  const store = memoryRequestLimits(() => 1_800_000_001);
+  const firstSlots: (() => void)[] = [];
+  const countedReviewer = async () => { await new Promise<void>(resolve => { firstSlots.push(resolve); }); return review; };
+  const first = await start(t, countedReviewer, store);
+  const second = await start(t, countedReviewer, store);
+  const pending = first(input);
+  const duplicate = first(input);
+  const another = second({ ...input, days: 30 });
+  try {
+    let ready = false;
+    for (let attempt = 0; attempt < 100; attempt++) {
+      if (firstSlots.length === 2) { ready = true; break; }
+      await new Promise(resolve => setTimeout(resolve, 5));
+    }
+    assert.ok(ready);
+    const sameFromAnotherInstance = await second(input);
+    assert.equal(sameFromAnotherInstance.status, 429);
+    assert.match((await sameFromAnotherInstance.json()).message, /같은 기록/);
+    const full = await second({ ...input, eye: null });
+    assert.equal(full.status, 429);
+    assert.ok(full.headers.has('retry-after'));
+    assert.equal(firstSlots.length, 2);
+  } finally { firstSlots.forEach(resolve => resolve()); }
+  const responses = await Promise.all([pending, duplicate, another]);
+  for (const response of responses) assert.equal(response.status, 200);
+  assert.deepEqual(await responses[0].json(), await responses[1].json());
 });
 
 const local = { sideMetric: 'shoulder', sessions: 1, measuredMinutes: 5,

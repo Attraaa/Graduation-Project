@@ -5,7 +5,7 @@ import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promi
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
-import { createServer } from 'vite';
+import { createServer, searchForWorkspaceRoot } from 'vite';
 
 const executable = process.env.MOTI_TEST_CHROMIUM || [
   join(process.env.ProgramFiles ?? 'C:/Program Files', 'Google/Chrome/Application/chrome.exe'),
@@ -54,7 +54,9 @@ async function connect(url) {
   return { send, close: () => ws.close() };
 }
 
-const server = await createServer({ mode: 'browser', logLevel: 'error', server: { host: '127.0.0.1', port: 0, strictPort: true, watch: null } });
+const ortAssets = await realpath('node_modules/onnxruntime-web/dist');
+const server = await createServer({ mode: 'browser', logLevel: 'error', server: { host: '127.0.0.1', port: 0, strictPort: true, watch: null,
+  fs: { allow: [searchForWorkspaceRoot(process.cwd()), ortAssets] } } });
 const profileName = 'moti-layout-test-';
 const profile = await mkdtemp(join(tmpdir(), profileName));
 const artifacts = process.env.MOTI_UI_ARTIFACTS && resolve(process.env.MOTI_UI_ARTIFACTS);
@@ -78,73 +80,184 @@ try {
   };
   const page = path => send('Page.navigate', { url: base + path });
   const viewport = (width, height) => send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false });
+  const findControl = (selector, label) =>
+    `Array.from(document.querySelectorAll(${JSON.stringify(selector)})).find(el => !el.disabled && el.textContent.includes(${JSON.stringify(label)}))`;
   const click = async (selector, text = '') => {
-    const find = `Array.from(document.querySelectorAll(${JSON.stringify(selector)})).find(el => !el.disabled && el.textContent.includes(${JSON.stringify(text)}))`;
+    const find = findControl(selector, text);
     await eventually(() => read(`!!(${find})`), Boolean, `${selector} ${text}`);
     await read(`(${find}).click()`);
   };
+  const clickTopEdge = async (selector, label) => {
+    const control = findControl(selector, label);
+    const point = await eventually(() => read(`(() => {
+      const button = ${control};
+      if (!button) return null;
+      button.scrollIntoView({ block: 'center' });
+      const { left, top, width } = button.getBoundingClientRect();
+      const x = left + width / 2, y = top + 1;
+      return button.contains(document.elementFromPoint(x, y)) ? { x, y } : null;
+    })()`), Boolean, `${label} has a clickable top edge`);
+    await send('Input.dispatchMouseEvent', { type: 'mouseMoved', ...point });
+    await send('Input.dispatchMouseEvent', { type: 'mousePressed', button: 'left', buttons: 1, clickCount: 1, ...point });
+    await delay(200);
+    const stillHit = await read(`(${control})?.contains(document.elementFromPoint(${point.x}, ${point.y}))`);
+    await send('Input.dispatchMouseEvent', { type: 'mouseReleased', button: 'left', buttons: 0, clickCount: 1, ...point });
+    assert.equal(stillHit, true, `${label} keeps its top edge under the pointer while pressed`);
+  };
   const text = (selector, value) => eventually(() => read(`document.querySelector(${JSON.stringify(selector)})?.textContent`), received => received?.includes(value), value);
+  const key = async (name, code) => {
+    const typed = name === 'Enter' ? '\r' : name === 'Space' ? ' ' : undefined;
+    for (const type of ['keyDown', 'keyUp']) await send('Input.dispatchKeyEvent', { type,
+      key: name === 'Space' ? ' ' : name, code: name, windowsVirtualKeyCode: code, nativeVirtualKeyCode: code,
+      ...(type === 'keyDown' && typed ? { text: typed, unmodifiedText: typed } : {}) });
+  };
+  const focusedLabel = () => read(`(() => {
+    const element = document.activeElement;
+    return element === document.body ? 'BODY' : element?.getAttribute('aria-label') ?? element?.textContent?.trim();
+  })()`);
+  const activate = async label => {
+    const selector = `button[aria-label="${label}"]`;
+    await read(`document.querySelector(${JSON.stringify(selector)})?.focus()`);
+    assert.equal(await focusedLabel(), label);
+    await key('Enter', 13);
+  };
   const screen = async (name, clip) => {
     if (!artifacts) return;
     const { data } = await send('Page.captureScreenshot', { format: 'png', ...(clip ? { clip: { ...clip, scale: 1 } } : {}) });
     await writeFile(join(artifacts, `${name}.png`), Buffer.from(data, 'base64'));
   };
+  const expectMinuteGap = async label => {
+    const selector = `[role="img"][aria-label^="${label}"]`;
+    const plot = await eventually(() => read(`(() => {
+      const chart = document.querySelector(${JSON.stringify(selector)});
+      const curve = chart?.querySelector('.recharts-line-curve')?.getAttribute('d');
+      const points = Array.from(chart?.querySelectorAll('.recharts-line-dot') ?? [],
+        dot => [Number(dot.getAttribute('cx')), Number(dot.getAttribute('cy'))]);
+      return { curve, points };
+    })()`), ({ curve, points }) => curve && points.length === 4, `${label} has four saved points`);
+    assert.equal((plot.curve.match(/M/g) ?? []).length, 2, `${label} breaks the line across an unmeasured minute`);
+    const [first, second, third, fourth] = plot.points;
+    assert.ok(Math.abs(third[0] - second[0] - 2 * (second[0] - first[0])) < 1, `${label} preserves elapsed time`);
+    if (label.includes('깜빡임')) assert.ok(third[1] > Math.max(first[1], second[1], fourth[1]), 'a saved zero is drawn at the bottom');
+  };
   await send('Page.addScriptToEvaluateOnNewDocument', { source: `
     window.captionCalls = [];
+    window.fixture = { requests: [], failures: [], reviews: {}, generation: 0, deleteCount: 0 };
     window.motiWindow = { setTheme: async (...input) => { window.captionCalls.push(input); } };
-    Object.defineProperty(navigator.mediaDevices, 'getUserMedia', { value: () => new Promise(() => {}) });
+    Object.defineProperty(navigator.mediaDevices, 'getUserMedia', { configurable: true, value: () => new Promise(() => {}) });
     window.motiKeyboard = { start: () => new Promise(() => {}), stop: async () => {}, onHalt: () => () => {}, settings: async () => ({ apps: [] }) };
     const normalFetch = window.fetch;
     const date = new Date().toLocaleDateString('sv-SE');
-    localStorage.setItem('moti.session', JSON.stringify({ token: 'local-fixture', user: { id: '7', nickname: 'Moti', username: 'moti' } }));
+    const login = { token: 'local-fixture', user: { id: '7', nickname: 'Moti', username: 'moti' } };
+    if (location.hash === '#/login') localStorage.removeItem('moti.session');
+    else localStorage.setItem('moti.session', JSON.stringify(login));
     const posture = (mode, hour, score) => ({ date, hour: String(hour), mode, scorePolicyVersion: mode + '-fixture', habitPolicyVersion: 'fixture',
       runMs: 60_000, validMs: 60_000, scoreTimeSum: score * 60_000, deviationMs: 0, deviationEpisodeCount: 0, sessionCount: 1, recordIds: ['s1:' + mode], longestContinuousMs: 0 });
     const start = new Date(date + 'T09:15:00').getTime(), record = { ...posture('turtle', 9, 82), id: 's1:turtle', owner: '7',
-      startedAt: start, updatedAt: start + 300_000, offsetMinutes: new Date(start).getTimezoneOffset(), status: 'finished' };
+      startedAt: start, updatedAt: start + 300_000, runMs: 300_000, offsetMinutes: new Date(start).getTimezoneOffset(), status: 'finished' };
     const eyeRow = { date, hour: '9', policyVersion: 'eye-local', sessionCount: 1, runMs: 60_000, validMs: 60_000, blinks: 16, breaks: 0, nearReminders: 0, openReminders: 0 };
-    const eyeRecord = { ...eyeRow, id: 'eye-local', owner: '7', mode: 'eye', startedAt: start - 300_000, updatedAt: start, offsetMinutes: record.offsetMinutes, status: 'finished' };
+    const eyeRecord = { ...eyeRow, id: 'eye-local', owner: '7', mode: 'eye', startedAt: start - 300_000,
+      updatedAt: start, runMs: 300_000, offsetMinutes: record.offsetMinutes, status: 'running' };
+    const observed = [0, 1, 3, 4];
     const keyRecord = { id: 'key-local', owner: '7', startedAt: start + 360_000, updatedAt: start + 480_000, offsetMinutes: record.offsetMinutes, status: 'finished',
       policyVersion: 'ansi-qwerty-touch:2.0.0', recognitionVersion: 'hands-camera-manual-v3', nearbyCredit: 70, total: 33 };
     const keyboard = { record: keyRecord, counts: [{ date, code: 'KeyF', context: 'plain', finger: 'left:index', verdict: 'preferred', reason: 'preferred-finger', count: 33 }] };
     window.fetch = (input, options) => {
-      const path = new URL(typeof input === 'string' ? input : input.url, location.href).pathname;
+      const { pathname: path, search } = new URL(typeof input === 'string' ? input : input.url, location.href);
       if (!path.startsWith('/api/')) return normalFetch(input, options);
-      const routes = { '/api/auth/me': { email: 'moti@example.test' }, '/api/records/generation': { generation: 0 },
-        '/api/records/history': { records: [record, eyeRecord], hasMore: false }, '/api/records/keyboard': [keyboard],
+      const method = options?.method ?? 'GET';
+      const call = method + ' ' + path;
+      window.fixture.requests.push(call);
+      if (window.fixture.failures.includes(call)) return Promise.resolve(Response.json({ message: '이 시험의 요청이 실패했습니다.' }, { status: 503 }));
+      if (method === 'DELETE' && path === '/api/records') {
+        window.fixture.deleteCount++;
+        return Promise.resolve(Response.json({ generation: ++window.fixture.generation }));
+      }
+      if (path === '/api/ai/review') {
+        const days = JSON.parse(options.body).days;
+        return new Promise(resolve => { window.fixture.reviews[days] = resolve; });
+      }
+      if (path === '/api/hospitals') {
+        const data = JSON.parse(options.body);
+        const label = data.query ?? '현재 위치';
+        if (label === '실패 주소') return Promise.resolve(Response.json({ message: '검색에 실패했어요' }, { status: 503 }));
+        return Promise.resolve(Response.json({ center: { label, lat: 37.57, lng: 126.98 }, hospitals: data.department === '안과' ? [] :
+          [{ id: '19', name: label + ' 병원', category: '의원', lat: 37.57, lng: 126.98, phone: '', address: label, distance: 80, url: '' }] }));
+      }
+      const routes = { '/api/auth/login': login, '/api/auth/me': { email: 'moti@example.test' }, '/api/records/generation': { generation: window.fixture.generation },
+        '/api/records/history': { records: window.fixture.deleteCount ? [] : [record, eyeRecord], hasMore: false },
+        '/api/records/keyboard': window.fixture.deleteCount ? [] : [keyboard],
         '/api/records/keyboard/key-local': keyboard, '/api/records/posture-statistics': [posture('turtle', 9, 82), posture('balance', 9, 91), posture('turtle', 16, 77)],
-        '/api/records/eye-statistics': [eyeRow], '/api/records/posture/s1%3Aturtle': { record, buckets: [0, 1, 2, 3].map(index => ({ ...record, minute: start + 60_000 * index, scoreTimeSum: (78 + 4 * index) * 60_000 })) },
-        '/api/records/eye/eye-local': { record: eyeRecord, buckets: [] } };
+        '/api/records/eye-statistics': [eyeRow], '/api/records/posture/s1%3Aturtle':
+          { record, buckets: observed.map(index => ({ ...posture('turtle', 9, 78 + 4 * index), minute: start + 60_000 * index })) },
+        '/api/records/eye/eye-local':
+          { record: eyeRecord, buckets: observed.map(index => ({ ...eyeRow, minute: eyeRecord.startedAt + 60_000 * index, blinks: index === 3 ? 0 : 12 + 3 * index })) } };
+      if (call === 'GET /api/records/history' && window.fixture.deferHistory) {
+        return new Promise(resolve => { window.fixture.finishHistory = status => resolve(Response.json(routes[path], { status })); });
+      }
+      if (call === 'GET /api/records/history' && window.fixture.historyOffsets) {
+        const offset = Number(new URLSearchParams(search).get('offset'));
+        window.fixture.historyOffsets.push(offset);
+        const page = { records: [record, eyeRecord].slice(offset, offset + 1), hasMore: offset === 0 };
+        if (offset === 1) {
+          return new Promise(resolve => { window.fixture.finishHistoryPage = status => resolve(Response.json(page, { status })); });
+        }
+        return Promise.resolve(Response.json(page));
+      }
       return Promise.resolve(Response.json(routes[path] ?? []));
     };
   ` });
 
   await viewport(1100, 800);
-  await page('/#/dashboard');
+  await page('/#/login');
+  await text('h1', 'Moti');
+  for (const [field, value] of [['username', 'moti'], ['current-password', 'fixture-password']]) {
+    await read(`document.querySelector('input[autocomplete="${field}"]').focus()`);
+    await send('Input.insertText', { text: value });
+  }
+  await clickTopEdge('form button[type="submit"]', '시작하기');
   await text('h1', '학습');
-  const modeButton = (mode, action) => click(`button[aria-label="${mode} ${action}"]`);
-  const bounds = () => read(`Array.from(document.querySelectorAll('section[aria-label$="모니터링"]')).map(card => {
+  assert.equal(await read(`window.fixture.requests.filter(call => call === 'POST /api/auth/login').length`), 1);
+  const picker = '[role="group"][aria-label="표시할 측정"]';
+  const modeChoice = mode => `${picker} button[aria-controls="dashboard-${mode === '상체' ? 'upper_body' : 'keyboard'}"]`;
+  const selectMode = mode => click(modeChoice(mode));
+  const modeButton = async (mode, action) => {
+    const button = `button[aria-label="${mode} ${action}"]`;
+    const visible = selector => read(`!!document.querySelector(${JSON.stringify(selector)})?.getClientRects().length`);
+    if (await visible(picker) && !(await visible(button))) await selectMode(mode);
+    await eventually(() => visible(button), Boolean, `${mode} ${action} is visible`);
+    await click(button);
+  };
+  const bounds = () => read(`Array.from(document.querySelectorAll('section[aria-label$="모니터링"]')).filter(card => card.getClientRects().length).map(card => {
     const box = node => { const { left, top, width, height } = node.getBoundingClientRect(); return { left, top, width, height }; };
     return [box(card), ...Array.from(card.children, box)];
   })`);
   async function symmetry(width, height) {
     await viewport(width, height);
-    const [upper, keyboard] = await eventually(bounds, lanes => lanes?.length === 2 && lanes.every(lane => lane.length === 5), 'two cards');
+    const count = width < 768 ? 1 : 2;
+    const [upper, keyboard] = await eventually(bounds, lanes => lanes?.length === count && lanes.every(lane => lane.length === 5), `${count} measurement cards at ${width}×${height}`);
+    const main = await read(`(() => { const page = document.querySelector('main'); return [page.scrollHeight, page.clientHeight]; })()`);
+    assert.ok(main[0] <= main[1] + 1, `Dashboard scrolls at ${width}×${height}: ${main[0]} > ${main[1]}`);
     const near = (a, b) => Math.abs(a - b) <= 1;
-    assert.ok(near(upper[0].width, keyboard[0].width));
-    if (width >= 768) {
+    if (keyboard) {
+      assert.ok(near(upper[0].width, keyboard[0].width));
       assert.ok(upper.every((row, index) => near(row.top, keyboard[index].top) && near(row.height, keyboard[index].height)),
         `Asymmetric rows at ${width}×${height}: ${JSON.stringify([upper, keyboard])}`);
       assert.ok(keyboard[0].left > upper[0].left);
-      const main = await read(`(() => { const page = document.querySelector('main'); return [page.scrollHeight, page.clientHeight]; })()`);
-      assert.ok(main[0] <= main[1], `Dashboard scrolls at ${width}×${height}: ${main[0]} > ${main[1]}`);
       assert.ok(upper[3].height >= 112 && upper[4].height >= 136,
         `Camera and chart heights at ${width}×${height}: ${upper[3].height}, ${upper[4].height}`);
     } else {
-      assert.ok(near(upper[0].left, keyboard[0].left));
-      assert.ok(keyboard[0].top >= upper[0].top + upper[0].height);
+      assert.ok(upper[3].height >= 88 && upper[4].height >= 96,
+        `Compact camera and chart heights at ${width}×${height}: ${upper[3].height}, ${upper[4].height}`);
+      const compact = await read(`(() => {
+        const pressed = document.querySelector(${JSON.stringify(`${picker} button[aria-pressed="true"]`)});
+        return { card: !!document.getElementById(pressed?.getAttribute('aria-controls'))?.getClientRects().length,
+          menu: document.querySelector('nav[aria-label="주 메뉴"]').getBoundingClientRect().top };
+      })()`);
+      assert.ok(compact.card && upper[0].top + upper[0].height <= compact.menu, `The selected card fits above navigation at ${width}×${height}`);
     }
     assert.equal(await read('document.documentElement.scrollWidth <= innerWidth'), true);
-    const actionsFit = await read(`Array.from(document.querySelectorAll('section[aria-label$="모니터링"] header')).every(header => {
+    const actionsFit = await read(`Array.from(document.querySelectorAll('section[aria-label$="모니터링"] header')).filter(header => header.getClientRects().length).every(header => {
       const { left, right } = header.getBoundingClientRect();
       const buttons = Array.from(header.querySelectorAll('button'), button => button.getBoundingClientRect());
       return buttons.every(button => button.left >= left && button.right <= right && Math.abs(button.top - buttons[0].top) <= 1);
@@ -152,36 +265,112 @@ try {
     assert.equal(actionsFit, true, `Measurement buttons fit on one line at ${width}×${height}`);
   }
   await symmetry(800, 600);
+  await symmetry(320, 568);
   await modeButton('상체', '시작');
   await text('section[aria-label="상체 모니터링"] [role="status"]', '모델 준비 중');
-  for (const [width, height] of [[800, 600], [784, 592], [768, 600], [950, 600], [1023, 630], [1100, 800], [1440, 600], [390, 700]]) {
+  for (const [width, height] of [[800, 600], [784, 592], [768, 600], [950, 600], [1023, 630], [1100, 800], [1440, 600], [390, 700], [320, 568], [640, 448]]) {
     await symmetry(width, height);
   }
-  await modeButton('상체', '중지');
+  await activate('상체 중지');
   await text('dialog[open]', '상체 측정이 종료되었습니다');
   assert.deepEqual(await read('captionCalls.at(-1)'), ['light', true]);
-  await click('dialog[open] button', '닫기');
+  assert.equal(await focusedLabel(), '닫기');
+  await key('Tab', 9);
+  assert.equal(await focusedLabel(), '통계로 이동하기');
+  await key('Tab', 9);
+  assert.equal(await focusedLabel(), '닫기');
+  await key('Escape', 27);
   assert.deepEqual(await read('captionCalls.at(-1)'), ['light', false]);
+  assert.equal(await focusedLabel(), '상체 시작', 'keyboard focus returns to the stopped card');
+  await modeButton('상체', '시작');
+  await activate('상체 중지');
+  await text('dialog[open]', '상체 측정이 종료되었습니다');
+  await clickTopEdge('dialog[open] button', '통계로 이동하기');
+  await text('h1', '통계');
+  await click('nav a', '학습');
   await viewport(800, 600);
   await modeButton('키보드', '시작');
   await text('section[aria-label="키보드 모니터링"] [role="status"]', '분석기 준비 중');
   for (const width of [800, 950, 1024, 1100, 1440]) await symmetry(width, 600);
   await modeButton('상체', '시작'); await symmetry(800, 600);
+  await symmetry(640, 448);
+  await read(`document.querySelector(${JSON.stringify(modeChoice('키보드'))}).focus()`);
+  await key('Enter', 13);
+  assert.equal(await read(`document.activeElement.getAttribute('aria-pressed')`), 'true');
+  await text(modeChoice('상체'), '모델 준비 중');
+  await modeButton('키보드', '일시정지');
+  await selectMode('상체');
+  await text(modeChoice('키보드'), '일시정지');
+  await symmetry(320, 568);
+  await modeButton('키보드', '재개');
+  await text('section[aria-label="키보드 모니터링"] [role="status"]', '분석기 준비 중');
+  await symmetry(320, 568);
   await modeButton('상체', '일시정지'); await symmetry(800, 600);
-  await modeButton('상체', '중지');
+  await activate('상체 중지');
   await text('dialog[open]', '키보드 측정은 계속 진행 중입니다.');
-  await click('dialog[open] button', '통계로 이동하기');
+  await key('Tab', 9);
+  assert.equal(await focusedLabel(), '통계로 이동하기');
+  await key('Enter', 13);
   await text('[role="group"][aria-label="기간"] [aria-pressed="true"]', '1일');
   await text('[role="tab"][aria-selected="true"]', '상체');
+  assert.equal(await read(`document.activeElement === document.querySelector('[role="tab"][aria-selected="true"]')`), true);
   await click('nav a', '학습');
   await text('h1', '학습');
   assert.equal(await read(`!!document.querySelector('button[aria-label="키보드 중지"]')`), true);
-  console.log('Dashboard layout holds for active, paused and idle combinations across both sides of the breakpoint.');
+  await modeButton('상체', '시작');
+  await viewport(320, 568);
+  await read(`location.hash = '/dashboard?mode=upper_body'`);
+  await text(modeChoice('키보드'), '분석기 준비 중');
+  await selectMode('상체');
+  await read(`location.hash = '/dashboard?mode=keyboard'`);
+  await eventually(() => read(`document.querySelector(${JSON.stringify(modeChoice('키보드'))}).getAttribute('aria-pressed')`), value => value === 'true', 'the measurement link selects its compact card');
+  await read(`location.hash = '/dashboard?mode=upper_body'`);
+  await viewport(1100, 800);
+  await activate('키보드 중지');
+  await text('dialog[open]', '상체 측정은 계속 진행 중입니다.');
+  await viewport(320, 568);
+  await key('Enter', 13);
+  assert.equal(await focusedLabel(), '키보드 시작', 'the closed dialog returns focus after a resize');
+  console.log('The dashboard fits without scrolling in wide and compact windows, and switching cards preserves each measurement.');
 
   await viewport(1100, 800);
   await page('/tests/monitoring-layout.html');
   await modeButton('상체', '시작'); await modeButton('키보드', '시작');
   await eventually(() => read('document.querySelectorAll(".recharts-line-curve").length'), n => n === 3, 'three live plot lines');
+  for (const [width, height] of [[320, 568], [390, 844]]) {
+    await symmetry(width, height);
+    const card = 'section[aria-label="상체 모니터링"]';
+    await text(card, '100');
+    await text(card, '추정 CVA');
+    await text(card, '15.2');
+    await text(card + ' [role="status"]', '관찰 중');
+    await eventually(() => read(`(() => {
+      const card = document.querySelector('${card}');
+      const bounds = card.getBoundingClientRect();
+      const status = card.querySelector('[role="status"]');
+      const meters = [...card.querySelectorAll('svg[viewBox="0 0 120 120"], svg[viewBox="0 0 132 74"]')];
+      const meterFits = meters.map(meter => {
+        const box = meter.getBoundingClientRect();
+        const sibling = meter.parentElement.querySelector('p');
+        return box.left >= bounds.left && box.right <= bounds.right && (!sibling || sibling.scrollWidth <= sibling.clientWidth + 1);
+      });
+      return { width: innerWidth, card: card.scrollWidth - card.clientWidth, status: status.scrollWidth - status.clientWidth, meters: meterFits };
+    })()`), layout => layout.width === width && layout.card <= 1 && layout.status <= 1 && layout.meters.length === 3 && layout.meters.every(Boolean),
+    `score dials fit ${width}×${height}`);
+  }
+  await viewport(320, 568);
+  await screen('review-dashboard-320');
+  await selectMode('키보드');
+  await symmetry(320, 568);
+  await eventually(() => read('document.querySelectorAll("#dashboard-keyboard .recharts-line-curve").length'), n => n === 1, 'compact keyboard plot');
+  await screen('review-dashboard-keyboard-320');
+  await selectMode('상체');
+  await symmetry(640, 448);
+  await screen('review-dashboard-640');
+  await read(`document.documentElement.classList.add('dark-theme')`);
+  await symmetry(320, 568);
+  await screen('review-dashboard-320-dark');
+  await read(`document.documentElement.classList.remove('dark-theme')`);
   await symmetry(800, 600);
   await screen('07-compact-dashboard');
   await viewport(1100, 800);
@@ -196,6 +385,33 @@ try {
   const completion = await text('dialog[open]', '키보드 측정은 계속 진행 중입니다.');
   for (const value of ['4분 55초', '78', '91', '14.7']) assert.ok(completion.includes(value));
   await screen('02-completion-summary');
+
+  for (const [phase, status, message] of [
+    ['calibrating', '기준 자세 수집', '기준 자세를 기록하고 있어요'],
+    ['error', '분석 오류', '카메라·분석 연결을 확인한 뒤'],
+  ]) {
+    await page(`/tests/monitoring-layout.html?posture=${phase}`);
+    await eventually(() => read(`location.search === '?posture=${phase}' && !!document.querySelector('button[aria-label="상체 시작"]')`),
+      Boolean, `posture ${phase} fixture is ready`);
+    await modeButton('상체', '시작'); await modeButton('키보드', '시작');
+    const statusSelector = 'section[aria-label="상체 모니터링"] header [role="status"]';
+    await text(statusSelector, status);
+    const guide = '[aria-label="상체 측정 안내"]';
+    await text(guide, message);
+    if (phase === 'calibrating') await text(guide, '깜빡임 보정');
+    for (const [width, height] of [[320, 568], [390, 844], [640, 448], [800, 600], [1100, 800]]) {
+      await symmetry(width, height);
+      assert.ok(await read(`(() => {
+        const label = document.querySelector(${JSON.stringify(statusSelector)});
+        return label.scrollWidth <= label.clientWidth + 1;
+      })()`), `posture ${phase} label fits at ${width}×${height}`);
+      const guideOffset = await read(`(() => {
+        const band = document.querySelector(${JSON.stringify(guide)});
+        return band.getBoundingClientRect().top - band.parentElement.getBoundingClientRect().top;
+      })()`);
+      assert.ok(guideOffset >= -1, `The ${phase} guidance is fully inside the preview at ${width}×${height}: ${guideOffset}px`);
+    }
+  }
   await send('Page.addScriptToEvaluateOnNewDocument', { source: `(() => {
     const upper = { run: 1, running: true, paused: false, seconds: 295, status: '관찰 중', detail: '목 81점 · 좌우 균형 93점', error: false,
       metrics: [{ label: '목', value: '81', low: false }, { label: '균형', value: '93', low: false }], note: '', blinkRate: 15.2 };
@@ -237,12 +453,13 @@ try {
   assert.deepEqual(clipped, []);
   await screen('05-overlay-both');
   await modeButton('상체', '일시정지'); await modeButton('상체', '재개');
-  await modeButton('상체', '중지'); await viewport(414, 136);
+  await activate('상체 중지'); await viewport(414, 136);
   await text('dialog[open]', '키보드 측정은 계속 진행 중입니다.');
   assert.equal(await read(`(() => { const d = document.querySelector('dialog'); return d.scrollHeight <= d.clientHeight; })()`), true);
-  await click('dialog[open] button', '닫기');
+  await key('Escape', 27);
+  assert.equal(await read(`document.activeElement?.classList.contains('overlay-back')`), true);
   assert.deepEqual(await rows(), ['키보드 오버레이']);
-  await modeButton('키보드', '중지'); await click('dialog[open] button', '통계로 이동하기');
+  await modeButton('키보드', '중지'); await clickTopEdge('dialog[open] button', '통계로 이동하기');
   assert.equal(await read('backMode'), 'keyboard');
   await click('dialog[open] button', '닫기');
   await click('.overlay-back', '돌아가기'); assert.equal(await read('backMode'), 'previous');
@@ -275,6 +492,7 @@ try {
   await text('h1', '학습이력');
   await click('section[aria-label$="기록"] ol button', '상체');
   await text('section[aria-label="기록 상세"]', '분별 점수');
+  await expectMinuteGap('분별 점수');
   const history = await read(`(() => {
     const list = document.querySelector('section[aria-label$="기록"]:has(ol)');
     return [list.innerText, document.querySelector('section[aria-label="기록 상세"]').innerText,
@@ -286,6 +504,7 @@ try {
   assert.doesNotMatch(history[4], /7일 통계/);
   await click('section[aria-label$="기록"] ol button', '안구');
   await text('section[aria-label="기록 상세"]', '분별 깜빡임 빈도');
+  await expectMinuteGap('분별 깜빡임 빈도');
   await click('nav a', '설정');
   await text('h1', '설정');
   const alertSettings = await text('section[aria-label="알림"]', '알림 켜기');
@@ -293,7 +512,222 @@ try {
   assert.equal(await read(`!!document.querySelector('section[aria-label="상체 측정 기준"]')`), false);
   await click('section[aria-label="알림"] [role="switch"]');
   assert.equal(await read(`localStorage.getItem('postureAI.notifications')`), 'off');
-  console.log('Verified daily and longer statistics, separate eye records, simplified history and the notification switch.');
+
+  const noHorizontal = async (width, height) => {
+    await viewport(width, height);
+    await eventually(() => read(`(() => { const main = document.querySelector('main');
+      return { content: main.scrollWidth, viewport: main.clientWidth, doc: document.documentElement.scrollWidth, available: innerWidth }; })()`),
+    size => size.content <= size.viewport + 1 && size.doc <= size.available, `horizontal fit at ${width}×${height}`);
+  };
+  await noHorizontal(320, 568);
+  assert.deepEqual(await read(`[...document.querySelectorAll('nav > a')].map(el => el.innerText)`),
+    ['학습', '통계', '학습이력', 'AI 총평', '설정']);
+  await read(`document.querySelector('nav summary').focus()`);
+  assert.equal(await read('document.activeElement.tagName'), 'SUMMARY');
+  await key('Space', 32);
+  await text('nav details[open]', '로그아웃');
+  await read(`document.querySelector('nav details').open = false`);
+  await click('nav a', '통계');
+  for (const days of [7, 30]) {
+    await click('[aria-label="기간"] button', `${days}일`);
+    await click('[role="tab"]', '상체');
+    await read(`document.getElementById('stats-tab-upper').focus()`);
+    for (const [press, code, label] of [['ArrowRight', 39, '키보드'], ['End', 35, '안구'], ['Home', 36, '상체']]) {
+      await key(press, code);
+      await text('[role="tab"][aria-selected="true"]', label);
+      assert.ok(await read(`(() => {
+        const tab = document.activeElement;
+        const panel = document.getElementById(tab.getAttribute('aria-controls'));
+        return panel && !panel.hidden && panel.getAttribute('aria-labelledby') === tab.id;
+      })()`));
+    }
+  }
+  await noHorizontal(320, 568);
+  await screen('review-statistics-320');
+  const activePanel = await read(`document.querySelector('[role="tab"][aria-selected="true"]').getAttribute('aria-controls')`);
+  const dateSelect = `#${activePanel} select`;
+  const link = `#${activePanel} a[href^="#/history"]`;
+  const calendarDate = '[aria-label="달력"] button[aria-pressed="true"]';
+  const calendarLabel = () => read(`document.querySelector(${JSON.stringify(calendarDate)})?.getAttribute('aria-label')`);
+  async function openHistoryByKeyboard(days, priorDay = false) {
+    await click('[aria-label="기간"] button', `${days}일`);
+    await eventually(() => read(`document.querySelector('${dateSelect}')?.options.length`), count => count === days, 'the date picker has the selected period');
+    await read(`document.querySelector('${dateSelect}').focus()`);
+    await key('End', 35);
+    const date = await read(`Array.from(document.querySelector('${dateSelect}').options).at(${priorDay ? -2 : -1}).value`);
+    if (priorDay) await key('ArrowUp', 38);
+    await eventually(() => read(`document.querySelector('${link}')?.getAttribute('href')`), href => href === `#/history?date=${date}`, 'the link targets the chosen date');
+    await key('Tab', 9);
+    assert.equal(await read(`document.activeElement.matches('${link}')`), true);
+    await key('Enter', 13);
+    await text('h1', '학습이력');
+    assert.equal(await read('location.hash'), `#/history?date=${date}`);
+    assert.equal(await read(`document.activeElement === document.querySelector(${JSON.stringify(calendarDate)})`), true,
+      'the statistics link focuses the selected history date');
+  }
+  await read(`window.fixture.deferHistory = true`);
+  await openHistoryByKeyboard(7, true);
+  assert.match(await calendarLabel(), /기록 불러오는 중/);
+  await eventually(() => read(`typeof window.fixture.finishHistory === 'function'`), Boolean, 'the history request is pending');
+  await read(`window.fixture.deferHistory = false; window.fixture.finishHistory(503)`);
+  await text('[role="alert"]', '상체·안구 기록을 불러오지 못했어요');
+  await eventually(calendarLabel, label => label?.includes('기록을 불러오지 못함'), 'the focused date reports a query failure');
+  const weekView = '[aria-label="달력 보기"] button[aria-pressed="true"]';
+  await read(`document.querySelector(${JSON.stringify(weekView)}).focus()`);
+  await click('[role="alert"] button', '다시 시도');
+  await eventually(calendarLabel, label => label?.includes('기록 없음'), 'the date reports empty after a successful retry');
+  assert.equal(await read(`document.activeElement === document.querySelector(${JSON.stringify(weekView)})`), true,
+    'record loading does not steal focus');
+  await click('nav a', '통계');
+  await openHistoryByKeyboard(30);
+  await click('section[aria-label$="기록"] ol button', '안구');
+  await text('[aria-label="기록 상세"]', '종료 미확인');
+  await click('[aria-label="달력 보기"] button', '월간');
+  await noHorizontal(320, 568);
+  await screen('review-history-320');
+  await click('[aria-label="달력 보기"] button', '주간');
+  await click('nav a', '통계');
+  await read(`window.fixture.historyOffsets = []; window.fixture.requests = []`);
+  await click('nav a', '학습이력');
+  const historyList = 'section[aria-label$="기록"]:has(ol)';
+  await eventually(() => read(`typeof window.fixture.finishHistoryPage === 'function'`), Boolean, 'the second history page is pending');
+  await text('main [role="status"]', '상체·안구 기록을 불러오는 중이에요');
+  await click(historyList + ' button', '상체');
+  await text('[aria-label="기록 상세"]', '상체');
+  await read(`window.fixture.finishHistoryPage(503); delete window.fixture.finishHistoryPage`);
+  await text('[role="alert"]', '상체·안구 기록 일부를 불러오지 못했어요');
+  await text('[aria-label="기록 상세"]', '상체');
+  assert.equal(await read(`document.querySelector('${historyList} button[aria-pressed="true"]').textContent.includes('상체')`), true);
+  await click('[role="alert"] button', '다시 시도');
+  await eventually(() => read(`typeof window.fixture.finishHistoryPage === 'function'`), Boolean, 'the retried second history page is pending');
+  await text('[aria-label="기록 상세"]', '상체');
+  await read(`window.fixture.finishHistoryPage(200)`);
+  await eventually(() => read(`!document.querySelector('main [role="alert"]') && document.querySelector('${historyList}').textContent.includes('안구')`),
+    Boolean, 'the remaining page restores the eye record');
+  assert.deepEqual(await read(`window.fixture.historyOffsets`), [0, 1, 0, 1]);
+  await noHorizontal(320, 568);
+  await screen('review-history-paginated-320');
+  await read(`delete window.fixture.historyOffsets; delete window.fixture.finishHistoryPage`);
+  await click('nav a', '통계');
+
+  await read(`window.fixture.failures = ['GET /api/records/history']; window.fixture.requests = []`);
+  await click('nav a', '학습이력');
+  await text('[role="alert"]', '상체·안구 기록을 불러오지 못했어요');
+  await text('[aria-label="기록 상세"]', '키보드');
+  const keyboardRequests = `window.fixture.requests.filter(path => path === 'GET /api/records/keyboard').length`;
+  const keyboardBeforeRetry = await read(keyboardRequests);
+  await read(`window.fixture.failures = []`);
+  await click('[role="alert"] button', '다시 시도');
+  await text('section[aria-label$="기록"]:has(ol)', '상체');
+  assert.equal(await read(keyboardRequests), keyboardBeforeRetry);
+  await click('nav a', '통계');
+  await read(`window.fixture.failures = ['GET /api/records/keyboard']`);
+  await click('nav a', '학습이력');
+  await text('[role="alert"]', '키보드 기록을 불러오지 못했어요');
+  await text('section[aria-label$="기록"]:has(ol)', '상체');
+  await read(`window.fixture.failures = ['GET /api/auth/me']`);
+  await click('nav a', '설정');
+  await text('section[aria-label="비밀번호 · 이메일"]', '이메일 조회 실패');
+  assert.equal(await read(`[...document.querySelectorAll('section[aria-label="비밀번호 · 이메일"] button')].find(b => b.textContent.includes('재설정')).disabled`), true);
+  await read(`window.fixture.failures = []`);
+  await click('section[aria-label="비밀번호 · 이메일"] button', '이메일 다시 조회');
+  await text('section[aria-label="비밀번호 · 이메일"]', 'moti@example.test');
+  await read(`window.fixture.storeOriginal = Storage.prototype.setItem; Storage.prototype.setItem = function (key, value) {
+    if (key === 'postureAI.notifications') throw new DOMException('fixture quota', 'QuotaExceededError');
+    return window.fixture.storeOriginal.call(this, key, value);
+  }`);
+  await click('section[aria-label="알림"] [role="switch"]');
+  await text('[role="alert"]', '설정을 저장하지 못했어요');
+  assert.equal(await read(`localStorage.getItem('postureAI.notifications')`), 'off');
+  assert.equal(await read(`document.querySelector('section[aria-label="알림"] [role="switch"]').getAttribute('aria-checked')`), 'false');
+  await read(`Storage.prototype.setItem = window.fixture.storeOriginal`);
+  await viewport(1100, 800);
+
+  await click('nav a', 'AI 총평');
+  const generation = () => click('button', '총평 받기');
+  const periodSelect = days => click('[aria-label="기간"] button', days + '일');
+  const pendingReview = days => eventually(() => read(`typeof fixture.reviews[${days}] === 'function'`), Boolean, `review request ${days}`);
+  const resolveReview = (days, label, status = 200) => read(`fixture.reviews[${days}](Response.json({
+    summary: '${label}', strengths: [], improvements: [], model: 'fixture', generatedAt: new Date().toISOString(), message: '${label}'
+  }, { status: ${status} }))`);
+  await generation(); await pendingReview(7);
+  await periodSelect(30); await generation(); await pendingReview(30);
+  await resolveReview(30, '최근 삼십일 응답');
+  await text('main', '최근 삼십일 응답');
+  await resolveReview(7, '늦은 칠일 오류', 503);
+  assert.equal(await read(`document.querySelector('main').textContent.includes('늦은 칠일 오류')`), false);
+  await read('fixture.reviews = {}');
+  await click('button', '다시 받기'); await pendingReview(30);
+  await periodSelect(7); await generation(); await pendingReview(7);
+  await resolveReview(7, '최근 칠일 응답');
+  await text('main', '최근 칠일 응답');
+  await resolveReview(30, '늦은 삼십일 응답');
+  await text('main', '최근 칠일 응답');
+  const typeAddress = value => read(`(() => {
+    const input = document.querySelector('input[aria-label="동네 이름이나 주소"]');
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, '${value}');
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  })()`);
+  const hospitals = 'section[aria-label="주변 병원 찾기"]';
+  await typeAddress('새동네'); await click(`${hospitals} button`, '찾기'); await text(hospitals, '새동네 병원');
+  await typeAddress('실패 주소'); await click(`${hospitals} button`, '찾기'); await text(hospitals, '검색에 실패했어요');
+  assert.equal(await read(`document.querySelector('${hospitals}').textContent.includes('새동네 병원')`), false);
+  await click(hospitals + ' button', '다시 시도'); await text(hospitals, '검색에 실패했어요');
+  await typeAddress('다른동네'); await click(`${hospitals} button`, '찾기'); await text(hospitals, '다른동네 병원');
+  await click(hospitals + ' button', '안과'); await text(hospitals, '안과를 찾지 못했어요');
+
+  await click('nav a', '학습');
+  await modeButton('상체', '시작'); await modeButton('키보드', '시작');
+  await click('nav a', '설정'); await click('button', '통계 삭제');
+  await text('dialog[open]', 'moti 계정');
+  await click('dialog button', '유지하기');
+  assert.equal(await read('window.fixture.deleteCount'), 0);
+  await read(`window.fixture.failures = ['DELETE /api/records']`);
+  await click('button', '통계 삭제'); await click('dialog button', '삭제하기');
+  await text('dialog[open]', '이 시험의 요청이 실패했습니다.');
+  await click('dialog button', '좋아요');
+  await click('nav a', '학습');
+  await eventually(() => read(`document.querySelectorAll('button[aria-label$=" 중지"]').length`), count => count === 2, 'both measurements stay active after failed deletion');
+  await click('nav a', '설정');
+  await read(`window.fixture.failures = []`);
+  await click('button', '통계 삭제'); await click('dialog button', '삭제하기');
+  await text('dialog[open]', '삭제 완료');
+  await click('dialog button', '좋아요');
+  await click('nav a', '학습');
+  await eventually(() => read(`document.querySelectorAll('button[aria-label$=" 시작"]').length`), count => count === 2, 'deletion ends both measurements');
+  assert.equal(await read('window.fixture.deleteCount'), 1);
+  await read(`window.fixture.failures = ['POST /api/records/posture']`);
+  await modeButton('상체', '시작');
+  await click('nav a', '통계');
+  await text('[data-recording-status]', '저장 실패');
+  await read(`window.fixture.failures = []`);
+  await click('[data-recording-status] button', '저장 재시도');
+  await eventually(() => read(`!document.querySelector('[data-recording-status]')`), Boolean, 'save retry clears the banner in statistics');
+  await click('nav a', '학습');
+  await modeButton('상체', '중지');
+  await click('dialog[open] button', '닫기');
+  await read(`Object.defineProperty(navigator.mediaDevices, 'getUserMedia', { configurable: true, value: async () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 640; canvas.height = 480;
+    canvas.getContext('2d').fillRect(0, 0, 640, 480);
+    const stream = canvas.captureStream(3);
+    window.fixture.camera = { canvas, track: stream.getVideoTracks()[0] };
+    return stream;
+  } })`);
+  await modeButton('상체', '시작');
+  await eventually(() => read(`window.fixture.camera?.track.readyState`), value => value === 'live', 'camera running before cross-tab logout');
+  const { targetId } = await send('Target.createTarget', { url: base + '/#/login' });
+  const peerPage = await eventually(async () => (await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()).find(page => page.id === targetId), Boolean, 'second browser tab');
+  const peer = await connect(peerPage.webSocketDebuggerUrl);
+  try {
+    const peerOrigin = await eventually(async () => (await peer.send('Runtime.evaluate', { expression: 'location.origin', returnByValue: true })).result.value,
+      value => value === base, 'same-origin second tab');
+    assert.equal(peerOrigin, base);
+    await peer.send('Runtime.evaluate', { expression: `localStorage.removeItem('moti.session')` });
+    await text('h1', 'Moti');
+    await eventually(() => read(`window.fixture.camera?.track.readyState`), value => value === 'ended', 'the camera stops when another tab logs out');
+  } finally { peer.close(); await send('Target.closeTarget', { targetId }); }
+  console.log('Checked narrow navigation and gauges, history and save retries, stale responses, both-mode deletion and cross-tab camera cleanup.');
 } finally {
   devTools?.close();
   chrome?.kill();

@@ -25,24 +25,32 @@ body {
 
 /* Duolingo style button base */
 .btn-duo {
-  @apply relative rounded-2xl font-bold uppercase tracking-wider transition-all active:translate-y-1 active:border-b-0;
+  @apply relative rounded-2xl font-bold uppercase tracking-wider transition-all;
   border-bottom-width: 4px;
 }
 
+/* Press feedback keeps the pointer target in place. */
+.btn-duo:active:not(:disabled) {
+  filter: brightness(.9);
+}
+
 .btn-primary {
-  @apply bg-primary border-primary-border text-white hover:bg-primary-hover;
+  background: var(--color-button-primary);
+  @apply border-primary-border text-white hover:brightness-95;
 }
 
 .btn-secondary {
-  @apply bg-secondary border-secondary-border text-white hover:opacity-90;
+  background: var(--color-button-secondary);
+  @apply border-secondary-border text-white hover:brightness-95;
 }
 
 .btn-danger {
-  @apply bg-danger border-danger-border text-white hover:opacity-90;
+  background: var(--color-button-danger);
+  @apply border-danger-border text-white hover:brightness-95;
 }
 
 .btn-warning {
-  @apply bg-warning border-warning-border text-white hover:opacity-90;
+  @apply bg-warning border-warning-border text-warning-foreground hover:brightness-95;
 }
 
 /* Card style */

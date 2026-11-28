@@ -27,6 +27,8 @@ import { useActivityNotifications } from '../notifications/useActivityNotificati
 import MonitoringDesktopBridge from '../overlay/MonitoringDesktopBridge';
 import { systemIssue } from '../notifications/issues';
 import { sessionLabel } from './presentation';
+import { cameraEyeId } from './cameraRecordId';
+import { recordingDeletionPending } from '../records/deletion';
 
 const initialEye = (): EyeUpdate => ({ measurement: emptyEyeSnapshot(), phase: 'loading', message: '' });
 // The alert rule also counts 기준에서 벗어남. Capture it when each upper-body run starts.
@@ -45,6 +47,8 @@ export default function MonitoringProvider({ children }: { children: ReactNode }
   const [keys, setKeys] = useState(initialKeyboardSnapshot);
   const [remap, setRemap] = useState(0);
   const [referenceRequest, setReferenceRequest] = useState(0);
+  const [eyeRetryRequest, setEyeRetryRequest] = useState(0);
+  const [cameraRun, setCameraRun] = useState('');
   // Face results of the shared upper-body canvas (EyeMonitor) for the neck model in PostureMonitor.
   const [faces] = useState(createFaceBuffer);
   usePostureNotifications(snapshot, upper.isRunning && !upper.isPaused, upper.run, referenceRequest);
@@ -81,24 +85,32 @@ export default function MonitoringProvider({ children }: { children: ReactNode }
   const onEyeUpdate = useCallback((value: EyeUpdate) => {
     observeEye(value);
     setEye(value);
-    if (value.phase === 'error') { eyeSink.current?.finish(); const state = upperState(); if (state.running) systemIssue('eye', String(state.run), 'eye-analysis'); }
+    // A retry can resume this eye recording while the upper-body session stays open.
+    const state = upperState();
+    if (value.phase === 'error' && state.running) systemIssue('eye', String(state.run), 'eye-analysis');
   }, [upperState, observeEye]);
   const startUpper = () => {
-    if (upper.getState().running) return;
+    if (upper.getState().running || recordingDeletionPending()) return;
     for (const key of ['upper', 'eye', 'tracking']) systemIssue(key, '', null);
     const chosen = readSensitivity(); setSensitivity(chosen);
-    eyeSink.current?.finish(); eyeSink.current = beginEyeRecording(chosen.eye);
+    const run = crypto.randomUUID();
+    setCameraRun(run);
+    eyeSink.current?.finish(); eyeSink.current = beginEyeRecording(chosen.eye, cameraEyeId(run));
     faces.clear();
     setEye(initialEye()); setSnapshot(createMonitorSnapshot()); setUpperTrend([]);
     upper.start();
   };
-  const startKeyboard = () => { if (keyboard.getState().running) return; systemIssue('keyboard', '', null); lastPress.current = null; setKeys(initialKeyboardSnapshot); setKeyboardTrend([]); keyboard.start(); };
+  const startKeyboard = () => { if (keyboard.getState().running || recordingDeletionPending()) return; systemIssue('keyboard', '', null); lastPress.current = null; setKeys(initialKeyboardSnapshot); setKeyboardTrend([]); keyboard.start(); };
   const recalibrate = () => {
     const { running, paused } = upper.getState();
     if (!running || paused) return;
     faces.clear();
     setUpperTrend([]);
     setReferenceRequest(value => value + 1);
+    if (eye.phase === 'error') {
+      systemIssue('eye', '', null);
+      setEyeRetryRequest(value => value + 1);
+    }
   };
   const remapKeyboard = () => {
     const { running, paused } = keyboard.getState();
@@ -161,7 +173,10 @@ export default function MonitoringProvider({ children }: { children: ReactNode }
   };
   return <CameraProvider modeId="upper_body" deviceId={upper.deviceId} cameraLabel={deviceLabel(upper)} paused={upper.isPaused} onOpen={openCamera}>
     {error && <p role="alert" className="text-sm text-danger">{error}</p>}
-    <KeyboardCamera base={base} openCamera={openCamera} portal={portal} configMode={configMode} setConfigMode={setConfigMode} onPosture={onPosture} onKeyboard={onKeyboard} onEyeUpdate={onEyeUpdate} onEyeSample={onEyeSample} remapRequest={remap} referenceRequest={referenceRequest} sensitivity={sensitivity} faces={faces}>{children}</KeyboardCamera>
+    <KeyboardCamera base={base} openCamera={openCamera} portal={portal} configMode={configMode} setConfigMode={setConfigMode}
+      onPosture={onPosture} onKeyboard={onKeyboard} onEyeUpdate={onEyeUpdate} onEyeSample={onEyeSample}
+      remapRequest={remap} referenceRequest={referenceRequest} eyeRetryRequest={eyeRetryRequest} cameraRun={cameraRun}
+      sensitivity={sensitivity} faces={faces}>{children}</KeyboardCamera>
   </CameraProvider>;
 }
 
@@ -169,15 +184,17 @@ type BaseState = { upper: Omit<MonitoringState['upper'], 'camera'>; keyboard: Om
 type RuntimeProps = { base: BaseState; children: ReactNode; openCamera: (mode: string, ratio: number) => void;
   portal: HTMLElement | null; configMode: MonitoringMode; setConfigMode: (mode: MonitoringMode) => void;
   onPosture: (value: MonitorSnapshot) => void; onKeyboard: (value: KeyboardMonitorSnapshot) => void;
-  onEyeUpdate: (value: EyeUpdate) => void; onEyeSample: (at: number, value: EyeSnapshot) => void; remapRequest: number; referenceRequest: number;
-  sensitivity: ReturnType<typeof readSensitivity>; faces: FaceBuffer };
+  onEyeUpdate: (value: EyeUpdate) => void; onEyeSample: (at: number, value: EyeSnapshot) => void;
+  remapRequest: number; referenceRequest: number; eyeRetryRequest: number;
+  sensitivity: ReturnType<typeof readSensitivity>; faces: FaceBuffer; cameraRun: string };
 const deviceLabel = (session: ReturnType<typeof useSessionControls>) => session.devices.find(device => device.deviceId === session.deviceId)?.label || '기본 카메라';
 function KeyboardCamera(props: RuntimeProps) {
   const upperCamera = useCameraSettings();
   const { controls } = props.base.keyboard;
   return <CameraProvider modeId="keyboard" deviceId={controls.deviceId} cameraLabel={deviceLabel(controls)} paused={controls.isPaused} onOpen={props.openCamera}><MonitoringRuntime {...props} upperCamera={upperCamera} /></CameraProvider>;
 }
-function MonitoringRuntime({ base, children, upperCamera, portal, configMode, setConfigMode, onPosture, onKeyboard, onEyeUpdate, onEyeSample, remapRequest, referenceRequest, sensitivity, faces }: RuntimeProps & { upperCamera: CameraContextValue }) {
+function MonitoringRuntime({ base, children, upperCamera, portal, configMode, setConfigMode, onPosture, onKeyboard, onEyeUpdate, onEyeSample,
+  remapRequest, referenceRequest, eyeRetryRequest, sensitivity, faces, cameraRun }: RuntimeProps & { upperCamera: CameraContextValue }) {
   const keyboardCamera = useCameraSettings();
   const upper = base.upper.controls, keyboard = base.keyboard.controls;
   const session = configMode === 'upper_body' ? upper : keyboard;
@@ -186,8 +203,10 @@ function MonitoringRuntime({ base, children, upperCamera, portal, configMode, se
     <MonitoringDesktopBridge />
     <div hidden aria-hidden="true">
       <CameraContext.Provider value={upperCamera}>
-        <PostureMonitor key={upper.run} isRunning={upper.isRunning} paused={upper.isPaused} referenceRequest={referenceRequest} deviceId={upper.deviceId} onUpdate={onPosture} recordCapture={beginPostureRecording} balanceSensitivity={sensitivity.balance} habitRule={sensitivity.habit} faces={faces} />
-        <EyeMonitor key={`eye:${upper.run}`} shared active={upper.isRunning && upperCamera.connected} paused={upper.isPaused} deviceId={upper.deviceId} reference={0} eyeReference={referenceRequest} sensitivity={sensitivity.eye} onUpdate={onEyeUpdate} onSample={onEyeSample} onFace={faces.push} />
+        <PostureMonitor key={upper.run} isRunning={upper.isRunning} paused={upper.isPaused} referenceRequest={referenceRequest} cameraRun={cameraRun} deviceId={upper.deviceId} onUpdate={onPosture} recordCapture={beginPostureRecording} balanceSensitivity={sensitivity.balance} habitRule={sensitivity.habit} faces={faces} />
+        <EyeMonitor key={`eye:${upper.run}`} shared active={upper.isRunning && upperCamera.connected} paused={upper.isPaused} deviceId={upper.deviceId}
+          reference={0} eyeReference={referenceRequest} retryRequest={eyeRetryRequest} sensitivity={sensitivity.eye}
+          onUpdate={onEyeUpdate} onSample={onEyeSample} onFace={faces.push} />
       </CameraContext.Provider>
       <CameraContext.Provider value={keyboardCamera}>
         <KeyboardMonitor key={keyboard.run} isRunning={keyboard.isRunning} paused={keyboard.isPaused} deviceId={keyboard.deviceId} onUpdate={onKeyboard} remapRequest={remapRequest} external />
@@ -200,6 +219,7 @@ function MonitoringRuntime({ base, children, upperCamera, portal, configMode, se
       {session.failed && <p role="alert" className="camera-error">카메라·분석 연결을 확인한 뒤 본창에서 다시 시작해 주세요.</p>}
       <label className="camera-field">모드<select aria-label="모드" value={configMode} onChange={event => setConfigMode(event.target.value as MonitoringMode)}><option value="upper_body">상체 · 목·어깨·안구</option><option value="keyboard">키보드</option></select></label>
       <label className="camera-field">사용할 카메라<select aria-label="사용할 카메라" value={session.deviceId} disabled={session.isRunning} onChange={event => session.setDeviceId(event.target.value)}><option value="">기본 카메라</option>{session.devices.filter(device => device.deviceId).map((device, index) => <option key={device.deviceId} value={device.deviceId}>{device.label || `카메라 ${index + 1}`}</option>)}</select></label>
+      {session.deviceError && <p role="alert" className="camera-error">{session.deviceError}</p>}
       {session.isRunning && <p className="camera-hint">장치를 바꾸려면 해당 모드를 중지해 주세요.</p>}
       <button type="button" className="camera-recapture" disabled={!session.isRunning || session.isPaused}
         onClick={configMode === 'upper_body' ? base.upper.recalibrate : base.keyboard.remap}>

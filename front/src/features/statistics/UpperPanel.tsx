@@ -42,7 +42,7 @@ export default function UpperPanel({ upper, days, periodDays, floor, today, deta
       </section> : <section aria-label="날짜별 점수" className={`${CARD} space-y-3`}>
         <ChartHeader title="날짜별 점수" legend={LINES} />
         {empty ? <EmptyChart /> : (
-          <DailyChart label="날짜별 목·좌우 균형 점수" lines={LINES} today={today} domain={[floor, 100]} ticks={ticks}
+          <DailyChart label="날짜별 목·좌우 균형 점수" lines={LINES} today={today} domain={[floor, 100]} ticks={ticks} unit="점"
             faded={faded} detail={detail} onSelectDate={onSelectDate}
             data={days.map(day => ({ date: day.date, turtle: day.upper.turtle, balance: day.upper.balance }))} />
         )}

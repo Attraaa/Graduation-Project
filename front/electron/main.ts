@@ -2,7 +2,6 @@ import { app, BrowserWindow, ipcMain, dialog, powerMonitor, Notification, shell,
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import net from 'node:net'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { trustedRecordUrl } from './recordHandlers'
@@ -14,6 +13,10 @@ import { createPostureTimelineStore } from './postureTimelineStore'
 import { registerNotificationHandlers } from './notificationHandlers'
 import { OverlayWindow } from './overlayWindow'
 import { createDiagnosticLog, watchDiagnostics } from './diagnostics'
+import { waitForKeyboardReady } from './keyboardReady'
+import { registerDesktopApi } from './desktopApi'
+
+declare const MOTI_DESKTOP_API_BASE: string
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -84,16 +87,6 @@ ipcMain.on('records:close-ready', (event, saved: unknown) => {
   }
 })
 
-const getFreeLocalPort = () => new Promise<number>((resolve, reject) => {
-  const server = net.createServer()
-  server.once('error', reject)
-  server.listen(0, '127.0.0.1', () => {
-    const address = server.address()
-    const port = typeof address === 'object' && address ? address.port : 0
-    server.close(error => error ? reject(error) : resolve(port))
-  })
-})
-
 const stopKeyboardService = () => {
   keyboardGeneration += 1
   const processToStop = keyboardProcess
@@ -101,21 +94,6 @@ const stopKeyboardService = () => {
   keyboardService = null
   keyboardStarting = null
   if (processToStop && !processToStop.killed) processToStop.kill()
-}
-
-const waitForKeyboardService = async (origin: string, child: ChildProcessWithoutNullStreams) => {
-  const deadline = Date.now() + 45_000
-  while (Date.now() < deadline) {
-    if (child.exitCode !== null) throw new Error('키보드 분석 프로세스가 준비 중 종료되었습니다.')
-    try {
-      const response = await fetch(`${origin}/api/status`)
-      if (response.ok) return
-    } catch {
-      // The Python process loads its models before opening the local port.
-    }
-    await new Promise(resolve => setTimeout(resolve, 250))
-  }
-  throw new Error('키보드 분석 프로세스 준비 시간이 초과되었습니다.')
 }
 
 const startKeyboardService = async (external: boolean) => {
@@ -126,17 +104,14 @@ const startKeyboardService = async (external: boolean) => {
     const generation = keyboardGeneration
     const settings = readKeyboardSettings()
     const observeApps = external && settings.apps.length > 0
-    const port = await getFreeLocalPort()
-    if (generation !== keyboardGeneration) throw new Error('키보드 분석 시작이 취소되었습니다.')
     const token = randomBytes(32).toString('base64url')
-    const origin = `http://127.0.0.1:${port}`
     let command: string
     let args: string[]
     let cwd: string
 
     if (app.isPackaged) {
       command = path.join(process.resourcesPath, 'keyboard', 'moti-keyboard.exe')
-      args = ['--host', '127.0.0.1', '--port', String(port), '--embedded']
+      args = ['--host', '127.0.0.1', '--port', '0', '--embedded']
       cwd = path.dirname(command)
       if (!existsSync(command)) {
         throw new Error('설치 파일에 키보드 분석 실행 파일이 포함되지 않았습니다.')
@@ -145,7 +120,7 @@ const startKeyboardService = async (external: boolean) => {
       const projectRoot = path.resolve(__dirname, '../..')
       cwd = path.join(projectRoot, 'keyboard-detect')
       command = path.join(cwd, '.venv', 'Scripts', 'python.exe')
-      args = ['-m', 'keylog.service', '--host', '127.0.0.1', '--port', String(port), '--embedded']
+      args = ['-m', 'keylog.service', '--host', '127.0.0.1', '--port', '0', '--embedded']
       if (!existsSync(command)) {
         throw new Error('키보드 분석 Python 환경이 없습니다. 루트에서 setup.cmd를 먼저 실행해 주세요.')
       }
@@ -161,37 +136,31 @@ const startKeyboardService = async (external: boolean) => {
       throw new Error('키보드 분석 시작이 취소되었습니다.')
     }
     keyboardProcess = child
-    let processError = ''
-    // The analyzer's last messages without its per-request lines, for the diagnostics log when it stops by itself.
-    let recentOutput = ''
-    const spawnedAt = Date.now()
+    const spawnedAt = performance.now()
     diagnostics.write('keyboard-service-start', { packaged: app.isPackaged, approvedApps: observeApps ? settings.apps.length : 0 })
-    child.stdout.resume()
-    child.stderr.on('data', chunk => {
-      processError = `${processError}${String(chunk)}`.slice(-2000)
-      const lines = String(chunk).split(/\r?\n/).filter(line => line.trim() && !/"(GET|POST) \//.test(line))
-      if (lines.length) recentOutput = `${recentOutput}\n${lines.join('\n')}`.slice(-1500)
-    })
+    child.stderr.resume()
+    child.on('error', () => diagnostics.write('keyboard-service-error'))
     child.once('exit', (code, signal) => {
       // stopKeyboardService clears keyboardProcess before it kills the process, so only an exit of its own keeps it set.
       const expected = keyboardProcess !== child
-      diagnostics.write('keyboard-service-exit', { code, signal, expected, seconds: Math.round((Date.now() - spawnedAt) / 1000),
-        ...(expected ? {} : { output: recentOutput.trim() }) })
+      diagnostics.write('keyboard-service-exit', { code, signal, expected, seconds: Math.round((performance.now() - spawnedAt) / 1000) })
       if (keyboardProcess === child) {
         keyboardProcess = null
         keyboardService = null
       }
     })
 
+    let port: number
     try {
-      await waitForKeyboardService(origin, child)
-      if (generation !== keyboardGeneration) throw new Error('키보드 분석 시작이 취소되었습니다.')
+      port = await waitForKeyboardReady(child)
+      if (generation !== keyboardGeneration || keyboardProcess !== child) throw new Error('키보드 분석 시작이 취소되었습니다.')
     } catch (error) {
+      if (keyboardProcess === child) { keyboardProcess = null; keyboardService = null }
       if (!child.killed) child.kill()
-      const message = error instanceof Error ? error.message : String(error)
-      throw new Error(processError.trim() ? `${message}\n${processError.trim()}` : message, { cause: error })
+      throw error
     }
-    keyboardService = { origin, token }
+    keyboardService = { origin: `http://127.0.0.1:${port}`, token }
+    diagnostics.write('keyboard-service-ready', { milliseconds: Math.round(performance.now() - spawnedAt), packaged: app.isPackaged })
     return keyboardService
   })()
   keyboardStarting = starting
@@ -201,10 +170,11 @@ const startKeyboardService = async (external: boolean) => {
   })
 }
 
-const trustedAppWindow = (event: Electron.IpcMainInvokeEvent) => {
+const trustedAppWindow = (event: Electron.IpcMainInvokeEvent | Electron.IpcMainEvent) => {
   if (!win || event.sender !== win.webContents || event.senderFrame !== win.webContents.mainFrame
     || !trustedRecordUrl(event.senderFrame.url, recordsPageUrl)) throw new Error('허용되지 않은 앱 요청입니다.')
 }
+const cancelApiRequests = registerDesktopApi(ipcMain, trustedAppWindow, MOTI_DESKTOP_API_BASE, path.join(app.getPath('userData'), 'desktop-session.bin'))
 const timelines = createPostureTimelineStore(path.join(app.getPath('userData'), 'posture-timelines'))
 ipcMain.handle('records:posture-timeline-write', (event, batch) => { trustedAppWindow(event); return timelines.write(batch) })
 ipcMain.handle('records:posture-timelines-read', (event, owner, from, to) => { trustedAppWindow(event); return timelines.read(owner, from, to) })
@@ -232,7 +202,7 @@ app.on('browser-window-blur', refreshFocus)
 ipcMain.handle('keyboard-service:start', async (event, external: unknown = false) => {
   trustedAppWindow(event)
   if (typeof external !== 'boolean') throw new Error('잘못된 관찰 설정입니다.')
-  try { return await startKeyboardService(external) } catch (error) { stopKeyboardService(); throw error }
+  return startKeyboardService(external)
 })
 ipcMain.handle('keyboard-service:stop', event => { trustedAppWindow(event); stopKeyboardService() })
 ipcMain.handle('keyboard-settings:read', event => { trustedAppWindow(event); return readKeyboardSettings() })
@@ -268,8 +238,28 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
+      sandbox: true,
       backgroundThrottling: false,
     },
+  })
+
+  const owner = win.webContents
+  const fromApp = (contents: Electron.WebContents | null, isMainFrame: boolean, url: string | undefined) =>
+    contents === owner && isMainFrame && trustedRecordUrl(url || owner.getURL(), recordsPageUrl)
+  const fromCameraSettings = (contents: Electron.WebContents | null, isMainFrame: boolean, url: string | undefined) =>
+    contents !== null && cameraWindow?.webContents === contents && isMainFrame
+      && (url || contents.getURL()) === cameraSettingsUrl(recordsPageUrl)
+  owner.session.setPermissionCheckHandler((contents, permission, _origin, details) => {
+    const isApp = fromApp(contents, details.isMainFrame, details.requestingUrl)
+    return permission === 'geolocation' ? isApp : permission === 'media' && details.mediaType !== 'audio'
+      && (isApp || fromCameraSettings(contents, details.isMainFrame, details.requestingUrl))
+  })
+  owner.session.setPermissionRequestHandler((contents, permission, callback, details) => {
+    const isApp = fromApp(contents, details.isMainFrame, details.requestingUrl)
+    const mediaTypes = 'mediaTypes' in details ? details.mediaTypes ?? [] : []
+    callback(permission === 'geolocation' ? isApp : permission === 'media'
+      && (isApp || fromCameraSettings(contents, details.isMainFrame, details.requestingUrl))
+      && mediaTypes.includes('video') && !mediaTypes.includes('audio'))
   })
 
   // Test active push message to Renderer-process.
@@ -296,9 +286,10 @@ function createWindow() {
   win.on('restore', () => { if (overlay?.isActive()) overlay.back() })
   win.webContents.on('did-start-navigation', details => {
     // Hash-router navigation keeps the measurement owner and its Python service alive.
-    if (details.isMainFrame && !details.isSameDocument) { overlay?.invalidate(); stopKeyboardService(); clearNotifications() }
+    if (details.isMainFrame && !details.isSameDocument) { cancelApiRequests(); overlay?.invalidate(); stopKeyboardService(); clearNotifications() }
   })
-  win.webContents.on('render-process-gone', () => { overlay?.invalidate(); stopKeyboardService(); clearNotifications() })
+  win.webContents.on('render-process-gone', () => { cancelApiRequests(); overlay?.invalidate(); stopKeyboardService(); clearNotifications() })
+  win.on('closed', cancelApiRequests)
   win.on('close', event => {
     if (allowClose) return
     overlay?.back()

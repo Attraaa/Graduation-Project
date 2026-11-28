@@ -1,4 +1,6 @@
 import { Pause, Play, Square } from 'lucide-react';
+import { useSyncExternalStore } from 'react';
+import { recordingDeletionPending, subscribeRecordingDeletion } from '../records/deletion';
 import { useMonitoring } from './monitoringContext';
 import { modeName, type MonitoringMode } from './modes';
 
@@ -17,6 +19,7 @@ export default function SessionActions({ modeId, onStop }: { modeId: MonitoringM
   const session = modeId === 'upper_body' ? all.upper : all.keyboard;
   const name = modeName(modeId);
   const { controls } = session;
+  const deleting = useSyncExternalStore(subscribeRecordingDeletion, recordingDeletionPending, recordingDeletionPending);
   const pauseLabel = controls.isPaused ? '재개' : '일시정지';
   return <div role="group" aria-label={`${name} 측정 제어`} className="flex items-center gap-1.5">
     {controls.isRunning ? <>
@@ -28,6 +31,7 @@ export default function SessionActions({ modeId, onStop }: { modeId: MonitoringM
       <button type="button" aria-label={`${name} 중지`} title="중지" onClick={onStop ? () => onStop(modeId) : controls.stop} className={`${ACTIVE} ${QUIET} text-danger-text`}>
         <Square size={12} fill="currentColor" /><span className={LABEL}>중지</span>
       </button>
-    </> : <button type="button" aria-label={`${name} 시작`} onClick={session.start} className={`${BASE} ${GO} px-3`}><Play size={13} fill="currentColor" />시작</button>}
+    </> : <button type="button" data-session-start disabled={deleting} title={deleting ? '기록을 삭제한 뒤 측정을 시작할 수 있어요' : undefined}
+      aria-label={`${name} 시작`} onClick={session.start} className={`${BASE} ${GO} px-3 disabled:opacity-45`}><Play size={13} fill="currentColor" />시작</button>}
   </div>;
 }

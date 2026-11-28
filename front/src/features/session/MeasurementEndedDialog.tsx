@@ -5,11 +5,12 @@ import ModalFrame from '../../components/dialog/ModalFrame';
 import { modeName, type MonitoringMode } from './modes';
 import { measurementDuration, type MeasurementSummary } from './measurementSummary';
 
-export default function MeasurementEndedDialog({ mode, remaining, summary, onClose, onStatistics, className, error }: {
+export default function MeasurementEndedDialog({ mode, remaining, summary, onClose, returnFocus, onStatistics, className, error }: {
   mode: MonitoringMode;
   remaining: { mode: MonitoringMode; paused: boolean } | null;
   summary?: MeasurementSummary;
   onClose: () => void;
+  returnFocus?: () => HTMLElement | null;
   onStatistics: () => void;
   className?: string;
   error?: string;
@@ -17,7 +18,8 @@ export default function MeasurementEndedDialog({ mode, remaining, summary, onClo
   const title = useId(), description = useId();
   const other = remaining && modeName(remaining.mode);
   const accent = mode === 'upper_body' ? 'bg-mode-upper-soft text-mode-upper' : 'bg-mode-keyboard-soft text-mode-keyboard';
-  return <ModalFrame aria-labelledby={title} aria-describedby={remaining ? description : undefined} onDismiss={onClose} className={`measurement-completion ${className ?? ''}`}>
+  return <ModalFrame aria-labelledby={title} aria-describedby={remaining ? description : undefined} onDismiss={onClose}
+    returnFocus={returnFocus} className={`measurement-completion ${className ?? ''}`}>
     <header className="flex items-center gap-3">
       <span aria-hidden="true" className={`measurement-completion-icon grid size-11 shrink-0 place-items-center rounded-2xl ${accent}`}><Check size={22} strokeWidth={3} /></span>
       <h2 id={title} className="text-lg font-black leading-tight">{modeName(mode)} 측정이 종료되었습니다</h2>

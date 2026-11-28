@@ -26,7 +26,10 @@ const eyeBatch = (owner: string) => ({ schemaVersion: 1, generation: 0, sequence
 async function startApp(t: TestContext) {
   let queries = 0;
   const unavailableDatabase = {
-    query: async () => { queries += 1; throw new Error('PRIVATE_DATABASE_DETAILS'); },
+    query: async (sql: string) => {
+      if (sql.startsWith('SELECT session_version FROM users')) return [[{ session_version: 0 }]];
+      queries += 1; throw new Error('PRIVATE_DATABASE_DETAILS');
+    },
     getConnection: async () => { queries += 1; throw new Error('PRIVATE_DATABASE_DETAILS'); },
   } as unknown as Pool;
   const server = createApp(config, unavailableDatabase).listen(0, '127.0.0.1');

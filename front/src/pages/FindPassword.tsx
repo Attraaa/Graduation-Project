@@ -49,21 +49,24 @@ const FindPassword = () => {
 
         {/* The ID is fixed once the code is accepted, because the new password goes to that account. */}
         <form onSubmit={handleRequest} className="space-y-4">
-          <input type="text" placeholder="아이디" autoComplete="username" className={FIELD} readOnly={reset.step === 'reset'}
-            value={userId} onChange={(e) => setUserId(e.target.value)} required />
-          <input type="email" placeholder="이메일" autoComplete="email" className={FIELD} readOnly={reset.step === 'reset'}
-            value={email} onChange={(e) => setEmail(e.target.value)} required />
+          <label className="block space-y-1 text-sm font-semibold text-heading"><span>아이디</span>
+            <input type="text" autoComplete="username" className={FIELD} readOnly={reset.step === 'reset'}
+              value={userId} onChange={(e) => setUserId(e.target.value)} required /></label>
+          <label className="block space-y-1 text-sm font-semibold text-heading"><span>이메일</span>
+            <input type="email" autoComplete="email" className={FIELD} readOnly={reset.step === 'reset'}
+              value={email} onChange={(e) => setEmail(e.target.value)} required /></label>
           <Button type="submit" variant={reset.step === 'request' ? 'warning' : 'outline'} fullWidth disabled={reset.busy !== null}>
             {reset.busy === 'request' ? '보내는 중…' : reset.step === 'request' ? '인증 코드 받기' : '인증 코드 다시 받기'}
           </Button>
         </form>
 
-        {reset.message && <p role="status" className="mt-4 rounded-2xl bg-gray-50 p-4 text-sm font-bold text-gray-600">{reset.message}</p>}
+        {reset.message && <p id="reset-result" role="status" className="mt-4 rounded-2xl bg-gray-50 p-4 text-sm font-bold text-gray-600">{reset.message}</p>}
 
         {reset.step === 'verify' && (
           <form onSubmit={handleVerify} className="mt-4 space-y-4">
-            <input type="text" inputMode="numeric" maxLength={6} placeholder="인증 코드 6자리" autoComplete="one-time-code" className={FIELD}
-              value={reset.code} onChange={(e) => reset.setCode(e.target.value)} required />
+            <label className="block space-y-1 text-sm font-semibold text-heading"><span>인증 코드 6자리</span>
+              <input type="text" inputMode="numeric" maxLength={6} autoComplete="one-time-code" className={FIELD} autoFocus
+                aria-describedby={reset.message ? 'reset-result' : undefined} value={reset.code} onChange={(e) => reset.setCode(e.target.value)} required /></label>
             <Button type="submit" variant="warning" fullWidth disabled={reset.busy !== null}>
               {reset.busy === 'verify' ? '확인 중…' : '인증 코드 확인'}
             </Button>
@@ -72,10 +75,12 @@ const FindPassword = () => {
 
         {reset.step === 'reset' && (
           <form onSubmit={handleReset} className="mt-4 space-y-4">
-            <input type="password" placeholder="새 비밀번호 (6자 이상)" autoComplete="new-password" className={FIELD}
-              value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required />
-            <input type="password" placeholder="새 비밀번호 확인" autoComplete="new-password" className={FIELD}
-              value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required />
+            <label className="block space-y-1 text-sm font-semibold text-heading"><span>새 비밀번호 (6자 이상)</span>
+              <input type="password" autoComplete="new-password" className={FIELD} autoFocus aria-describedby={reset.message ? 'reset-result' : undefined}
+                value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required /></label>
+            <label className="block space-y-1 text-sm font-semibold text-heading"><span>새 비밀번호 확인</span>
+              <input type="password" autoComplete="new-password" className={FIELD} value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)} required /></label>
             <Button type="submit" variant="warning" fullWidth disabled={reset.busy !== null}>
               {reset.busy === 'reset' ? '바꾸는 중…' : '비밀번호 재설정'}
             </Button>

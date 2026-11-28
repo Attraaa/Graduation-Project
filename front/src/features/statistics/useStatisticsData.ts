@@ -37,6 +37,7 @@ export function useStatisticsData(end: string, days: PeriodDays) {
     summary,
     keyboard: keyboard.data ?? [],
     status: { posture: statusOf(posture), eye: statusOf(eye), keyboard: statusOf(keyboard) },
+    retrySource: { posture: posture.retry, eye: eye.retry, keyboard: keyboard.retry },
     retry: () => { posture.retry(); eye.retry(); keyboard.retry(); },
   };
 }

@@ -14,15 +14,10 @@ export interface HospitalResult { center: { lat: number; lng: number; label: str
 /** About 1 km. The device location leaves the device no more precisely than this; the server rounds it again. */
 const roughly = (value: number) => Math.round(value * 100) / 100;
 
-/** Hospitals of one department near a typed place or the device location, nearest first (GET /api/hospitals). */
+/** Put the location in the body so it does not appear in access-log URLs. */
 export function findHospitals(department: Department, where: Where) {
-  const params = new URLSearchParams({ department });
-  if ('query' in where) params.set('query', where.query.trim());
-  else {
-    params.set('lat', String(roughly(where.lat)));
-    params.set('lng', String(roughly(where.lng)));
-  }
-  return apiRequest<HospitalResult>(`/api/hospitals?${params}`);
+  const position = 'query' in where ? { query: where.query.trim() } : { lat: roughly(where.lat), lng: roughly(where.lng) };
+  return apiRequest<HospitalResult>('/api/hospitals', { method: 'POST', body: { department, ...position } });
 }
 
 export const distanceText = (meters: number) => (meters < 1000 ? `${Math.round(meters)}m` : `${(meters / 1000).toFixed(1)}km`);

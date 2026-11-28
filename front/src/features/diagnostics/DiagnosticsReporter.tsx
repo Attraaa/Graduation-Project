@@ -21,10 +21,10 @@ export default function DiagnosticsReporter() {
       bridge.sample({ heapUsedMB: memory ? memory.usedJSHeapSize / 1048576 : null, heapLimitMB: memory ? memory.jsHeapSizeLimit / 1048576 : null,
         route: location.hash, visible: document.visibilityState === 'visible', upper: mode(latest.current.upper), keyboard: mode(latest.current.keyboard) });
     }, 60_000);
-    const onError = (event: ErrorEvent) => bridge.error({ kind: 'error', message: event.message, source: event.filename, line: event.lineno,
-      stack: event.error instanceof Error ? event.error.stack : undefined });
+    const onError = (event: ErrorEvent) => bridge.error({ kind: 'error',
+      message: event.error instanceof Error ? event.error.name : '', line: event.lineno });
     const onRejection = (event: PromiseRejectionEvent) => bridge.error({ kind: 'rejection',
-      message: event.reason instanceof Error ? event.reason.message : String(event.reason), stack: event.reason instanceof Error ? event.reason.stack : undefined });
+      message: event.reason instanceof Error ? event.reason.name : '' });
     window.addEventListener('error', onError);
     window.addEventListener('unhandledrejection', onRejection);
     return () => { window.clearInterval(timer); window.removeEventListener('error', onError); window.removeEventListener('unhandledrejection', onRejection); };

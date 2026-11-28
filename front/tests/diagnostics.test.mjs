@@ -32,11 +32,12 @@ test('process metrics are summed per type in MB, and renderer input keeps only t
   const metric = (type, kb, cpu) => ({ type, memory: { workingSetSize: kb, peakWorkingSetSize: kb * 2, privateBytes: kb }, cpu: { percentCPUUsage: cpu } });
   assert.deepEqual(summarizeMetrics([metric('Tab', 512000, 12.34), metric('Tab', 512000, 1), metric('GPU', 204800, 3)]),
     { Tab: { count: 2, workingSetMB: 1000, peakMB: 2000, privateMB: 1000, cpu: 13.3 }, GPU: { count: 1, workingSetMB: 200, peakMB: 400, privateMB: 200, cpu: 3 } });
-  const sample = sanitizeRendererSample({ heapUsedMB: 123.456, heapLimitMB: 'x', route: '#/dashboard'.padEnd(200, 'x'), visible: true, frames: [1, 2],
+  const sample = sanitizeRendererSample({ heapUsedMB: 123.456, heapLimitMB: 'x', route: '#/dashboard?address=PRIVATE_LOCATION', visible: true, frames: [1, 2],
     upper: { running: true, paused: false, phase: 'observing', seconds: 1452.25, landmarks: [0.1] }, keyboard: null });
-  assert.deepEqual(sample, { heapUsedMB: 123.5, heapLimitMB: null, route: '#/dashboard'.padEnd(60, 'x'), visible: true,
+  assert.deepEqual(sample, { heapUsedMB: 123.5, heapLimitMB: null, route: '/dashboard', visible: true,
     upper: { running: true, paused: false, phase: 'observing', seconds: 1452.3 }, keyboard: { running: false, paused: false, phase: null, seconds: null } });
-  assert.deepEqual(sanitizeRendererError({ kind: 'rejection', message: 'm', line: 3 }), { kind: 'rejection', message: 'm', source: null, line: 3, stack: null });
+  assert.deepEqual(sanitizeRendererError({ kind: 'rejection', message: 'TypeError: PRIVATE_EMAIL', line: 3, source: 'PRIVATE_PATH',
+    stack: 'PRIVATE_BEARER' }), { kind: 'rejection', name: 'TypeError', line: 3 });
   assert.equal(sanitizeRendererError(null).kind, 'error');
 });
 

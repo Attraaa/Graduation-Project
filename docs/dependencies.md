@@ -1,13 +1,13 @@
 # 의존성 관리와 Windows 팀 환경
 
-기준: 2026-09-07. 현재 저장소의 런타임 설정과 잠금을 설명합니다. 네 명 모두 Windows를 사용한다는 결정에 따라 설치 경로를 통일했습니다. 자동 설치 대상은 **Windows x64**이며 ARM64는 Python 패키지와 모델의 별도 검증이 필요합니다.
+2026-11-28 기준으로 현재 저장소의 런타임 설정과 잠금을 설명합니다. 네 명 모두 Windows를 사용한다는 결정에 따라 설치 경로를 통일했습니다. 자동 설치 대상은 **Windows x64**이며 ARM64는 Python 패키지와 모델의 별도 검증이 필요합니다.
 
 ## 1. 표준 런타임과 자동 설치
 
 | 도구 | 팀 표준 | 기준 파일 |
 | --- | --- | --- |
-| Node.js | 24.20.0 | `toolchain.json`, front/server `engines` |
-| npm | 11.19.0 | Node 배포본에 포함; 두 프로젝트의 `packageManager`와 `engines` |
+| Node.js | 24.22.3 | `toolchain.json`, front/server `engines` |
+| npm | 11.19.1 | Node 배포본에 포함; 두 프로젝트의 `packageManager`와 `engines` |
 | CPython | 3.12.14, Windows x64 | `toolchain.json`, `keyboard-detect/.python-version` |
 | uv | 0.12.10 | `toolchain.json` |
 
@@ -42,16 +42,16 @@ front와 server는 각각 `package.json`과 `package-lock.json`을 유지합니�
 | tailwindcss / @tailwindcss/vite | 4.2.4 | 스타일과 빌드 연결 |
 | lucide-react | 1.14.0 | 공통 SVG 아이콘 |
 | recharts | 3.8.1 | 통계 차트 |
-| postcss / autoprefixer | 8.5.28 / 10.5.0 | CSS 처리 |
+| postcss / autoprefixer | 8.5.34 / 10.5.0 | CSS 처리 |
 | @mediapipe/pose | 0.5.1675469404 | 브라우저 자세 랜드마크 추론 |
 | onnxruntime-web | 1.23.2 | 거북목 모델 E19 실행(wasm, 스레드 1개). 연구에서 일치 시험을 통과한 버전 |
 | socket.io-client | 4.8.1 | Electron 키보드 화면과 로컬 Python 분석 서비스 연결 |
-| electron / electron-builder | 41.10.7 / 26.15.3 | 데스크톱 실행·설치 파일 생성 |
-| vite / @vitejs/plugin-react | 8.2.2 / 6.0.1 | 개발·빌드 |
+| electron / electron-builder | 45.5.0 / 26.18.1 | 데스크톱 실행·설치 파일 생성 |
+| vite / @vitejs/plugin-react | 8.4.0 / 6.0.1 | 개발·빌드 |
 | vite-plugin-electron | 0.29.1 | Electron 개발·빌드 연결 |
 | esbuild | 0.28.2 | 빌드 도구 의존성 |
 | typescript | 6.0.3 | 타입 검사 |
-| eslint / typescript-eslint | 10.2.1 / 8.59.1 | 코드 검사 |
+| eslint / typescript-eslint | 10.16.0 / 8.74.0 | 코드 검사 |
 | @types/node | 24.12.2 | Node API 타입 선언 |
 
 사용하지 않던 `vite-plugin-electron-renderer`는 제거했습니다. 현재 렌더러는 브라우저 API를 사용하며 Node API를 직접 가져오지 않습니다. 필요한 데스크톱 기능은 preload를 통한 명시적 IPC 계약으로 추가합니다.
@@ -67,11 +67,10 @@ front와 server는 각각 `package.json`과 `package-lock.json`을 유지합니�
 | bcrypt | 6.0.0 | 비밀번호 해시 |
 | cors / dotenv | 2.8.6 / 16.6.1 | 요청 출처·환경 설정 |
 | jsonwebtoken | 9.0.3 | 인증 토큰 |
-| @anthropic-ai/sdk | 0.133.0 | AI 총평의 Claude 호출. `package.json`에 정확히 고정, 배포 서버에서도 `npm ci` 필요 |
 | nodemailer | 10.1.7 | 아이디 찾기·비밀번호 재설정 메일(SMTP). 10.1.3 이하의 주소 파싱 취약점(GHSA-8c8m-p3m8-cjg8 외 2건)이 고쳐진 버전으로 정확히 고정, 배포 서버에서도 `npm ci` 필요 |
 | tsx / typescript | 4.22.3 / 6.0.3 | 개발 실행·컴파일 |
 | @types/node | 24.13.3 | Node API 타입 선언 |
-| qs | 6.16.0 | 전이 의존성 보안 갱신; `overrides` 지정 |
+| qs / body-parser / proxy-addr | 6.16.2 / 1.20.9 / 2.0.8 | 쿼리·JSON 본문·프록시 주소 처리 |
 
 프론트와 서버의 TypeScript 실행 버전은 6.0.3으로 통일했습니다. `@types/node`의 패치 차이는 타입 선언의 차이이며 실제 Node 실행 버전 차이가 아닙니다. Electron에 내장된 Node도 개발 도구 Node와 별도입니다. 전체 패키지와 무결성 값은 각 `package-lock.json`이 기준입니다.
 
@@ -130,7 +129,7 @@ Python의 `mp.solutions.hands`와 브라우저의 기존 `Pose`는 Legacy API입
 
 ## 5. 검증 범위와 배포 경계
 
-현재 작업 PC에서 전체 setup이 완료되었고 front/server의 npm 감사 결과는 각각 **0건**입니다. 이는 검사 시점의 알려진 취약점 조회 결과이며 이후에도 유지된다는 보장은 아닙니다. 빌드·테스트·Python 모델 로드 결과는 [개발 가이드](development.md)에 기록합니다. 네 명의 PC 모두에서 설치·카메라 검증이 완료된 상태는 아닙니다.
+2026-11-28 잠금 파일 감사에서 서버는 0건, 프론트는 패키징 도구 계열에 중간 등급 6건이 남았습니다. 프론트의 수정 가능한 높음·심각 등급은 해소했습니다. 남은 권고의 npm 자동 수정안은 Electron Builder의 주요 버전을 낮추는 변경이라 설치 경로 검증과 함께 별도로 검토합니다. 빌드·테스트·Python 모델 로드 절차는 [개발 가이드](development.md)에 있습니다.
 
 MySQL 드라이버와 기존 저장소 구현은 남아 있지만 최종 서버 DB 제품·버전·운영 환경은 미정입니다. setup은 MySQL 설치나 스키마 실행을 하지 않습니다. 특히 `server/schema.sql`은 기존 테이블을 삭제하므로 일반 설치 과정으로 실행하면 안 됩니다.
 

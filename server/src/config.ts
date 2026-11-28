@@ -1,5 +1,6 @@
 export interface ServerConfig {
   port: number;
+  trustLoopbackProxy?: boolean;
   database: {
     host: string;
     port: number;
@@ -36,7 +37,7 @@ export function readConfig(env: NodeJS.ProcessEnv): ServerConfig {
   if (!Number.isSafeInteger(expiresIn) || expiresIn <= 0) {
     throw new Error('JWT_EXPIRES_IN must be a positive duration such as 30m, 1h, or 7d.');
   }
-  const reviewGatewayUrl = env.MOTI_REVIEW_GATEWAY_URL?.trim() || null;
+  const reviewGatewayUrl = env.MOTI_AI_REVIEW_ENABLED === 'false' ? null : env.MOTI_REVIEW_GATEWAY_URL?.trim() || null;
   if (reviewGatewayUrl) {
     const url = new URL(reviewGatewayUrl);
     const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
@@ -47,6 +48,7 @@ export function readConfig(env: NodeJS.ProcessEnv): ServerConfig {
   const smtp = { host: env.SMTP_HOST?.trim(), user: env.SMTP_USER?.trim(), password: env.SMTP_PASS?.trim() };
   return {
     port: port('PORT', 4000),
+    trustLoopbackProxy: env.MOTI_TRUST_LOOPBACK_PROXY === 'true',
     database: {
       host: env.DB_HOST ?? 'localhost',
       port: port('DB_PORT', 3306),

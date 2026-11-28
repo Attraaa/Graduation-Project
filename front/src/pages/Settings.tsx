@@ -1,6 +1,8 @@
 import { useState, useSyncExternalStore } from 'react';
 import { Bell, Check, Database, Palette, Trash2, User } from 'lucide-react';
 import { clearStatistics, getCurrentUser, updateCurrentUser } from '../utils/authStore';
+import { isCurrentSession, readSession } from '../utils/apiClient';
+import { readPreference, writePreference } from '../utils/localPreferences';
 import { useDialog } from '../components/dialog/useDialog';
 import KeyboardSettings from '../features/keyboard/KeyboardSettings';
 import AccountSecurity from '../features/settings/AccountSecurity';
@@ -18,10 +20,6 @@ const THEMES: Record<Theme, { name: string; page: string; card: string; line: st
 };
 const SOUNDS = [{ id: 'soft', name: '끄기' }, { id: 'normal', name: '켜기' }];
 const MODE_DOTS = ['bg-mode-upper', 'bg-mode-keyboard'];
-const keep = (key: string, value: string) => {
-  localStorage.setItem(`postureAI.${key}`, value);
-  if (NOTIFICATION_SETTING_KEYS.includes(key)) window.dispatchEvent(new Event(NOTIFICATION_SETTINGS_CHANGED));
-};
 
 /** One mode's alert rule as a sentence: "상체 [70점] 이하 [3초] 유지 시". Stored under `postureAI.<key>`. */
 function AlertRule({ name, score, seconds, onScore, onSeconds }: {
@@ -85,7 +83,8 @@ const Settings = () => {
   const currentUser = getCurrentUser();
   const [notificationsEnabled, setNotificationsEnabled] = useState(() => readNotificationPreferences().enabled);
   const deliveryStatus = useSyncExternalStore(subscribeNotificationDelivery, notificationDeliveryMessage, notificationDeliveryMessage);
-  const [darkMode, setDarkMode] = useState(localStorage.getItem('postureAI.theme') === 'dark');
+  const [darkMode, setDarkMode] = useState(() => readPreference('postureAI.theme') === 'dark');
+  const [settingsError, setSettingsError] = useState('');
   const [nickname, setNickname] = useState(currentUser?.nickname ?? '');
   const [savedNickname, setSavedNickname] = useState(nickname);
   const [alertStrength, setAlertStrength] = useState(() => readNotificationPreferences().silent ? 'soft' : 'normal');
@@ -94,11 +93,19 @@ const Settings = () => {
   const [keyboardThreshold, setKeyboardThreshold] = useState(() => readNotificationPreferences().keyboardThreshold);
   const [keyboardSeconds, setKeyboardSeconds] = useState(() => readNotificationPreferences().keyboardSeconds);
 
-  const handleTheme = (theme: Theme) => {
-    setDarkMode(theme === 'dark');
-    keep('theme', theme);
-    document.documentElement.classList.toggle('dark-theme', theme === 'dark');
+  const keep = (key: string, value: string, commit: () => void) => {
+    if (!writePreference(`postureAI.${key}`, value)) {
+      setSettingsError('설정을 저장하지 못했어요. 이 앱의 저장 공간을 확인한 뒤 다시 시도해 주세요.');
+      return;
+    }
+    setSettingsError('');
+    commit();
+    if (NOTIFICATION_SETTING_KEYS.includes(key)) window.dispatchEvent(new Event(NOTIFICATION_SETTINGS_CHANGED));
   };
+  const handleTheme = (theme: Theme) => keep('theme', theme, () => {
+    setDarkMode(theme === 'dark');
+    document.documentElement.classList.toggle('dark-theme', theme === 'dark');
+  });
 
   const handleAccountSave = async () => {
     await saveAccount(async signal => {
@@ -111,20 +118,20 @@ const Settings = () => {
 
   const handleClearStatistics = async () => {
     if (clearing) return;
-    const confirmed = await confirm({
-      title: '데이터 삭제',
-      message: '현재 계정으로 서버에 저장된 통계와 학습이력을 삭제하시겠습니까?\n삭제한 데이터는 되돌릴 수 없습니다.',
-      tone: 'danger',
-      confirmLabel: '삭제하기',
-      cancelLabel: '유지하기',
-    });
-    if (!confirmed) return;
+    const session = readSession();
+    if (!session) return;
     setClearing(true);
     try {
-      await clearStatistics();
-      await notify({ title: '삭제 완료', message: '현재 계정의 통계와 학습이력을 삭제했습니다.', tone: 'success' });
+      const confirmed = await confirm({
+        title: '데이터 삭제',
+        message: `${session.user.username} 계정의 통계와 학습이력을 삭제할까요? 삭제한 기록은 복구할 수 없어요.\n삭제되면 진행 중인 상체·안구와 키보드 측정이 종료돼요.`,
+        tone: 'danger', confirmLabel: '삭제하기', cancelLabel: '유지하기',
+      });
+      if (!confirmed || !isCurrentSession(session)) return;
+      await clearStatistics(session);
+      if (isCurrentSession(session)) await notify({ title: '삭제 완료', message: '현재 계정의 통계와 학습이력을 삭제했습니다.', tone: 'success' });
     } catch (error) {
-      await notify({ title: '삭제 실패', message: error instanceof Error ? error.message : '기록 삭제에 실패했습니다.', tone: 'warning' });
+      if (isCurrentSession(session)) await notify({ title: '삭제 결과', message: error instanceof Error ? error.message : '기록 삭제에 실패했습니다.', tone: 'warning' });
     } finally { setClearing(false); }
   };
 
@@ -133,6 +140,7 @@ const Settings = () => {
       <header>
         <h1 className="text-2xl font-extrabold text-heading">설정</h1>
       </header>
+      {settingsError && <p role="alert" className="text-sm text-danger-text">{settingsError}</p>}
 
       <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
         <SettingsCard title="계정" icon={<User size={18} />}>
@@ -164,21 +172,21 @@ const Settings = () => {
           <div className="flex items-center justify-between gap-3">
             <p className="text-sm font-semibold text-heading">알림 켜기</p>
             <Switch label="알림 켜기" checked={notificationsEnabled}
-              onChange={on => { setNotificationsEnabled(on); keep('notifications', on ? 'on' : 'off'); }} />
+              onChange={on => keep('notifications', on ? 'on' : 'off', () => setNotificationsEnabled(on))} />
           </div>
           <Field label="알림 기준">
             <div className="space-y-2">
               <AlertRule name="상체" score={scoreThreshold} seconds={postureSeconds}
-                onScore={value => { setScoreThreshold(value); keep('scoreThreshold', String(value)); }}
-                onSeconds={value => { setPostureSeconds(value); keep('alertSeconds', String(value)); }} />
+                onScore={value => keep('scoreThreshold', String(value), () => setScoreThreshold(value))}
+                onSeconds={value => keep('alertSeconds', String(value), () => setPostureSeconds(value))} />
               <AlertRule name="키보드" score={keyboardThreshold} seconds={keyboardSeconds}
-                onScore={value => { setKeyboardThreshold(value); keep('keyboardThreshold', String(value)); }}
-                onSeconds={value => { setKeyboardSeconds(value); keep('keyboardAlertSeconds', String(value)); }} />
+                onScore={value => keep('keyboardThreshold', String(value), () => setKeyboardThreshold(value))}
+                onSeconds={value => keep('keyboardAlertSeconds', String(value), () => setKeyboardSeconds(value))} />
             </div>
           </Field>
           <Field label="알림 소리">
             <Segmented label="알림 소리" options={SOUNDS} value={alertStrength}
-              onChange={value => { setAlertStrength(value); keep('alertStrength', value); }} />
+              onChange={value => keep('alertStrength', value, () => setAlertStrength(value))} />
           </Field>
           {window.motiNotifications && deliveryStatus && <p role="status" className="text-xs text-muted">{deliveryStatus}</p>}
         </SettingsCard>

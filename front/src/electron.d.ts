@@ -1,8 +1,10 @@
 import type { SystemNotificationRequest, SystemNotificationResult } from './features/notifications/contract'
 import type { OverlayCommand, OverlayMode, OverlayResult, OverlaySnapshot, OverlayView } from './features/overlay/contract'
+import type { DesktopApi } from './utils/desktopApiContract'
 
 declare global {
   interface Window {
+    motiApi?: DesktopApi
     motiOverlay?: {
       state: () => Promise<OverlayView>
       ready: () => Promise<void>

@@ -4,7 +4,7 @@ import { keyboardSummary } from '../../../../database/keyboard';
 import type { KeyboardCount, KeyboardStored } from '../../../../database/keyboard';
 import DailyChart from '../statistics/DailyChart';
 import HourlyChart from '../statistics/HourlyChart';
-import { clockText } from '../dashboard/format';
+import { clockText, longDate } from '../dashboard/format';
 import StatTile from '../statistics/StatTile';
 import { CARD, ChartHeader, EmptyChart, HistoryLink } from '../statistics/parts';
 import type { PeriodDays } from '../statistics/period';
@@ -13,6 +13,7 @@ import { percentText, reasonText, scoreText } from './labels';
 import KeyboardKeyExploration from './KeyboardKeyExploration';
 import { keyLabel as keyText } from './keyExploration';
 import { dailyKeyboardPractice } from './dailyPractice';
+import TrendSelection from '../statistics/TrendSelection';
 
 const dayBefore = (day: string, n: number) => new Date(Date.parse(day) - n * 86400_000).toISOString().slice(0, 10);
 const policyKey = (row: KeyboardStored) => JSON.stringify([row.record.policyVersion, row.record.recognitionVersion, row.record.nearbyCredit]);
@@ -27,6 +28,8 @@ export default function KeyboardStatistics({ data, date, days, today, detail, on
   detail: (date: string) => ReactNode; onSelectDate: (date: string) => void; onOpenHistory: () => void;
 }) {
   const [policy, setPolicy] = useState(''), [selectedKey, setSelectedKey] = useState('KeyA');
+  const [pickedDate, setPickedDate] = useState('');
+  const [pickedSession, setPickedSession] = useState('');
   const dayView = days === 1;
   const from = dayBefore(date, days - 1);
   const groups = [...new Set(data.map(policyKey))];
@@ -42,6 +45,8 @@ export default function KeyboardStatistics({ data, date, days, today, detail, on
   });
   const sessions = dayView ? dailyKeyboardPractice(records, date) : [];
   const sessionTime = (index: number) => sessions[index] ? clockText(sessions[index].at, sessions[index].offsetMinutes) : '';
+  const selectedDay = daily.find(row => row.date === pickedDate) ?? daily.findLast(row => row.score !== null || row.coverage !== null) ?? daily.at(-1);
+  const selectedSession = sessions[Number(pickedSession || sessions.length - 1)];
   const byKey = new Map<string, KeyboardCount[]>();
   counts.forEach(row => byKey.set(row.code, [...(byKey.get(row.code) ?? []), row]));
   const differences = [...byKey].map(([code, rows]) => ({ code, ...keyboardSummary(rows, credit) }))
@@ -63,12 +68,22 @@ export default function KeyboardStatistics({ data, date, days, today, detail, on
       <ChartHeader title={dayView ? '세션별 연습 변화' : '연습 변화'} legend={LINES} />
       {dayView ? sessions.some(session => session.score !== null || session.coverage !== null)
         ? <HourlyChart expanded label="세션별 훈련 점수와 판정 가능 비율" data={sessions.map(({ score, coverage }, hour) => ({ hour, score, coverage }))}
-          lines={LINES} domain={[0, 100]} unit="점" labelFor={sessionTime} />
+          lines={LINES} domain={[0, 100]} unit="점" labelFor={sessionTime} selectedHour={selectedSession ? sessions.indexOf(selectedSession) : undefined} />
         : <EmptyChart text={sessions.length ? '판정할 수 있는 키보드 집계가 없어요' : '이 날의 키보드 연습 기록이 없어요'} />
         : counts.length ? <DailyChart label="날짜별 훈련 점수와 판정 가능 비율" lines={LINES} today={today} domain={[0, 100]}
-        faded={faded} detail={detail} onSelectDate={onSelectDate}
+        faded={faded} detail={detail} onSelectDate={onSelectDate} selectedDate={selectedDay?.date}
         data={daily.map(row => ({ date: row.date, score: row.score, coverage: row.coverage }))} />
         : <EmptyChart text="선택한 기간의 키보드 집계가 없습니다. 키보드 학습을 시작하면 처리된 입력의 집계를 저장합니다." />}
+      {dayView && selectedSession && <TrendSelection label="세션" options={sessions.map((_, index) => ({ value: String(index), label: sessionTime(index) }))}
+        value={String(sessions.indexOf(selectedSession))} onChange={setPickedSession} date={date}>
+        <span>훈련 점수 <b className="text-heading">{scoreText(selectedSession.score)}</b></span>
+        <span>판정 가능 비율 <b className="text-heading">{percentText(selectedSession.coverage)}</b></span>
+      </TrendSelection>}
+      {!dayView && selectedDay && <TrendSelection label="날짜" options={daily.map(row => ({ value: row.date, label: longDate(row.date) }))}
+        value={selectedDay.date} onChange={setPickedDate} date={selectedDay.date}>
+        <span>훈련 점수 <b className="text-heading">{scoreText(selectedDay.score)}</b></span>
+        <span>판정 가능 비율 <b className="text-heading">{percentText(selectedDay.coverage)}</b></span>
+      </TrendSelection>}
       <p className="text-sm text-muted">{previousPeriodText(days)} {scoreText(before.score)} ({before.valid}회, 판정 {percentText(before.coverage)}) → {dayView ? '선택한 날' : '현재'} {scoreText(summary.score)} ({summary.valid}회, 판정 {percentText(summary.coverage)}){summary.score !== null && before.score !== null ? ` · ${Math.round(summary.score) - Math.round(before.score)}점 변화` : ''}</p>
       <p className="text-xs text-muted">표본 수와 판정 가능 비율이 다른 기간의 점수 변화는 실제 개선과 다를 수 있습니다. 일관성은 같은 키·Shift 상황에서 가장 많이 쓴 손가락의 비율이며 점수에 가산하지 않습니다.</p>
     </section>

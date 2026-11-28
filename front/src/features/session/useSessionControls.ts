@@ -1,19 +1,25 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createSessionClock } from './sessionClock';
+import { readPreference, writePreference } from '../../utils/localPreferences';
 
 export function useSessionControls(modeId?: string) {
   const [isRunning, setIsRunning] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
-  const [deviceId, selectDevice] = useState(() => modeId ? localStorage.getItem(`moti.camera-device.${modeId}`) ?? '' : '');
+  const [deviceId, selectDevice] = useState(() => modeId ? readPreference(`moti.camera-device.${modeId}`) ?? '' : '');
+  const [deviceError, setDeviceError] = useState('');
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [run, setRun] = useState(0);
   const [failed, setFailed] = useState(false);
   const current = useRef({ running: false, paused: false, run: 0 });
   const clock = useRef(createSessionClock());
   const setDeviceId = useCallback((id: string) => {
+    if (modeId && !writePreference(`moti.camera-device.${modeId}`, id)) {
+      setDeviceError('사용할 카메라를 저장하지 못했어요. 이 앱의 저장 공간을 확인해 주세요.');
+      return;
+    }
+    setDeviceError('');
     selectDevice(id);
-    if (modeId) localStorage.setItem(`moti.camera-device.${modeId}`, id);
   }, [modeId]);
 
   useEffect(() => {
@@ -65,5 +71,5 @@ export function useSessionControls(modeId?: string) {
   const fail = useCallback(() => { if (current.current.running) { stop(); setFailed(true); } }, [stop]);
   const getState = useCallback(() => ({ ...current.current }), []);
 
-  return { isRunning, isPaused, elapsedSeconds, run, failed, deviceId, devices, setDeviceId, start, stop, pause, resume, fail, getState };
+  return { isRunning, isPaused, elapsedSeconds, run, failed, deviceId, devices, deviceError, setDeviceId, start, stop, pause, resume, fail, getState };
 }

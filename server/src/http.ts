@@ -2,7 +2,7 @@ import type { NextFunction, Request, Response, RequestHandler } from 'express';
 import type { AuthRequest } from './auth.js';
 
 export class HttpError extends Error {
-  constructor(public readonly status: number, message: string) {
+  constructor(public readonly status: number, message: string, public readonly retryAfter?: number) {
     super(message);
   }
 }
@@ -15,6 +15,7 @@ export function asyncHandler(handler: (req: AuthRequest, res: Response) => Promi
 export function handleError(error: unknown, _req: Request, res: Response, next: NextFunction): void {
   if (res.headersSent) { next(error); return; }
   if (error instanceof HttpError) {
+    if (error.retryAfter !== undefined) res.set('Retry-After', String(error.retryAfter));
     res.status(error.status).json({ message: error.message });
     return;
   }
@@ -26,6 +27,6 @@ export function handleError(error: unknown, _req: Request, res: Response, next: 
     res.status(413).json({ message: '요청 본문이 너무 큽니다.' });
     return;
   }
-  console.error(error);
+  console.error('Unhandled API error');
   res.status(500).json({ message: '서버 오류가 발생했습니다.' });
 }

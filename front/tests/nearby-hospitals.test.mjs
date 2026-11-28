@@ -10,7 +10,8 @@ const bundle = await build({ stdin: { contents: [
   "export { default as NearbyHospitals } from './src/features/hospitals/NearbyHospitals.tsx';",
   "export { findHospitals, distanceText, DEPARTMENTS } from './src/features/hospitals/api.ts';",
 ].join('\n'), resolveDir: process.cwd() },
-  bundle: true, write: false, logLevel: 'error', platform: 'node', format: 'cjs', jsx: 'automatic', external: ['react', 'react-dom'] });
+  bundle: true, write: false, logLevel: 'error', platform: 'node', format: 'cjs', jsx: 'automatic', external: ['react', 'react-dom'],
+  loader: { '.html': 'text' } });
 const compiled = { exports: {} };
 new Function('module', 'exports', 'require', bundle.outputFiles[0].text)(compiled, compiled.exports, createRequire(import.meta.url));
 const app = compiled.exports;
@@ -25,17 +26,18 @@ test('only Kakao Map place pages may leave the app for the default browser', () 
 
 test('a search sends the trimmed place, or the device location rounded to about 1 km', async t => {
   globalThis.localStorage = { getItem: () => JSON.stringify({ token: 't', user: { id: '7', username: 'member', nickname: '회원' } }) };
-  const urls = [], originalFetch = globalThis.fetch;
-  globalThis.fetch = async url => {
-    urls.push(String(url));
+  const requests = [], originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, options) => {
+    requests.push({ url, ...options });
     return new Response(JSON.stringify({ center: { lat: 37.57, lng: 126.98, label: '현재 위치 근처' }, hospitals: [] }), { status: 200 });
   };
   t.after(() => { globalThis.fetch = originalFetch; });
   await app.findHospitals('정형외과', { query: ' 강남역 ' });
   await app.findHospitals('안과', { lat: 37.56654, lng: 126.97803 });
-  assert.deepEqual(urls.map(url => Object.fromEntries(new URL(url, 'http://moti.test').searchParams)), [
+  assert.ok(requests.every(call => call.url === '/api/hospitals' && call.method === 'POST'));
+  assert.deepEqual(requests.map(call => JSON.parse(call.body)), [
     { department: '정형외과', query: '강남역' },
-    { department: '안과', lat: '37.57', lng: '126.98' },
+    { department: '안과', lat: 37.57, lng: 126.98 },
   ]);
 });
 

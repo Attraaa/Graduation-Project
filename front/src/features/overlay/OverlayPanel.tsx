@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { ArrowUpRight, Pause, Play, Square } from 'lucide-react';
 import MeasurementEndedDialog from '../session/MeasurementEndedDialog';
 import RateGauge from '../session/RateGauge';
@@ -15,6 +15,7 @@ function BackButton({ onClick }: { onClick: () => void }) {
 
 /** One row per mode with score rings, status, active time and measurement controls. */
 export default function OverlayPanel() {
+  const panel = useRef<HTMLElement>(null);
   const [view, setView] = useState<OverlayView>({ snapshot: null, connected: false });
   const [pending, setPending] = useState<Partial<Record<OverlayMode, { id: string; action: OverlayAction }>>>({});
   const [message, setMessage] = useState('');
@@ -53,7 +54,7 @@ export default function OverlayPanel() {
   const visible = visibleOverlayModes(snapshot);
   const back = () => { void window.motiOverlay?.back().catch(() => setMessage('본창 연결을 확인해 주세요.')); };
   return <>
-    <main className="overlay-panel overlay-drag text-heading">
+    <main ref={panel} className="overlay-panel overlay-drag text-heading">
       {!visible.length && <div className="overlay-empty">
         <p>{view.connected ? '측정 중인 모드가 없어요.' : '측정 정보를 기다리고 있어요.'}</p>
         <BackButton onClick={back} />
@@ -98,6 +99,7 @@ export default function OverlayPanel() {
     </main>
     {ended && <MeasurementEndedDialog mode={ended} className="overlay-completion" error={statisticsError}
       remaining={remainingMode && remaining && remaining.running ? { mode: remainingMode, paused: remaining.paused } : null}
+      returnFocus={() => panel.current?.querySelector<HTMLButtonElement>('.overlay-back') ?? null}
       onClose={() => setEnded(null)} onStatistics={() => {
         void window.motiOverlay?.back(ended).catch(() => setStatisticsError('본창 연결을 확인해 주세요.'));
       }} />}

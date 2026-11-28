@@ -2,6 +2,7 @@ import { ipcRenderer, contextBridge } from 'electron'
 import type { PostureTimelineBatch } from '../src/features/records/postureTimelineContract'
 import type { SystemNotificationRequest } from '../src/features/notifications/contract'
 import type { OverlayCommand, OverlayMode, OverlayResult, OverlaySnapshot, OverlayView } from '../src/features/overlay/contract'
+import type { DesktopApi } from '../src/utils/desktopApiContract'
 
 if (process.argv.includes('--moti-overlay')) {
   contextBridge.exposeInMainWorld('motiOverlay', {
@@ -14,6 +15,14 @@ if (process.argv.includes('--moti-overlay')) {
     },
   })
 } else {
+const api: DesktopApi = {
+  initialize: legacy => ipcRenderer.invoke('moti-api:initialize', legacy),
+  request: call => ipcRenderer.invoke('moti-api:request', call),
+  cancel: id => ipcRenderer.send('moti-api:cancel', id),
+  logout: revision => ipcRenderer.invoke('moti-api:logout', revision),
+}
+contextBridge.exposeInMainWorld('motiApi', api)
+
 contextBridge.exposeInMainWorld('motiDesktop', {
   publish: (snapshot: OverlaySnapshot | null) => ipcRenderer.send('desktop:publish', snapshot),
   open: () => ipcRenderer.invoke('desktop:open'),

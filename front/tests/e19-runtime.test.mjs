@@ -14,10 +14,11 @@ const config = JSON.parse(readFileSync(new URL('../public/models/fhp-e19/config.
 const close = (a, b, tolerance = 1e-5) => assert.ok(Math.abs(a - b) < tolerance, `${a} != ${b}`);
 class Tensor { constructor(type, data, dims) { Object.assign(this, { type, data, dims }); } }
 // Fake E19: neck Δ = 100 × (nose x − reference nose x), load = 1000 × (nose y − reference nose y), head pitch = 100 × nose z.
-function fakeModel(cfg = config) {
+function fakeModel(cfg = config, beforeRun = () => {}) {
   const feeds = [];
   const session = { run: async input => {
     feeds.push(input);
+    await beforeRun();
     const p = input.pose.data, r = input.ref_pose.data;
     return { delta_deg: { data: Float32Array.of((p[0] - r[0]) * 100) }, load_pct: { data: Float32Array.of((p[1] - r[1]) * 1000) },
       psi_deg: { data: Float32Array.of(p[2] * 100) }, scale: { data: Float32Array.of(1, 1, 1) } };
@@ -68,6 +69,25 @@ test('the three calibration failures: too few frames with face and shoulders, mo
   assert.deepEqual(await model.calibrate(upright(50, { z: 0.125 })), { ok: false, reason: 'not_upright' });
   assert.deepEqual(await model.infer(frame(0)), { measuring: false, reason: 'uncalibrated' });
   assert.equal((await model.calibrate(upright(50, { z: 0.115 }))).ok, true);
+});
+
+test('a calculation from an earlier camera generation cannot clear or replace the new reference', async () => {
+  for (const blockedCall of [1, 8]) {
+    const gate = Promise.withResolvers(), entered = Promise.withResolvers();
+    let calls = 0, current = true;
+    const { model } = fakeModel(config, () => {
+      if (++calls === blockedCall) { entered.resolve(); return gate.promise; }
+    });
+    const stale = model.calibrate(upright(5, { y: 0.38 }), () => current);
+    await entered.promise;
+    current = false; model.clear();
+    const updated = await model.calibrate(upright(5, { y: 0.43 }));
+    assert.equal(updated.ok, true);
+    gate.resolve();
+    assert.equal((await stale).ok, false);
+    assert.equal(model.calibrated(), true);
+    close((await model.infer(frame(0, { y: 0.43 }))).loadPct, 0);
+  }
 });
 
 test('a head turned over 35° stops measuring; a missing or far face still measures without the face', async () => {
@@ -146,6 +166,10 @@ test('each pose frame takes the face of the same video frame, else the nearest w
   for (let i = 0; i < 20; i++) faces.push(sample(1000 + i, 1 + i));
   assert.equal(faces.match(1000, 1).videoTime, 9); // only the latest 12 samples are kept
   faces.clear(); assert.equal(faces.match(1019, 20), null);
+  faces.push({ ...sample(100, 0.5), generation: 1 });
+  assert.equal(faces.match(110, 0.5, undefined, 2), null);
+  faces.push({ ...sample(111, 0.499), generation: 2 });
+  assert.equal(faces.match(112, 0.5, undefined, 2).t, 111);
 });
 
 test('the model input keeps pose 0–12 and the face nearest the pose nose with its head matrix', () => {

@@ -33,6 +33,6 @@ export function Waiting() {
 
 export function HistoryLink({ onClick, text = '학습이력에서 보기 →' }: { onClick: () => void; text?: string }) {
   return (
-    <button type="button" onClick={onClick} className="mt-3 text-sm font-semibold text-secondary hover:underline">{text}</button>
+    <button type="button" onClick={onClick} className="mt-3 text-sm font-semibold text-secondary-text hover:underline">{text}</button>
   );
 }

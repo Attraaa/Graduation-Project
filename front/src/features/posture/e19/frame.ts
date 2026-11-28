@@ -11,6 +11,7 @@ export interface FaceSample {
   t: number;
   /** 그때 캔버스에 그려져 있던 영상 시각(같은 프레임 판별용). */
   videoTime: number;
+  generation?: number;
   faces: readonly (readonly Landmark[])[];
   matrices: readonly { data: ArrayLike<number> }[];
 }
@@ -23,11 +24,12 @@ export function createFaceBuffer(size = 12) {
     push(sample: FaceSample) { items = [...items.slice(1 - size), sample]; },
     clear() { items = []; },
     /** 같은 영상 프레임의 얼굴 결과, 없으면 maxGapMs 이내에서 캡처 시각이 가장 가까운 결과. */
-    match(t: number, videoTime: number, maxGapMs = FACE_MATCH_MS): FaceSample | null {
-      const same = items.findLast(item => item.videoTime === videoTime);
+    match(t: number, videoTime: number, maxGapMs = FACE_MATCH_MS, generation?: number): FaceSample | null {
+      const current = generation === undefined ? items : items.filter(item => item.generation === generation);
+      const same = current.findLast(item => item.videoTime === videoTime);
       if (same) return same;
       let best: FaceSample | null = null;
-      for (const item of items) if (Math.abs(item.t - t) <= maxGapMs && (!best || Math.abs(item.t - t) < Math.abs(best.t - t))) best = item;
+      for (const item of current) if (Math.abs(item.t - t) <= maxGapMs && (!best || Math.abs(item.t - t) < Math.abs(best.t - t))) best = item;
       return best;
     },
   };

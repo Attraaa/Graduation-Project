@@ -65,6 +65,7 @@ const values = (outputs: Record<string, { data: unknown }>, name: string) => out
 export function createNeckModel(ort: TensorFactory, session: ModelSession, cfg: NeckModelConfig) {
   let reference: Reference | null = null;
   let offset: { delta: number; load: number; psi: number } | null = null;
+  let revision = 0;
 
   const qc = (pose: NeckFrame['pose']): NeckReason | null => {
     if (!pose || pose.length !== 13) return 'no_pose';
@@ -91,7 +92,7 @@ export function createNeckModel(ort: TensorFactory, session: ModelSession, cfg: 
     };
   };
 
-  async function infer(x: NeckFrame): Promise<NeckResult> {
+  async function inferWith(x: NeckFrame, reference: Reference | null, offset: { delta: number; load: number; psi: number } | null): Promise<NeckResult> {
     const reason = qc(x.pose);
     if (reason) return { measuring: false, reason };
     if (!reference) return { measuring: false, reason: 'uncalibrated' };
@@ -110,36 +111,44 @@ export function createNeckModel(ort: TensorFactory, session: ModelSession, cfg: 
       scoreNeck: 100 * clip01(delta / cfg.delta_ref_deg), scoreLoad: 100 * clip01(load / cfg.load_ref_pct), faceUsed: faceOk, yawDeg };
   }
 
-  function clear() { reference = null; offset = null; }
+  const infer = (frame: NeckFrame) => inferWith(frame, reference, offset);
+  function clear() { revision++; reference = null; offset = null; }
 
   /**
    * 5초 동안 모은 프레임으로 보정합니다. 크기 단서 중앙값 + 원소별 중앙값 랜드마크를 기준으로 삼고,
    * 같은 프레임의 목 Δ·부하·고개 각도 중앙값을 오프셋으로 뺍니다(곱하는 보정은 없음).
    */
-  async function calibrate(frames: readonly NeckFrame[]): Promise<NeckCalibration> {
+  async function calibrate(frames: readonly NeckFrame[], isCurrent = () => true): Promise<NeckCalibration> {
     clear();
+    const started = revision;
+    const valid = () => started === revision && isCurrent();
     const c = cfg.calibration;
-    const fail = (why: NeckFailure): NeckCalibration => { clear(); return { ok: false, reason: why }; };
+    const fail = (reason: NeckFailure): NeckCalibration => ({ ok: false, reason });
     const good = frames.filter(x => !qc(x.pose) && x.face && x.fmat && faceBelongs(x));
     if (!frames.length || good.length / frames.length < c.min_valid_frac) return fail('too_few_frames');
     const one = Float32Array.from([1, 1, 1]), scales: Float32Array[] = [], kept: Arrays[] = [];
     for (const x of good) {
       const g = arrays(x, true);
       const o = await session.run(feeds(g, x, true, { scale: one, ...g }));
+      if (!valid()) return fail('too_few_frames');
       scales.push(Float32Array.from(values(o, 'scale'))); kept.push(g);
     }
-    reference = { scale: medianStack(scales), pose: medianStack(kept.map(g => g.pose)), face: medianStack(kept.map(g => g.face)), fmat: medianStack(kept.map(g => g.fmat)) };
+    const candidate = { scale: medianStack(scales), pose: medianStack(kept.map(g => g.pose)), face: medianStack(kept.map(g => g.face)), fmat: medianStack(kept.map(g => g.fmat)) };
     const results: NeckResult[] = [];
-    for (const x of frames) results.push(await infer(x));
-    const valid = results.filter(r => r.measuring);
-    if (valid.length / results.length < c.min_valid_frac) return fail('too_few_frames');
-    const d = valid.map(r => r.raw.delta), l = valid.map(r => r.raw.load), p = valid.map(r => r.raw.psi);
+    for (const x of frames) {
+      results.push(await inferWith(x, candidate, null));
+      if (!valid()) return fail('too_few_frames');
+    }
+    const accepted = results.filter(r => r.measuring);
+    if (accepted.length / results.length < c.min_valid_frac) return fail('too_few_frames');
+    const d = accepted.map(r => r.raw.delta), l = accepted.map(r => r.raw.load), p = accepted.map(r => r.raw.psi);
     const mean = d.reduce((a, b) => a + b, 0) / d.length;
     if (Math.sqrt(d.reduce((a, b) => a + (b - mean) ** 2, 0) / d.length) > c.max_sd_deg) return fail('unstable');
     if (Math.abs(median(p)) > c.max_abs_psi_deg) return fail('not_upright');
     const limitD = c.max_abs_offset_frac * cfg.delta_ref_deg, limitL = c.max_abs_offset_frac * cfg.load_ref_pct;
     const od = median(d), ol = median(l);
     const clamp = (value: number, limit: number) => Math.max(-limit, Math.min(limit, value));
+    reference = candidate;
     offset = { delta: clamp(od, limitD), load: clamp(ol, limitL), psi: median(p) };
     return { ok: true, offsetDeg: offset.delta, offsetLoadPct: offset.load, psiOffsetDeg: offset.psi, clipped: Math.abs(od) > limitD || Math.abs(ol) > limitL };
   }

@@ -12,6 +12,6 @@ export default function CameraGuidance() {
   if (active && eye.phase === 'error') lines.push({ tone: 'error', text: `깜빡임 분석: ${eye.message}` });
   const eyeGuide = active && eye.phase === 'calibrating' && !eye.measurement.calibrated;
   return <GuidanceBand label="상체 측정 안내" lines={lines}>
-    {eyeGuide && <div className="bg-slate-950/80 px-3 py-2 font-semibold [&_p]:text-white"><EyeCalibrationGuide measurement={eye.measurement} /></div>}
+    {eyeGuide && <div className="bg-slate-950/80 px-3 py-2 font-semibold max-md:py-1 [&_p]:text-white"><EyeCalibrationGuide measurement={eye.measurement} /></div>}
   </GuidanceBand>;
 }

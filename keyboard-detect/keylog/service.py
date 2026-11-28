@@ -77,6 +77,8 @@ class RealtimeAttributionService:
         self.analysis_wait_ms = analysis_wait_ms
         self.expose_test_page = expose_test_page
         self.event_queue: "queue.Queue[KeyEvent]" = queue.Queue(maxsize=64)
+        self._quality_lock = threading.Lock()
+        self._quality = {"observed": 0, "processed": 0, "dropped": 0, "maxQueueWaitMs": 0}
         self._privacy_generation = 0
         self._state_lock = threading.RLock()
         self._mapping_ready = False
@@ -91,7 +93,9 @@ class RealtimeAttributionService:
         self._stop_event = threading.Event()
         self._worker = threading.Thread(target=self._process_events, daemon=True)
 
+        self._announce_startup("hands")
         tracker = MediaPipeFingerTracker() if use_mediapipe else None
+        self._announce_startup("layout")
         self.analyzer = KeyboardPressAnalyzer(finger_tracker=tracker)
         self.keylogger = RealTimeKeyLogger(on_event=self.enqueue_key_event)
 
@@ -110,11 +114,21 @@ class RealtimeAttributionService:
         if enable_global_keylogger:
             self.keylogger.start()
 
+    def _announce_startup(self, stage: str) -> None:
+        if not self.expose_test_page:
+            print(f"MOTI_KEYBOARD_LOADING {stage}", flush=True)
+
     def enqueue_key_event(self, event: KeyEvent) -> None:
-        try:
-            self.event_queue.put_nowait((self._privacy_generation, event))
-        except queue.Full:
-            pass
+        dropped = None
+        with self._quality_lock:
+            self._quality["observed"] += 1
+            try:
+                self.event_queue.put_nowait((self._privacy_generation, event))
+            except queue.Full:
+                self._quality["dropped"] += 1
+                dropped = dict(self._quality)
+        if dropped is not None and self._client:
+            self.socketio.emit("input_quality", dropped, to=self._client)
 
     def _external_press(self, code, context):
         if not self._mapping_ready or not self._client:
@@ -373,6 +387,7 @@ class RealtimeAttributionService:
                 time.sleep(remaining)
             if generation != self._privacy_generation or not self._client:
                 continue
+            queue_wait_ms = max(0, round((time.perf_counter_ns() - event.perf_counter_ns) / 1e6))
 
             snapshot, delta_ms = self.frame_buffer.nearest_for_event(
                 event,
@@ -383,11 +398,22 @@ class RealtimeAttributionService:
             result = self.analyzer.analyze(event, snapshot, frame_delta_ms=delta_ms,
                                            fingers=snapshot.fingers if snapshot else [])
             payload = result.to_jsonable()
-            payload["latency"]["queue_wait_ms"] = self.analysis_wait_ms
+            payload["latency"]["queue_wait_ms"] = queue_wait_ms
             if generation == self._privacy_generation and self._client:
+                with self._quality_lock:
+                    self._quality["processed"] += 1
+                    self._quality["maxQueueWaitMs"] = max(self._quality["maxQueueWaitMs"], queue_wait_ms)
+                    payload["quality"] = dict(self._quality)
                 self.socketio.emit("press_result", payload, to=self._client)
 
     def run(self, host: str, port: int, debug: bool = False) -> None:
+        if not self.expose_test_page:
+            from werkzeug.serving import make_server
+
+            server = make_server("127.0.0.1", port, self.app, threaded=True)
+            print(f"MOTI_KEYBOARD_READY {server.server_port}", flush=True)
+            server.serve_forever()
+            return
         print(f"[keylog] open http://{host}:{port}")
         self.socketio.run(self.app, host=host, port=port, debug=debug, allow_unsafe_werkzeug=True)
 

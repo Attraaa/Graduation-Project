@@ -1,47 +1,54 @@
+import { useLayoutEffect, useRef, type Ref } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { longDate, minutesText } from '../dashboard/format';
-import { weekdayIndex } from './calendar';
-import type { CalendarDay, CalendarView } from './calendar';
+import type { SourceStatus } from '../dashboard/SourceState';
+import type { CalendarDay } from './calendar';
 import { MODE_DOT, MODE_NAME } from './labels';
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
 const LEGEND = ['upper', 'keyboard', 'eye'] as const;
+const EMPTY_LABEL = { loading: '기록 불러오는 중', error: '기록을 불러오지 못함', ready: '기록 없음' };
 
-function DayCell({ day, view, selected, onSelect }: {
-  day: CalendarDay; view: CalendarView; selected: boolean; onSelect: (date: string) => void;
+function DayCell({ day, selected, recordsStatus, buttonRef, onSelect }: {
+  day: CalendarDay; selected: boolean; recordsStatus: SourceStatus; buttonRef?: Ref<HTMLButtonElement>;
+  onSelect: (date: string) => void;
 }) {
   const dayOfMonth = Number(day.date.slice(8));
   const recorded = day.modes.length > 0;
-  const name = view === 'week' ? `${WEEKDAYS[weekdayIndex(day.date)]} ${dayOfMonth}` : String(dayOfMonth);
   const spoken = recorded
-    ? `${longDate(day.date)}, ${day.modes.map(mode => MODE_NAME[mode]).join('·')} ${minutesText(day.totalMs)}`
-    : `${longDate(day.date)}, 기록 없음`;
+    ? `${longDate(day.date)}, ${day.modes.map(mode => MODE_NAME[mode]).join(', ')} ${minutesText(day.totalMs)}`
+    : `${longDate(day.date)}, ${EMPTY_LABEL[day.isFuture ? 'ready' : recordsStatus]}`;
   return (
-    <button type="button" disabled={day.isFuture} aria-pressed={selected} aria-label={spoken} onClick={() => onSelect(day.date)}
-      className={`flex min-h-16 flex-col items-start gap-1 rounded-xl p-2 text-left ${
-        selected ? 'border-2 border-heading' : day.isFuture ? 'border border-dashed border-border' : 'border border-border hover:bg-nav-active'
-      } ${day.isFuture ? 'cursor-default opacity-40' : recorded ? 'bg-surface' : 'bg-surface-muted'}`}>
-      <span className="flex items-center gap-1">
-        <span className={`text-sm font-semibold ${recorded ? 'text-heading' : 'text-muted'}`}>{name}</span>
-        {day.isToday && <span className="rounded bg-heading px-1 text-[10px] font-bold text-surface">오늘</span>}
+    <button ref={buttonRef} type="button" disabled={day.isFuture} aria-pressed={selected} aria-label={spoken} aria-current={day.isToday ? 'date' : undefined}
+      onClick={() => onSelect(day.date)}
+      className={`flex min-h-13 min-w-0 flex-col items-center gap-1 rounded-lg border px-0.5 py-1.5 text-center sm:min-h-16 sm:items-start sm:rounded-xl sm:p-2 sm:text-left ${
+        selected ? 'border-heading bg-nav-active' : day.isFuture ? 'border-dashed border-border bg-surface-muted' : 'border-border bg-surface hover:bg-nav-active'
+      } ${day.isFuture ? 'cursor-default opacity-40' : ''}`}>
+      <span className="flex max-w-full flex-wrap items-center gap-1">
+        <span className={`text-sm font-semibold ${day.isToday || recorded ? 'text-heading' : 'text-muted'}`}>{dayOfMonth}</span>
+        {day.isToday && <span className="hidden rounded bg-heading px-1 text-[10px] font-bold text-surface lg:inline">오늘</span>}
       </span>
       {recorded && (
         <span className="flex gap-0.5">
           {day.modes.map(mode => <span key={mode} aria-hidden="true" className={`h-2 w-2 rounded-full ${MODE_DOT[mode]}`} />)}
         </span>
       )}
-      {recorded && <span className="text-xs text-muted">{minutesText(day.totalMs)}</span>}
+      {recorded && <span className="hidden max-w-full text-xs text-muted sm:inline">{minutesText(day.totalMs)}</span>}
     </button>
   );
 }
 
 /** Week or month calendar: mode dots and measured time per day, faded empty days, disabled future days. */
-export default function HistoryCalendar({ view, title, days, blanks, selected, canForward, onSelect, onMove }: {
-  view: CalendarView; title: string; days: CalendarDay[]; blanks: number; selected: string; canForward: boolean;
+export default function HistoryCalendar({ title, days, blanks, selected, recordsStatus, focusSelected, canForward, onSelect, onMove }: {
+  title: string; days: CalendarDay[]; blanks: number; selected: string; recordsStatus: SourceStatus; focusSelected?: boolean; canForward: boolean;
   onSelect: (date: string) => void; onMove: (direction: -1 | 1) => void;
 }) {
+  const selectedDay = useRef<HTMLButtonElement>(null);
+  useLayoutEffect(() => {
+    if (focusSelected) selectedDay.current?.focus({ preventScroll: true });
+  }, [focusSelected, selected]);
   return (
-    <section aria-label="달력" className="rounded-2xl border border-border bg-surface p-4">
+    <section aria-label="달력" className="rounded-2xl border border-border bg-surface p-3 sm:p-4">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-1">
           <button type="button" aria-label="이전 기간" onClick={() => onMove(-1)}
@@ -60,12 +67,11 @@ export default function HistoryCalendar({ view, title, days, blanks, selected, c
           ))}
         </ul>
       </div>
-      {view === 'month' && (
-        <div className="mb-1 grid grid-cols-7 gap-2 text-center text-xs text-muted">{WEEKDAYS.map(day => <span key={day}>{day}</span>)}</div>
-      )}
-      <div className="grid grid-cols-7 gap-2">
+      <div className="mb-1 grid grid-cols-7 gap-1 text-center text-xs text-muted sm:gap-2">{WEEKDAYS.map(day => <span key={day}>{day}</span>)}</div>
+      <div className="grid grid-cols-7 gap-1 sm:gap-2">
         {Array.from({ length: blanks }, (_, index) => <span key={`blank-${index}`} aria-hidden="true" />)}
-        {days.map(day => <DayCell key={day.date} day={day} view={view} selected={day.date === selected} onSelect={onSelect} />)}
+        {days.map(day => <DayCell key={day.date} day={day} selected={day.date === selected} recordsStatus={recordsStatus}
+          buttonRef={day.date === selected ? selectedDay : undefined} onSelect={onSelect} />)}
       </div>
     </section>
   );

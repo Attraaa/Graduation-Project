@@ -13,7 +13,8 @@ const bundle = await build({ stdin: { contents: [
   "export { default as Login } from './src/pages/Login.tsx';",
   "export { DialogProvider } from './src/components/AppDialog.tsx';",
   "export { MemoryRouter } from 'react-router-dom';",
-  "export { findId, requestPasswordReset, verifyResetCode, resetPassword, requestEmailCode, changeEmail, readAccountEmail, loginUser, updateCurrentUser, registerUser } from './src/utils/authStore.ts';",
+  "export { findId, requestPasswordReset, verifyResetCode, resetPassword, requestEmailCode, changeEmail, readAccountEmail, loginUser, updateCurrentUser, registerUser, clearStatistics } from './src/utils/authStore.ts';",
+  "export { initializeDesktopSession, readSession, clearSession } from './src/utils/apiClient.ts';",
 ].join('\n'), resolveDir: process.cwd() },
   bundle: true, write: false, logLevel: 'error', platform: 'node', format: 'cjs', jsx: 'automatic', external: ['react', 'react-dom'],
   loader: { '.svg': 'dataurl' } });
@@ -24,7 +25,7 @@ const SESSION = JSON.stringify({ token: 't', user: { id: '7', username: 'member'
 
 function storage(initial = {}) {
   const values = new Map(Object.entries(initial));
-  globalThis.window = {};
+  globalThis.window = new EventTarget();
   globalThis.localStorage = { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, value), removeItem: key => values.delete(key) };
   return globalThis.localStorage;
 }
@@ -32,6 +33,32 @@ const page = component => {
   storage();
   return renderToStaticMarkup(createElement(app.MemoryRouter, null, createElement(app.DialogProvider, null, createElement(component))));
 };
+
+test('the desktop renderer migrates old sessions and sends subsequent requests without a Bearer token', async () => {
+  const previous = JSON.parse(SESSION);
+  const store = storage({ 'moti.session': SESSION });
+  const session = { revision: 'native-session', user: previous.user };
+  const next = { revision: 'another-native-session', user: { ...previous.user, nickname: '새 이름' } };
+  const requests = [];
+  window.motiApi = {
+    initialize: async legacy => { assert.deepEqual(legacy, previous); return session; },
+    request: async call => {
+      requests.push(call);
+      return { status: 200, data: call.path === '/api/auth/login' ? next : { email: null } };
+    },
+    logout: async revision => { assert.equal(revision, next.revision); },
+  };
+  await app.initializeDesktopSession();
+  assert.equal(store.getItem('moti.session'), null);
+  assert.deepEqual(app.readSession(), session);
+  assert.equal(await app.readAccountEmail(), null);
+  assert.equal((await app.loginUser('member', 'password')).ok, true);
+  assert.deepEqual(app.readSession(), next);
+  assert.ok(requests.every(call => call.revision === session.revision && !('token' in call) && !('headers' in call)));
+  assert.equal(store.getItem('moti.session'), null);
+  await app.clearSession();
+  assert.equal(app.readSession(), null);
+});
 /** Answers every request with the given status and body, and records what was sent. */
 function server(t, status, body) {
   const calls = [], originalFetch = globalThis.fetch;
@@ -45,7 +72,7 @@ function server(t, status, body) {
 
 test('finding an ID asks for the registered email', () => {
   const out = page(app.FindId);
-  assert.match(out, /<input type="email" placeholder="이메일"[^>]*required/);
+  assert.match(out, /<label[^>]*><span>이메일<\/span><input type="email"[^>]*required/);
   assert.match(out, />아이디 찾기<\/button>/);
   assert.doesNotMatch(out, /지원하지 않습니다/);
 });
@@ -54,24 +81,49 @@ test('the login screen offers finding the ID and resetting the password', () => 
   const out = page(app.Login);
   assert.match(out, /href="\/find-id"[^>]*>아이디 찾기<\/a>/);
   assert.match(out, /href="\/find-password"[^>]*>비밀번호 재설정<\/a>/);
+  assert.match(out, /href="\/register"[^>]*>회원가입<\/a>/);
   assert.doesNotMatch(out, /비밀번호 찾기/);
 });
 
 test('resetting a password asks for the ID and email first; the code and new-password steps come later', () => {
   const out = page(app.FindPassword);
   assert.match(out, /<h1[^>]*>비밀번호 재설정<\/h1>/);
-  assert.match(out, /<input type="text" placeholder="아이디"[^>]*required/);
-  assert.match(out, /<input type="email" placeholder="이메일"[^>]*required/);
+  assert.match(out, /<label[^>]*><span>아이디<\/span><input type="text"[^>]*required/);
+  assert.match(out, /<label[^>]*><span>이메일<\/span><input type="email"[^>]*required/);
   assert.match(out, />인증 코드 받기<\/button>/);
   assert.doesNotMatch(out, /인증 코드 6자리|새 비밀번호|type="password"/);
 });
 
 test('registration asks for the email used to find the account and a code mailed to it', () => {
   const out = page(app.Register);
-  assert.match(out, /<input type="email" placeholder="이메일"[^>]*required=""[^>]*name="email"/);
+  assert.match(out, /<label for="register-email"[^>]*>이메일<\/label>/);
+  assert.match(out, /<input type="email" id="register-email"[^>]*required=""[^>]*name="email"/);
   assert.match(out, /<button type="button"[^>]*>인증 코드 받기<\/button>/);
   // The code field appears once a code was sent.
   assert.doesNotMatch(out, /인증 코드 6자리/);
+});
+
+test('late profile success and expiry of account A cannot overwrite account B', async t => {
+  const sessionA = { ...JSON.parse(SESSION), revision: 'a' };
+  const sessionB = { token: 'b', revision: 'b', user: { id: '8', username: 'other', nickname: '다른 계정' } };
+  const store = storage({ 'moti.session': JSON.stringify(sessionA) });
+  const replies = [], originalFetch = globalThis.fetch;
+  globalThis.fetch = (url, options) => {
+    assert.equal(options.headers.Authorization, 'Bearer t');
+    const gate = Promise.withResolvers(); replies.push(gate);
+    return gate.promise;
+  };
+  t.after(() => { globalThis.fetch = originalFetch; });
+  const updated = app.updateCurrentUser('이전 계정 이름');
+  const expired = app.readAccountEmail();
+  store.setItem('moti.session', JSON.stringify(sessionB));
+  replies[0].resolve(Response.json({ message: '저장되었습니다' }));
+  replies[1].resolve(Response.json({ message: 'old session' }, { status: 401 }));
+  assert.equal((await updated).ok, false);
+  await assert.rejects(expired, /로그인 상태가 바뀌었어요/);
+  await assert.rejects(app.clearStatistics(sessionA), /확인창을 연 계정에서/);
+  assert.equal(replies.length, 2);
+  assert.deepEqual(JSON.parse(store.getItem('moti.session')), sessionB);
 });
 
 test('recovery requests send trimmed input and show the server answer', async t => {

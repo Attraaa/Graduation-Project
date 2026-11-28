@@ -3,18 +3,7 @@ import { ExternalLink, Hospital as HospitalIcon, LocateFixed, Search } from 'luc
 import { BUTTON, BUTTON_STRONG, INPUT } from '../settings/parts';
 import { CARD } from '../statistics/parts';
 import { DEPARTMENTS, distanceText, findHospitals, type Department, type HospitalResult, type Where } from './api';
-import { loadKakaoMaps, type InfoWindow, type KakaoMap, type LatLng, type Marker } from './kakaoMap';
-
-type Pin = { id: string; name: string; marker: Marker; position: LatLng };
-type View = { box: HTMLElement; map: KakaoMap; info: InfoWindow; pins: Pin[]; fit: () => void };
-
-/** The selected hospital's name above its marker, as text so a place name can never inject markup. */
-function label(name: string) {
-  const element = document.createElement('div');
-  element.style.cssText = 'padding:4px 8px;font-size:12px;font-weight:600;color:#1f2937;white-space:nowrap';
-  element.textContent = name;
-  return element;
-}
+import HospitalMap from './HospitalMap';
 
 /**
  * 주변 병원 찾기. 진료과와 동네·주소(또는 현재 위치)로 카카오 지도 검색 결과를 지도와 목록으로 보여 줍니다.
@@ -27,12 +16,10 @@ export default function NearbyHospitals() {
   const [result, setResult] = useState<HospitalResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
-  const [mapError, setMapError] = useState('');
+  const [failed, setFailed] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   const latest = useRef(0);
-  const mapBox = useRef<HTMLDivElement>(null);
-  const view = useRef<View | null>(null);
-  const shown = result !== null;
+  useEffect(() => () => { latest.current++; }, []);
 
   // Only the latest search may show its result, so a slow earlier answer cannot replace a newer one.
   const search = async (next: Where, nextDepartment = department) => {
@@ -40,12 +27,17 @@ export default function NearbyHospitals() {
     setWhere(next);
     setBusy(true);
     setMessage('');
+    setFailed(false);
+    setResult(null);
     setSelected(null);
     try {
       const found = await findHospitals(nextDepartment, next);
       if (id === latest.current) setResult(found);
     } catch (error) {
-      if (id === latest.current) setMessage(error instanceof Error ? error.message : '주변 병원을 찾지 못했어요.');
+      if (id === latest.current) {
+        setFailed(true);
+        setMessage(error instanceof Error ? error.message : '주변 병원을 찾지 못했어요.');
+      }
     } finally {
       if (id === latest.current) setBusy(false);
     }
@@ -62,11 +54,16 @@ export default function NearbyHospitals() {
       setMessage('이 기기에서는 현재 위치를 쓸 수 없어요. 동네 이름이나 주소로 찾아 주세요.');
       return;
     }
+    const id = ++latest.current;
     setBusy(true);
     setMessage('');
+    setFailed(false);
+    setResult(null);
+    setWhere(null);
     navigator.geolocation.getCurrentPosition(
-      position => void search({ lat: position.coords.latitude, lng: position.coords.longitude }),
+      position => { if (id === latest.current) void search({ lat: position.coords.latitude, lng: position.coords.longitude }); },
       () => {
+        if (id !== latest.current) return;
         setBusy(false);
         setMessage('현재 위치를 가져오지 못했어요. 동네 이름이나 주소로 찾아 주세요.');
       },
@@ -78,60 +75,6 @@ export default function NearbyHospitals() {
     setDepartment(next);
     if (where) void search(where, next);
   };
-
-  // A new result replaces the markers; the map itself is made once per container.
-  useEffect(() => {
-    const box = mapBox.current;
-    if (!result || !box) return;
-    let active = true;
-    loadKakaoMaps().then(maps => {
-      if (!active) return;
-      const center = new maps.LatLng(result.center.lat, result.center.lng);
-      if (view.current?.box !== box) {
-        view.current = { box, map: new maps.Map(box, { center, level: 5 }), info: new maps.InfoWindow({ content: label('') }), pins: [], fit: () => {} };
-      }
-      const current = view.current;
-      current.info.close();
-      current.pins.forEach(pin => pin.marker.setMap(null));
-      const bounds = new maps.LatLngBounds();
-      bounds.extend(center);
-      current.pins = result.hospitals.map(hospital => {
-        const position = new maps.LatLng(hospital.lat, hospital.lng);
-        const marker = new maps.Marker({ map: current.map, position, title: hospital.name });
-        maps.event.addListener(marker, 'click', () => setSelected(hospital.id));
-        bounds.extend(position);
-        return { id: hospital.id, name: hospital.name, marker, position };
-      });
-      current.fit = () => (current.pins.length ? current.map.setBounds(bounds) : current.map.setCenter(center));
-      current.fit();
-      setMapError('');
-    }, (error: unknown) => {
-      if (active) setMapError(error instanceof Error ? error.message : '지도를 불러오지 못했어요.');
-    });
-    return () => { active = false; };
-  }, [result]);
-
-  // A window resize changes the box: lay the map out again and show the same hospitals.
-  useEffect(() => {
-    const box = mapBox.current;
-    if (!shown || !box) return;
-    const observer = new ResizeObserver(() => {
-      if (view.current?.box !== box) return;
-      view.current.map.relayout();
-      view.current.fit();
-    });
-    observer.observe(box);
-    return () => observer.disconnect();
-  }, [shown]);
-
-  useEffect(() => {
-    const current = view.current;
-    const pin = current?.pins.find(item => item.id === selected);
-    if (!current || !pin) return;
-    current.info.setContent(label(pin.name));
-    current.info.open(current.map, pin.marker);
-    current.map.panTo(pin.position);
-  }, [selected]);
 
   return (
     <section aria-label="주변 병원 찾기" className={`${CARD} space-y-4`}>
@@ -160,13 +103,15 @@ export default function NearbyHospitals() {
       <p className="text-xs text-muted">입력한 위치와 현재 위치는 이번 검색에만 쓰고 저장하지 않아요. 현재 위치는 약 1km 단위로만 보내요.</p>
 
       {busy && <p aria-live="polite" className="text-sm text-muted">주변 병원을 찾고 있어요…</p>}
-      {message && <p role="alert" className="text-sm font-semibold text-danger">{message}</p>}
+      {message && <div role="alert" className="flex flex-wrap items-center gap-2">
+        <p className="text-sm font-semibold text-danger-text">{message}</p>
+        {failed && where && <button type="button" onClick={() => void search(where)} className={BUTTON}>다시 시도</button>}
+      </div>}
 
       {result && (
         <div className="space-y-3">
           <p className="text-xs text-muted">{`${result.center.label} 기준 · 반경 5km`}</p>
-          <div ref={mapBox} aria-label="병원 위치 지도" className="h-72 w-full overflow-hidden rounded-xl border border-border bg-surface-muted" />
-          {mapError && <p className="text-xs text-muted">{mapError}</p>}
+          <HospitalMap result={result} selected={selected} onSelect={setSelected} />
           {result.hospitals.length ? (
             <ul className="divide-y divide-border">
               {result.hospitals.map(hospital => (

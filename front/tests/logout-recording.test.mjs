@@ -37,7 +37,7 @@ test('logging out during a measurement stops it and saves the last batches with 
   let asked = false;
   assert.equal(await service.logoutAfterSaving(async () => { asked = true; return true; }), true);
   assert.equal(asked, false);
-  assert.deepEqual(events, ['moti-stop-measurement']);
+  assert.deepEqual(events, ['moti-stop-measurement', 'moti-session-changed']);
   assert.equal(globalThis.localStorage.getItem('moti.session'), null);
   assert.equal(anonymous(), 0);
   const saved = mode => server.writes.findLast(batch => (batch.record.mode ?? 'keyboard') === mode).record.id;

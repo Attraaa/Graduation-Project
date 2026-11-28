@@ -11,6 +11,6 @@
 
 ## 서버 설정
 
-AWS 서버의 `MOTI_REVIEW_GATEWAY_URL`에 비공개 HTTPS 게이트웨이의 전체 `/review` 주소를 설정합니다. 미니 PC는 `{"record":"…"}`를 받아 Ollama로 총평을 작성하고 `{"summary":"…","model":"…"}`을 반환합니다. 로그인 검증과 계정당 시간당 10회 제한은 AWS에서 처리합니다. 게이트웨이가 바쁘거나 응답 시간이 초과되면 앱에 다시 시도할 수 있는 메시지를 표시합니다.
+AWS 서버의 `MOTI_REVIEW_GATEWAY_URL`에 비공개 HTTPS 게이트웨이의 전체 `/review` 주소를 설정합니다. 미니 PC는 `{"record":"…"}`를 받아 Ollama로 총평을 작성하고 `{"summary":"…","model":"…"}`을 반환합니다. API는 계정당 한 시간 10회, 전체 한 시간 90회, 동시 2건을 MySQL로 관리합니다. 같은 API 프로세스에 들어온 동일 계정·동일 기록 요청은 진행 중인 결과를 함께 받습니다. `MOTI_AI_REVIEW_ENABLED=false`로 호출을 중단할 수 있습니다. 본 API와 독립 총평 서비스가 같은 DB를 보도록 설정하고 `server/migrations/006_account_protection.sql`을 먼저 적용합니다.
 
 기본 API 서버에 총평 경로가 포함되어 있습니다. 총평만 별도 배포할 때는 `npm run build` 후 `PORT`를 지정하여 `node dist/reviewServer.js`로 루프백에서 실행하고 nginx의 해당 경로를 연결합니다. 프록시 읽기 제한은 100초 이상으로 설정합니다.

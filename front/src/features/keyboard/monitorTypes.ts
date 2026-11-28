@@ -1,5 +1,5 @@
 import type { KeyboardLiveResult } from './runtime'
-import type { KeyboardCount } from '../../../../database/keyboard'
+import type { KeyboardCount, KeyboardInputQuality } from '../../../../database/keyboard'
 
 export type KeyboardMonitorPhase = 'idle' | 'starting' | 'mapping' | 'ready' | 'error'
 /**
@@ -19,6 +19,7 @@ export interface KeyboardMonitorSnapshot {
   /** Scores of the last 50 judged presses (liveScore.ts). Explicit position recapture clears this window. */
   scores: number[]
   counts: KeyboardCount[]
+  quality?: KeyboardInputQuality
   observationStatus: 'off' | 'observing' | 'excluded' | 'error'
 }
 

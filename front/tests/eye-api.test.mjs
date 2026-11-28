@@ -6,7 +6,7 @@ import { MemoryRecords, memoryServer, loggedIn } from './fixtures/memory-records
 
 test('eye HTTP client sends JWT, omits owner query parameters, encodes ids and exposes server errors', async t => {
   const db = new MemoryRecords(), server = memoryServer(db, '7'), originalFetch = globalThis.fetch, requests = [];
-  globalThis.localStorage = loggedIn('7'); globalThis.window = { location: { hash: '#/statistics' } };
+  globalThis.localStorage = loggedIn('7'); globalThis.window = Object.assign(new EventTarget(), { location: { hash: '#/statistics' } });
   globalThis.fetch = async (url, options) => {
     requests.push({ url, ...options });
     assert.equal(options.headers.Authorization, 'Bearer test-token');
@@ -20,11 +20,13 @@ test('eye HTTP client sends JWT, omits owner query parameters, encodes ids and e
     ...emptyEyeTotals(), id: 'eye:/한글', owner: '7', mode: 'eye', startedAt: epoch, updatedAt: epoch,
     offsetMinutes: 0, policyVersion: 'eye-habits-v2', status: 'running',
   } };
-  assert.equal(await recordValue(api.generation('999')), 0);
+  await assert.rejects(recordValue(api.generation('999')), /계정과 현재 로그인 계정이 달라요/);
+  assert.equal(requests.length, 0);
+  assert.equal(await recordValue(api.generation('7')), 0);
   await recordValue(api.writeEye(batch));
-  const query = { owner: '999', from: '2026-10-01', to: '2026-10-02' };
+  const query = { owner: '7', from: '2026-10-01', to: '2026-10-02' };
   assert.deepEqual(await recordValue(api.eyeStatistics(query)), []);
-  assert.equal((await recordValue(api.eyeDetail('999', batch.record.id))).record.owner, '7');
+  assert.equal((await recordValue(api.eyeDetail('7', batch.record.id))).record.owner, '7');
   assert.equal((await recordValue(api.history(query))).records[0].id, batch.record.id);
   assert.equal((await recordValue(api.history({ ...query, offset: 1 }))).records.length, 0);
   const urls = requests.map(({ url }) => new URL(url, 'http://moti.test'));

@@ -15,6 +15,7 @@ async function startApp(t: TestContext, rows: Record<string, unknown>[]) {
   const queries: { sql: string; values: unknown[] }[] = [];
   const pool = {
     query: async (sql: string, values: unknown[]) => {
+      if (sql.startsWith('SELECT session_version FROM users')) return [[{ session_version: 0 }]];
       queries.push({ sql, values });
       return [rows, []];
     },

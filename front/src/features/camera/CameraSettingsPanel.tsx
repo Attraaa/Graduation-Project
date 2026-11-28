@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState, type CSSProperties, type PointerEvent, type ReactNode } from 'react';
-import { CameraOff, CircleCheck, FlipHorizontal2, FlipVertical2, LoaderCircle, RotateCw, RotateCcw, ScanLine, Hand, MousePointer2, Maximize, TriangleAlert } from 'lucide-react';
+import { CameraOff, CircleCheck, FlipHorizontal2, FlipVertical2, LoaderCircle, RotateCw, RotateCcw, ScanLine, Hand, MousePointer2, Maximize, Minus, Plus, TriangleAlert } from 'lucide-react';
 import { getLearningMode } from '../../data/modes';
 import { useCameraSettings } from './context';
 import { defaultQuad, validQuad, type GridSettings, type Point, type Quad } from './profile';
@@ -14,6 +14,12 @@ const AREA_ICON = { trying: <LoaderCircle size={16} className="camera-spin" />, 
 const areaText = ({ recognition, message }: KeyboardAreaStatus) => recognition === 'found' ? '키보드를 자동으로 찾았어요.'
   : recognition === 'waiting' ? '자동으로 찾지 못해 직접 맞추기로 바꿨어요. 모서리를 끌어 영역을 맞추면 판정을 시작해요.'
     : message || '키보드를 자동으로 찾는 중이에요.';
+const DIRECTIONS = [
+  { key: 'ArrowLeft', label: '왼쪽', icon: '←', dx: -1, dy: 0 },
+  { key: 'ArrowUp', label: '위쪽', icon: '↑', dx: 0, dy: -1 },
+  { key: 'ArrowDown', label: '아래쪽', icon: '↓', dx: 0, dy: 1 },
+  { key: 'ArrowRight', label: '오른쪽', icon: '→', dx: 1, dy: 0 },
+];
 
 export default function CameraSettingsPanel({ selection, keyboardStatus }: { selection?: ReactNode; keyboardStatus?: KeyboardAreaStatus }) {
   const camera = useCameraSettings();
@@ -25,6 +31,7 @@ export default function CameraSettingsPanel({ selection, keyboardStatus }: { sel
   const [previewWidth, setPreviewWidth] = useState(700);
   const [tool, setTool] = useState<'edit' | 'move'>(camera.modeId === 'keyboard' ? 'edit' : 'move');
   const [panning, setPanning] = useState(false);
+  const [gridTarget, setGridTarget] = useState('area');
   const pan = useRef<{ pointerId: number; start: Point; frame: CameraFraming } | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const [settings, setSettings] = useState<MediaTrackSettings & { exposureTime?: number; exposureMode?: string }>({});
@@ -132,16 +139,37 @@ export default function CameraSettingsPanel({ selection, keyboardStatus }: { sel
     const current = drag.current;
     if (!current) return;
     const p = point(event);
-    const quad = current.quad.map(p => [...p]) as Quad;
+    const quad = current.corner === null ? shiftQuad(current.quad, p[0] - current.start[0], p[1] - current.start[1]) : current.quad.map(point => [...point]) as Quad;
     if (current.corner !== null) quad[current.corner] = p;
-    else {
-      const base = quad.map(point => unframePoint(point, profile));
-      const dx = profile.zoom * Math.max(-Math.min(...base.map(p => p[0])), Math.min(1 - Math.max(...base.map(p => p[0])), (p[0] - current.start[0]) / profile.zoom));
-      const dy = profile.zoom * Math.max(-Math.min(...base.map(p => p[1])), Math.min(1 - Math.max(...base.map(p => p[1])), (p[1] - current.start[1]) / profile.zoom));
-      quad.forEach(p => { p[0] += dx; p[1] += dy; });
-    }
+    saveQuad(quad);
+  };
+  const shiftQuad = (quad: Quad, dx: number, dy: number): Quad => {
+    const base = quad.map(point => unframePoint(point, profile));
+    const clampShift = (axis: 0 | 1, delta: number) => profile.zoom * Math.max(-Math.min(...base.map(p => p[axis])),
+      Math.min(1 - Math.max(...base.map(p => p[axis])), delta / profile.zoom));
+    const x = clampShift(0, dx), y = clampShift(1, dy);
+    return quad.map(point => [point[0] + x, point[1] + y]) as Quad;
+  };
+  const saveQuad = (quad: Quad) => {
     if (validQuad(quad.map(point => unframePoint(point, profile)), .015 / (profile.zoom * profile.zoom))) changeGrid({ quad });
   };
+  const nudgeGrid = (dx: number, dy: number) => {
+    if (gridTarget === 'area') { saveQuad(shiftQuad(grid.quad, dx, dy)); return; }
+    const corner = Number(gridTarget), quad = grid.quad.map(point => [...point]) as Quad;
+    quad[corner] = [quad[corner][0] + dx, quad[corner][1] + dy];
+    saveQuad(quad);
+  };
+  const nudgePreview = (dx: number, dy: number) =>
+    update(normalizeFraming({ ...profile, panX: profile.panX + dx, panY: profile.panY + dy }));
+  const directionControls = (label: string, nudge: (x: number, y: number) => void) =>
+    <div role="group" aria-label={label} className="camera-button-grid" onKeyDown={event => {
+      const direction = DIRECTIONS.find(item => item.key === event.key);
+      if (direction) { event.preventDefault(); nudge(direction.dx * .01, direction.dy * .01); }
+    }}>
+      {DIRECTIONS.map(direction => <button key={direction.key} type="button" aria-label={`${label} ${direction.label}`}
+        onClick={() => nudge(direction.dx * .01, direction.dy * .01)}>{direction.icon} {direction.label}</button>)}
+    </div>;
+  const corner = gridTarget === 'area' ? null : grid.quad[Number(gridTarget)];
   const finishDrag = () => { drag.current = null; setEditing(false); };
   const gridDirections = <>
     <button type="button" aria-label="영역 좌우 반전" onClick={() => changeGrid({ flipX: !grid.flipX })}><FlipHorizontal2 size={17} />좌우 반전</button>
@@ -169,18 +197,32 @@ export default function CameraSettingsPanel({ selection, keyboardStatus }: { sel
         {connected && <div className="camera-preview-toolbar" role="toolbar" aria-label="미리보기 보기 도구">
           {camera.modeId === 'keyboard' && <><button type="button" aria-label="영역 편집" aria-pressed={tool === 'edit'} title="키보드 영역과 모서리 편집" onClick={() => setTool('edit')}><MousePointer2 size={16} />영역 편집</button><button type="button" aria-label="화면 이동" aria-pressed={tool === 'move'} title="드래그로 이동 · 휠 버튼 드래그도 가능" onClick={() => setTool('move')}><Hand size={16} />이동</button></>}
           <output aria-label="카메라 확대율" title="영상 위에서 휠로 확대·축소">{Math.round(profile.zoom * 100)}%</output>
+          <button type="button" aria-label="영상 축소" title="영상 축소" onClick={() => update(zoomFraming(profile, [.5, .5], 100))}><Minus size={16} /></button>
+          <button type="button" aria-label="영상 확대" title="영상 확대" onClick={() => update(zoomFraming(profile, [.5, .5], -100))}><Plus size={16} /></button>
           <button type="button" aria-label="확대·이동 초기화" title="확대·이동 초기화" onClick={() => update({ zoom: 1, panX: 0, panY: 0 })}><Maximize size={16} /></button>
         </div>}
       </section>
       <aside className="camera-settings-controls">
         {selection}
+        {connected && profile.zoom > 1 && <section><h2>확대 영상 이동</h2>{directionControls('영상 이동', nudgePreview)}
+          <p className="camera-hint">가로 {Math.round(profile.panX * 100)}% · 세로 {Math.round(profile.panY * 100)}%</p></section>}
         {camera.modeId === 'keyboard' && <section><h2><ScanLine size={18} />키보드 영역</h2><div className="camera-choice"><button aria-pressed={grid.source === 'automatic'} onClick={tryAutomatic}>{areaStatus?.recognition === 'trying' ? <><LoaderCircle size={15} className="camera-spin" />찾는 중</> : '자동 인식'}</button><button aria-pressed={grid.source === 'manual'} onClick={chooseManual}>직접 맞추기</button></div>
           {areaStatus ? <p role={areaStatus.recognition === 'waiting' ? 'alert' : 'status'} className={`camera-status is-${areaStatus.recognition}`}>{AREA_ICON[areaStatus.recognition as keyof typeof AREA_ICON]}<span>{areaText(areaStatus)}</span></p>
-            : <p className="camera-hint">{grid.source === 'manual' ? '네 모서리를 맞추고, 내부를 드래그해 이동하세요.' : '자동 인식이 어려우면 바로 직접 맞출 수 있어요.'}</p>}<h3>영역 방향</h3><div className="camera-button-grid">{gridDirections}</div><button className="camera-reset" onClick={() => changeGrid({ quad: defaultQuad(), flipX: false, flipY: false, turns: 0 })}><RotateCcw size={15} />영역 초기화</button></section>}
+            : <p className="camera-hint">{grid.source === 'manual' ? '네 모서리를 맞추고, 내부를 드래그해 이동하세요.' : '자동 인식이 어려우면 바로 직접 맞출 수 있어요.'}</p>}
+          {connected && grid.source === 'manual' && <>
+            <label className="camera-field">조정할 위치<select value={gridTarget} onChange={event => setGridTarget(event.target.value)}>
+              <option value="area">전체 영역</option>
+              {['왼쪽 위', '오른쪽 위', '오른쪽 아래', '왼쪽 아래'].map((label, index) => <option key={label} value={index}>{label} 모서리</option>)}
+            </select></label>
+            {directionControls('키보드 영역 조정', nudgeGrid)}
+            {corner && <p className="camera-hint">가로 {Math.round(corner[0] * 100)}% · 세로 {Math.round(corner[1] * 100)}%</p>}
+          </>}
+          <h3>영역 방향</h3><div className="camera-button-grid">{gridDirections}</div><button className="camera-reset" onClick={() => changeGrid({ quad: defaultQuad(), flipX: false, flipY: false, turns: 0 })}><RotateCcw size={15} />영역 초기화</button></section>}
         <section><h2>영상 방향</h2><div className="camera-button-grid"><button aria-pressed={profile.flipX} onClick={() => update({ flipX: !profile.flipX })}><FlipHorizontal2 size={17} />좌우 반전</button><button aria-pressed={profile.flipY} onClick={() => update({ flipY: !profile.flipY })}><FlipVertical2 size={17} />상하 반전</button><button onClick={() => update({ angle: ((profile.angle + 270) % 360) - 180 })}><RotateCw size={17} />90° 회전</button><button onClick={() => update({ angle: ((profile.angle + 360) % 360) - 180 })}><RotateCw size={17} />180° 회전</button></div><Range label="기울기" value={profile.angle} min={-180} max={180} suffix="°" onChange={angle => update({ angle })} /></section>
         <section><h2>영상 조정</h2><Range label="밝기" value={profile.brightness} min={50} max={150} suffix="%" onChange={brightness => update({ brightness })} /><Range label="대비" value={profile.contrast} min={50} max={150} suffix="%" onChange={contrast => update({ contrast })} /><label className="camera-field">해상도<select value={profile.resolution} onChange={event => update({ resolution: Number(event.target.value) })}><option value={640}>640 · 가볍게</option><option value={1280}>1280 · 기본</option><option value={1920}>1920 · 선명하게</option></select></label>{settings.width && <p className="camera-hint">현재 영상 {settings.width} × {settings.height}</p>}<button className="camera-reset" onClick={() => update({ left: 0, top: 0, width: 1, height: 1, angle: 0, brightness: 100, contrast: 100, flipX: camera.modeId !== 'keyboard', flipY: false, zoom: 1, panX: 0, panY: 0 })}><RotateCcw size={15} />영상 조정 초기화</button></section>
         <section><h2>카메라 노출</h2>{!connected ? <p className="camera-hint">카메라 연결 후 지원 여부를 확인합니다.</p> : caps?.exposureMode?.length ? <><label className="camera-field">노출 방식<select value={profile.exposureMode || settings.exposureMode || caps.exposureMode[0]} onChange={event => update({ exposureMode: event.target.value })}>{caps.exposureMode.map(mode => <option key={mode} value={mode}>{mode === 'manual' ? '수동' : mode === 'continuous' ? '자동' : mode}</option>)}</select></label>{profile.exposureMode === 'manual' && caps.exposureTime && <Range label="노출 시간" value={profile.exposure ?? settings.exposureTime ?? caps.exposureTime.min} min={caps.exposureTime.min} max={caps.exposureTime.max} step={caps.exposureTime.step || 1} onChange={exposure => update({ exposure })} />}{settings.exposureTime !== undefined && <p className="camera-hint">현재 노출 시간 {settings.exposureTime}</p>}</> : <p className="camera-hint">이 카메라에서는 앱의 노출 조정을 지원하지 않습니다.</p>}</section>
         {camera.exposureError && <p role="alert" className="camera-error">설정 적용 오류: {camera.exposureError}</p>}
+        {camera.storageError && <p role="alert" className="camera-error">{camera.storageError}</p>}
       </aside>
     </main>
     {menu && <div role="menu" className="camera-grid-menu" style={{ left: menu.x, top: menu.y }} onClick={event => event.stopPropagation()}><strong>키보드 영역 방향</strong>{gridDirections}</div>}

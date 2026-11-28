@@ -1,13 +1,13 @@
-import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import type { LegendItem } from './parts';
 
 /** The main 1-day chart uses the same lines and measured points as the date charts. */
-export default function HourlyChart({ label, data, lines, domain, unit, expanded = false, labelFor = hour => `${hour}시` }: {
+export default function HourlyChart({ label, data, lines, domain, unit, expanded = false, labelFor = hour => `${hour}시`, selectedHour, className }: {
   label: string; data: Record<string, number | null>[]; lines: LegendItem[]; domain: [number, number]; unit: string;
-  expanded?: boolean; labelFor?: (slot: number) => string;
+  expanded?: boolean; labelFor?: (slot: number) => string; selectedHour?: number; className?: string;
 }) {
   return (
-    <div className={expanded ? 'h-72' : 'h-28'} role="img" aria-label={label}>
+    <div className={className ?? (expanded ? 'h-72' : 'h-28')} role="img" aria-label={label}>
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={data} margin={{ top: expanded ? 8 : 4, right: expanded ? 16 : 8, bottom: 0, left: expanded ? 0 : 8 }}>
           {expanded && <CartesianGrid vertical={false} stroke="var(--color-track)" />}
@@ -15,6 +15,7 @@ export default function HourlyChart({ label, data, lines, domain, unit, expanded
             tick={{ fill: 'var(--color-muted)', fontSize: 11 }} tickFormatter={labelFor} />
           <YAxis hide={!expanded} domain={domain} width={30} allowDecimals={false} tickLine={false} axisLine={false}
             tick={{ fill: 'var(--color-muted)', fontSize: 11 }} />
+          {selectedHour !== undefined && <ReferenceLine x={selectedHour} stroke="var(--color-border-strong)" strokeDasharray="3 4" />}
           <Tooltip isAnimationActive={false} content={({ active, label: hour, payload }) => (active && payload?.length ? (
             <div className="rounded-lg border border-border bg-surface px-2 py-1 text-xs shadow">
               <p className="font-semibold text-heading">{labelFor(Number(hour))}</p>

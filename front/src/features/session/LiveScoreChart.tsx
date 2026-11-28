@@ -11,7 +11,7 @@ export default function LiveScoreChart({ points, keyboard = false }: { points: T
     <div className="mb-1 flex flex-wrap items-center justify-between gap-2"><h3 className="text-[13px] font-bold text-heading">최근 5분</h3>
       <div className="flex gap-3 text-xs text-muted">{lines.map(line => <span key={line.key} className="flex items-center gap-1"><i className="h-2 w-2 rounded-full" style={{ backgroundColor: line.color }} />{line.name}</span>)}</div>
     </div>
-    <div className="relative min-h-40 min-w-0 flex-1 md:min-h-0">
+    <div className="relative min-h-0 min-w-0 flex-1">
       {!hasScore ? <p className="absolute inset-0 flex items-center justify-center text-sm text-muted">측정한 점수가 여기에 표시됩니다</p> : <div className="absolute inset-0"><ResponsiveContainer width="100%" height="100%"><LineChart data={points} margin={{ top: 6, right: 8, bottom: 0, left: 0 }}>
         <CartesianGrid vertical={false} stroke="var(--color-track)" />
         <XAxis dataKey="at" type="number" domain={domain} ticks={ticks} allowDataOverflow interval="preserveStartEnd" minTickGap={14}

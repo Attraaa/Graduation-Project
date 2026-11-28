@@ -1,4 +1,6 @@
 import { Play } from 'lucide-react';
+import { useSyncExternalStore } from 'react';
+import { recordingDeletionPending, subscribeRecordingDeletion } from '../records/deletion';
 import { longDate } from '../dashboard/format';
 
 export type StartMode = 'upper_body' | 'keyboard';
@@ -6,7 +8,7 @@ const STARTS: { id: StartMode; name: string; color: string }[] = [
   { id: 'upper_body', name: '상체', color: 'bg-mode-upper' },
   { id: 'keyboard', name: '키보드', color: 'bg-mode-keyboard' },
 ];
-const LINK = 'text-sm font-semibold text-secondary hover:underline';
+const LINK = 'text-sm font-semibold text-secondary-text hover:underline';
 const OUTLINE = 'rounded-full border border-border px-3 py-1.5 text-sm font-semibold text-heading hover:bg-nav-active';
 
 /** Today offers the two monitoring starts; a past day offers its closest recorded days. */
@@ -14,6 +16,7 @@ export default function EmptyDay({ date, isToday, previous, next, onSelect, onSt
   date: string; isToday: boolean; previous: string | null; next: string | null;
   onSelect: (date: string) => void; onStart: (mode: StartMode) => void;
 }) {
+  const deleting = useSyncExternalStore(subscribeRecordingDeletion, recordingDeletionPending, recordingDeletionPending);
   return (
     <section aria-label={`${longDate(date)} 기록`} className="rounded-2xl border border-border bg-surface p-4">
       <div className="flex items-center justify-between gap-2">
@@ -26,7 +29,7 @@ export default function EmptyDay({ date, isToday, previous, next, onSelect, onSt
           <p className="text-sm text-muted">측정을 시작하면 여기에 오늘 기록이 쌓여요.</p>
           <div className="flex flex-wrap justify-center gap-2">
             {STARTS.map(mode => (
-              <button key={mode.id} type="button" onClick={() => onStart(mode.id)} className={`flex items-center gap-2 ${OUTLINE}`}>
+              <button key={mode.id} type="button" disabled={deleting} onClick={() => onStart(mode.id)} className={`flex items-center gap-2 disabled:opacity-45 ${OUTLINE}`}>
                 <span aria-hidden="true" className={`flex h-6 w-6 items-center justify-center rounded-full text-white ${mode.color}`}>
                   <Play size={12} fill="currentColor" className="ml-0.5" />
                 </span>

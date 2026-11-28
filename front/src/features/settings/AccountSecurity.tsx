@@ -137,15 +137,20 @@ function PasswordWindow({ username, email, onClose, onDone }: {
 export default function AccountSecurity() {
   const { notify } = useDialog();
   const username = getCurrentUser()?.username ?? '';
-  // undefined until the server answers, null when the account has no recovery address.
-  const [savedEmail, setSavedEmail] = useState<string | null>();
+  const [emailState, setEmailState] = useState<{ status: 'loading' | 'error' } | { status: 'ready'; email: string | null }>({ status: 'loading' });
+  const [attempt, retry] = useState(0);
+  const savedEmail = emailState.status === 'ready' ? emailState.email : undefined;
   const [open, setOpen] = useState<'email' | 'password' | null>(null);
 
   useEffect(() => {
-    let active = true;
-    readAccountEmail().then(value => { if (active) setSavedEmail(value); }).catch(() => {});
-    return () => { active = false; };
-  }, []);
+    const request = new AbortController();
+    readAccountEmail(request.signal).then(email => {
+      if (!request.signal.aborted) setEmailState({ status: 'ready', email });
+    }).catch(() => {
+      if (!request.signal.aborted) setEmailState({ status: 'error' });
+    });
+    return () => request.abort();
+  }, [attempt]);
 
   const openPassword = () => {
     if (savedEmail) setOpen('password');
@@ -157,17 +162,19 @@ export default function AccountSecurity() {
       <div className="space-y-1">
         <p className="text-xs font-semibold text-muted">이메일 (아이디 찾기·비밀번호 재설정용)</p>
         <p className="truncate text-sm font-semibold text-heading">
-          {savedEmail ?? (savedEmail === null ? '등록된 이메일 없음' : '불러오는 중…')}
+          {savedEmail ?? (savedEmail === null ? '등록된 이메일 없음' : emailState.status === 'error' ? '이메일 조회 실패' : '불러오는 중…')}
         </p>
+        {emailState.status === 'error' && <button type="button" className={BUTTON}
+          onClick={() => { setEmailState({ status: 'loading' }); retry(value => value + 1); }}>이메일 다시 조회</button>}
       </div>
       {savedEmail === null && <p className="text-xs font-semibold text-danger">등록된 이메일이 없어요. 등록해야 아이디 찾기와 비밀번호 재설정을 할 수 있어요.</p>}
       <div className="mt-auto grid grid-cols-2 gap-2">
-        <button type="button" onClick={() => setOpen('email')} className={BUTTON}>{savedEmail === null ? '이메일 등록' : '이메일 변경'}</button>
-        <button type="button" onClick={openPassword} className={BUTTON_STRONG}>비밀번호 재설정</button>
+        <button type="button" disabled={emailState.status !== 'ready'} onClick={() => setOpen('email')} className={BUTTON}>{savedEmail === null ? '이메일 등록' : '이메일 변경'}</button>
+        <button type="button" disabled={emailState.status !== 'ready'} onClick={openPassword} className={BUTTON_STRONG}>비밀번호 재설정</button>
       </div>
       {open === 'email' && (
         <EmailWindow current={savedEmail ?? null} onClose={() => setOpen(null)} onSaved={async (email, message) => {
-          setSavedEmail(email);
+          setEmailState({ status: 'ready', email });
           setOpen(null);
           await notify({ title: '변경 완료', message, tone: 'success' });
         }} />

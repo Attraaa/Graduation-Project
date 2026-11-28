@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { SourceError, SourceLoading } from '../features/dashboard/SourceState';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { SourceError } from '../features/dashboard/SourceState';
 import { pastDateOrNull } from '../features/dashboard/summary';
 import { calendarDays, canMoveForward, entryKey, leadingBlanks, movePeriod, neighborDates, periodTitle, visibleDates } from '../features/history/calendar';
 import type { CalendarView } from '../features/history/calendar';
@@ -16,21 +16,23 @@ import { todayDateKey } from '../features/records/views';
 const VIEWS: { id: CalendarView; name: string }[] = [{ id: 'week', name: '주간' }, { id: 'month', name: '월간' }];
 
 const LearningHistory = () => {
-  const [params] = useSearchParams();
+  const [params, setParams] = useSearchParams();
+  const { state } = useLocation();
   const navigate = useNavigate();
   const monitoring = useMonitoring();
   const today = todayDateKey();
-  const [date, setDate] = useState(() => pastDateOrNull(params.get('date'), today) ?? today);
+  const date = pastDateOrNull(params.get('date'), today) ?? today;
   const [view, setView] = useState<CalendarView>('week');
   const [picked, setPicked] = useState<string | null>(null);
-  const { byDate, status, retry, retryKeyboard } = useHistoryData(view, date, today);
+  const { byDate, hasLoadedCameraRecords, status, retryHistory, retryKeyboard } = useHistoryData(view, date, today);
   const loading = status.history === 'loading' || status.keyboard === 'loading';
+  const calendarStatus = loading ? 'loading' : status.history === 'ready' && status.keyboard === 'ready' ? 'ready' : 'error';
   const dates = visibleDates(view, date);
   const entries = byDate.get(date) ?? [];
   const selected = entries.find(entry => entryKey(entry) === picked) ?? entries[0] ?? null;
   const detail = useRecordDetail(selected);
   const { previous, next } = neighborDates(byDate, date, today);
-  const choose = (day: string) => { setDate(day); setPicked(null); };
+  const choose = (day: string) => { setParams({ date: day }, { replace: true }); setPicked(null); };
 
   return (
     <div className="space-y-4 pb-4">
@@ -47,36 +49,25 @@ const LearningHistory = () => {
           </div>
         </div>
       </header>
-      {loading ? (
-        <>
-          <SourceLoading className="h-40" />
-          <SourceLoading className="h-64" />
-        </>
-      ) : status.history === 'error' ? (
-        <SourceError onRetry={retry} />
-      ) : (
-        <>
-          <HistoryCalendar view={view} title={periodTitle(view, dates)} days={calendarDays(dates, byDate, today)}
-            blanks={leadingBlanks(view, dates)} selected={date} canForward={canMoveForward(view, date, today)}
-            onSelect={choose} onMove={direction => choose(movePeriod(view, date, direction, today))} />
-          {status.keyboard === 'error' && (
-            <div role="alert" className="flex flex-wrap items-center gap-2 text-sm text-muted">
-              <span>키보드 기록을 불러오지 못했어요</span>
-              <button type="button" onClick={retryKeyboard}
-                className="rounded-lg border border-border px-2 py-1 font-semibold text-heading hover:bg-nav-active">다시 시도</button>
-            </div>
-          )}
-          {selected ? (
-            <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,13rem)_minmax(0,1fr)] xl:grid-cols-[minmax(0,15rem)_minmax(0,1fr)]">
-              <DayRecords date={date} entries={entries} selectedKey={entryKey(selected)} onSelect={setPicked} />
-              <RecordDetail entry={selected} query={detail} />
-            </div>
-          ) : (
-            <EmptyDay date={date} isToday={date === today} previous={previous} next={next}
-              onSelect={choose} onStart={mode => { (mode === 'upper_body' ? monitoring.upper : monitoring.keyboard).start(); navigate('/dashboard'); }} />
-          )}
-        </>
-      )}
+      <HistoryCalendar title={periodTitle(view, dates)} days={calendarDays(dates, byDate, today)}
+        blanks={leadingBlanks(view, dates)} selected={date} recordsStatus={calendarStatus} focusSelected={state?.focusHistoryDate === true}
+        canForward={canMoveForward(view, date, today)}
+        onSelect={choose} onMove={direction => choose(movePeriod(view, date, direction, today))} />
+      {loading && <p role="status" className="text-sm text-muted">
+        {[status.history === 'loading' && '상체·안구', status.keyboard === 'loading' && '키보드'].filter(Boolean).join(', ')} 기록을 불러오는 중이에요
+      </p>}
+      {status.history === 'error' && <SourceError onRetry={retryHistory}
+        message={hasLoadedCameraRecords ? '상체·안구 기록 일부를 불러오지 못했어요' : '상체·안구 기록을 불러오지 못했어요'} />}
+      {status.keyboard === 'error' && <SourceError onRetry={retryKeyboard} message="키보드 기록을 불러오지 못했어요" />}
+      {selected ? (
+        <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,13rem)_minmax(0,1fr)] xl:grid-cols-[minmax(0,15rem)_minmax(0,1fr)]">
+          <DayRecords date={date} entries={entries} selectedKey={entryKey(selected)} onSelect={setPicked} />
+          <RecordDetail entry={selected} query={detail} />
+        </div>
+      ) : calendarStatus === 'ready' ? (
+        <EmptyDay date={date} isToday={date === today} previous={previous} next={next}
+          onSelect={choose} onStart={mode => { (mode === 'upper_body' ? monitoring.upper : monitoring.keyboard).start(); navigate('/dashboard'); }} />
+      ) : null}
     </div>
   );
 };

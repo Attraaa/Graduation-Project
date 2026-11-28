@@ -12,6 +12,7 @@ export interface CameraRuntime {
   deviceId: string;
   editing: boolean;
   generation: number;
+  frameGeneration: number | null;
   frameAt: number | null;
   videoTime: number;
   metrics: { encodingMs: number; roundTripMs: number; inferenceMs: number; resultAgeMs: number } | null;
@@ -32,6 +33,7 @@ export interface CameraContextValue {
   detach: () => void;
   open: () => void;
   exposureError: string | null;
+  storageError: string;
 }
 export const CameraContext = createContext<CameraContextValue | null>(null);
 export function useCameraSettings() {

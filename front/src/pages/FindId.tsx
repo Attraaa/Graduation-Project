@@ -30,16 +30,16 @@ const FindId = () => {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <input
+          <label className="block space-y-1 text-sm font-semibold text-heading"><span>이메일</span><input
             type="email"
-            placeholder="이메일"
+            aria-describedby={message ? 'find-id-result' : undefined}
             autoComplete="email"
             className="w-full rounded-2xl border-2 border-gray-200 bg-gray-50 px-4 py-4 font-bold text-gray-700 outline-none transition focus:border-[#1cb0f6] focus:bg-white"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
-          />
-          {message && <p role="status" className="rounded-2xl bg-gray-50 p-4 text-sm font-bold text-gray-600">{message}</p>}
+          /></label>
+          {message && <p id="find-id-result" role="status" className="rounded-2xl bg-gray-50 p-4 text-sm font-bold text-gray-600">{message}</p>}
           <Button type="submit" variant="secondary" fullWidth disabled={sending}>
             {sending ? '보내는 중…' : '아이디 찾기'}
           </Button>

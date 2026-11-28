@@ -5,6 +5,8 @@ import { asyncHandler, HttpError } from '../http.js';
 import { bodyObject, text, password, email, settingsObject, sixDigitCode } from '../validation.js';
 import { spendEmailCode } from './recovery.js';
 import type { RowDataPacket, ResultSetHeader } from 'mysql2';
+import { enforce, limit, memoryRequestLimits, type RequestLimits } from '../services/requestLimits.js';
+import { verifyInTransaction } from '../services/verificationTransaction.js';
 
 interface UserRow extends RowDataPacket {
   id: number;
@@ -12,6 +14,7 @@ interface UserRow extends RowDataPacket {
   nickname: string;
   email: string | null;
   password_hash: string;
+  session_version: number;
   settings: unknown;
 }
 
@@ -30,8 +33,9 @@ const readSettings = (value: unknown): Record<string, unknown> => {
     ? value as Record<string, unknown> : {};
 };
 
-export function createAuthRouter(pool: Pool, auth: Auth) {
+export function createAuthRouter(pool: Pool, auth: Auth, limits: RequestLimits = memoryRequestLimits()) {
   const router = Router();
+  const limited = '요청이 너무 많아요. 잠시 후 다시 시도해 주세요.';
 
   router.post('/register', asyncHandler(async (req, res) => {
     const input = bodyObject(req.body);
@@ -41,15 +45,19 @@ export function createAuthRouter(pool: Pool, auth: Auth) {
     // Required: finding an ID or resetting a password sends mail to this address, so it needs the code mailed to it.
     const address = email(input.email);
     const code = sixDigitCode(input.code);
+    await enforce(limits, [
+      limit(`register:ip:${req.ip}`, 20, 600), limit(`register:address:${address}`, 10, 600),
+    ], limited);
     const [rows] = await pool.query<UserRow[]>('SELECT id FROM users WHERE username = ?', [username]);
     if (rows.length > 0) throw new HttpError(409, '이미 사용 중인 아이디입니다.');
-    await spendEmailCode(pool, address, code);
-    const hash = await hashPassword(plain);
     try {
-      await pool.query<ResultSetHeader>(
-        'INSERT INTO users (username, nickname, email, password_hash) VALUES (?, ?, ?, ?)',
-        [username, nickname, address, hash],
-      );
+      await verifyInTransaction(pool, async connection => {
+        await spendEmailCode(connection, address, code);
+        const hash = await hashPassword(plain);
+        await connection.query<ResultSetHeader>(
+          'INSERT INTO users (username, nickname, email, password_hash) VALUES (?, ?, ?, ?)', [username, nickname, address, hash],
+        );
+      });
     } catch (error) {
       // The unique DB constraint also covers simultaneous registrations for the same username.
       if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'ER_DUP_ENTRY') {
@@ -65,14 +73,18 @@ export function createAuthRouter(pool: Pool, auth: Auth) {
     const username = text(input.username, '아이디', 50);
     // Permit old passwords at login; the byte limit applies when creating a new hash.
     const plain = text(input.password, '비밀번호', 4096, false);
+    await enforce(limits, [
+      limit(`login:account:${username.normalize('NFKC').toLowerCase()}`, 15, 600),
+      limit(`login:ip:${req.ip}`, 60, 600),
+    ], limited);
     const [rows] = await pool.query<UserRow[]>(
-      'SELECT id, username, nickname, password_hash FROM users WHERE username = ?', [username],
+      'SELECT id, username, nickname, password_hash, session_version FROM users WHERE username = ?', [username],
     );
     const user = rows[0];
     if (!user || !(await comparePassword(plain, user.password_hash))) {
       throw new HttpError(401, '아이디 또는 비밀번호를 확인해 주세요.');
     }
-    const token = auth.signToken({ userId: user.id, username: user.username });
+    const token = auth.signToken({ userId: user.id, username: user.username, sessionVersion: Number(user.session_version) });
     res.json({ token, user: { id: user.id, username: user.username, nickname: user.nickname } });
   }));
 
@@ -100,14 +112,17 @@ export function createAuthRouter(pool: Pool, auth: Auth) {
       // Not 401: the app treats a 401 with a token as an expired login and logs out.
       throw new HttpError(400, '현재 비밀번호를 확인해 주세요.');
     }
+    return rows[0].password_hash;
   };
 
   router.put('/me/password', auth.requireAuth, asyncHandler(async (req, res) => {
     const input = bodyObject(req.body);
     const newPassword = password(input.newPassword, '새 비밀번호');
-    await checkCurrentPassword(req.user!.userId, input.currentPassword);
+    const oldHash = await checkCurrentPassword(req.user!.userId, input.currentPassword);
     const hash = await hashPassword(newPassword);
-    await pool.query('UPDATE users SET password_hash = ? WHERE id = ?', [hash, req.user!.userId]);
+    const [updated] = await pool.query<ResultSetHeader>('UPDATE users SET password_hash = ?, session_version = session_version + 1 WHERE id = ? AND password_hash = ?',
+      [hash, req.user!.userId, oldHash]);
+    if (!updated.affectedRows) throw new HttpError(409, '비밀번호가 바뀌었어요. 다시 로그인해 주세요.');
     res.json({ message: '비밀번호가 변경되었습니다.' });
   }));
 
@@ -116,9 +131,14 @@ export function createAuthRouter(pool: Pool, auth: Auth) {
     const input = bodyObject(req.body);
     const address = email(input.email);
     const code = sixDigitCode(input.code);
-    await checkCurrentPassword(req.user!.userId, input.currentPassword);
-    await spendEmailCode(pool, address, code);
-    await pool.query('UPDATE users SET email = ? WHERE id = ?', [address, req.user!.userId]);
+    const oldHash = await checkCurrentPassword(req.user!.userId, input.currentPassword);
+    await verifyInTransaction(pool, async connection => {
+      await spendEmailCode(connection, address, code);
+      const [updated] = await connection.query<ResultSetHeader>('UPDATE users SET email = ? WHERE id = ? AND password_hash = ?',
+        [address, req.user!.userId, oldHash]);
+      if (!updated.affectedRows) throw new HttpError(409, '계정 설정이 바뀌었어요. 다시 로그인해 주세요.');
+      await connection.query('DELETE FROM password_reset_codes WHERE user_id = ?', [req.user!.userId]);
+    });
     res.json({ message: '이메일이 변경되었습니다.' });
   }));
 

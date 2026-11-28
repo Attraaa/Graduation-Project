@@ -1,5 +1,5 @@
 import type { RecordsApi, RecordsResult } from '../../../../database/contracts.ts';
-import { apiRequest } from '../../utils/apiClient';
+import { apiRequest, readSession } from '../../utils/apiClient';
 
 import type { PostureTimelineBatch } from './postureTimelineContract';
 import type { ReviewSession } from './reviewSession';
@@ -18,21 +18,35 @@ const search = ({ from, to, mode, offset }: { from: string; to: string; mode?: s
   from, to, ...(mode ? { mode } : {}), ...(offset ? { offset: String(offset) } : {}),
 });
 const path = (id: string) => encodeURIComponent(id);
+const keyboardQualityOwners = new Set<string>();
+function request<T>(owner: string, url: string, options?: { method: string; body?: unknown }) {
+  const session = readSession();
+  if (!session || session.user.id !== owner) throw new Error('기록의 계정과 현재 로그인 계정이 달라요.');
+  return apiRequest<T>(url, { ...options, session });
+}
 
 const serverRecords: RecordsApi = {
-  generation: () => call(async () => (await apiRequest<{ generation: number }>('/api/records/generation')).generation),
-  write: batch => call(() => apiRequest<void>('/api/records/posture', { method: 'POST', body: batch })),
-  list: query => call(() => apiRequest('/api/records/posture' + search(query))),
-  detail: (_owner, id) => call(() => apiRequest('/api/records/posture/' + path(id))),
-  statistics: query => call(() => apiRequest('/api/records/posture-statistics' + search({ from: query.from, to: query.to, mode: query.mode }))),
-  clear: () => call(async () => (await apiRequest<{ generation: number }>('/api/records', { method: 'DELETE' })).generation),
-  writeKeyboard: batch => call(() => apiRequest<void>('/api/records/keyboard', { method: 'POST', body: batch })),
-  keyboardStatistics: ({ from, to }) => call(() => apiRequest('/api/records/keyboard' + search({ from, to }))),
-  keyboardDetail: (_owner, id) => call(() => apiRequest('/api/records/keyboard/' + path(id))),
-  writeEye: batch => call(() => apiRequest<void>('/api/records/eye', { method: 'POST', body: batch })),
-  eyeStatistics: ({ from, to }) => call(() => apiRequest('/api/records/eye-statistics' + search({ from, to }))),
-  eyeDetail: (_owner, id) => call(() => apiRequest('/api/records/eye/' + path(id))),
-  history: ({ from, to, offset }) => call(() => apiRequest('/api/records/history' + search({ from, to, offset }))),
+  generation: owner => call(async () => {
+    const response = await request<{ generation: number; keyboardInputQuality?: boolean }>(owner, '/api/records/generation');
+    if (response.keyboardInputQuality) keyboardQualityOwners.add(owner); else keyboardQualityOwners.delete(owner);
+    return response.generation;
+  }),
+  write: batch => call(() => request<void>(batch.record.owner, '/api/records/posture', { method: 'POST', body: batch })),
+  list: query => call(() => request(query.owner, '/api/records/posture' + search(query))),
+  detail: (owner, id) => call(() => request(owner, '/api/records/posture/' + path(id))),
+  statistics: query => call(() => request(query.owner, '/api/records/posture-statistics' + search(query))),
+  clear: owner => call(async () => (await request<{ generation: number }>(owner, '/api/records', { method: 'DELETE' })).generation),
+  writeKeyboard: batch => call(() => {
+    const { quality, ...legacyRecord } = batch.record;
+    const body = quality && !keyboardQualityOwners.has(batch.record.owner) ? { ...batch, record: legacyRecord } : batch;
+    return request<void>(batch.record.owner, '/api/records/keyboard', { method: 'POST', body });
+  }),
+  keyboardStatistics: query => call(() => request(query.owner, '/api/records/keyboard' + search(query))),
+  keyboardDetail: (owner, id) => call(() => request(owner, '/api/records/keyboard/' + path(id))),
+  writeEye: batch => call(() => request<void>(batch.record.owner, '/api/records/eye', { method: 'POST', body: batch })),
+  eyeStatistics: query => call(() => request(query.owner, '/api/records/eye-statistics' + search(query))),
+  eyeDetail: (owner, id) => call(() => request(owner, '/api/records/eye/' + path(id))),
+  history: query => call(() => request(query.owner, '/api/records/history' + search(query))),
 };
 
 export function recordsApi(): RecordsApi {

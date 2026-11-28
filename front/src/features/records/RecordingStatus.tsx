@@ -6,7 +6,7 @@ export default function RecordingStatus({ errorsOnly = false }: { errorsOnly?: b
   const message = useSyncExternalStore(subscribeRecording, recordingMessage, recordingMessage);
   const failed = message.startsWith('저장 실패');
   if (errorsOnly && !failed) return null;
-  return <div data-recording-status aria-live="polite" className="text-sm text-muted">
+  return <div data-recording-status aria-live="polite" className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-border bg-surface px-3 py-2 text-sm text-muted">
     <p>{message}</p>
     {failed && <Button variant="outline" onClick={() => { void retryRecordings().catch(() => {}); }}>저장 재시도</Button>}
   </div>;

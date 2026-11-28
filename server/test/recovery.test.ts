@@ -11,6 +11,8 @@ import type { ResultSetHeader, RowDataPacket } from 'mysql2';
 import { comparePassword, createAuth, hashPassword } from '../src/auth.js';
 import { handleError } from '../src/http.js';
 import { createAuthRouter } from '../src/routes/auth.js';
+import { createDatabaseAuth } from '../src/db.js';
+import { limit, memoryRequestLimits, mysqlRequestLimits, type RequestLimits } from '../src/services/requestLimits.js';
 import { createRecoveryRouter } from '../src/routes/recovery.js';
 import type { Mailer, MailMessage } from '../src/services/mail.js';
 
@@ -37,14 +39,16 @@ interface Database {
 type Open = (t: TestContext) => Promise<Database>;
 
 /** Follows the statements in routes/recovery.ts and the email-related ones in routes/auth.ts; any other statement fails the test. */
-function memoryDatabase(): Database & { queries: () => number } {
-  const users: { id: number; username: string; email: string | null; passwordHash: string }[] = [];
+function memoryDatabase(): Database & { queries: () => number; failNext: (prefix: string) => void } {
+  const users: { id: number; username: string; email: string | null; passwordHash: string; version: number }[] = [];
   const codes = new Map<number, { hash: string; expiresAt: number; attempts: number }>();
   const emailCodes = new Map<string, { hash: string; expiresAt: number; attempts: number }>();
   let queries = 0;
+  let failPrefix: string | null = null;
   const changed = (affectedRows: number) => [{ affectedRows }];
   const query = async (sql: string, [first, second, third, fourth]: unknown[] = []) => {
     queries += 1;
+    if (failPrefix && sql.startsWith(failPrefix)) { failPrefix = null; throw new Error('synthetic account write failure'); }
     if (sql.startsWith('SELECT username FROM users WHERE email = ?')) {
       return [users.filter(user => user.email === first).map(({ username }) => ({ username }))];
     }
@@ -72,13 +76,13 @@ function memoryDatabase(): Database & { queries: () => number } {
       return [codes.get(first as number)?.hash === second ? [{ user_id: first }] : []];
     }
     if (sql.startsWith('DELETE FROM password_reset_codes')) {
-      if (codes.get(first as number)?.hash !== second) return changed(0);
+      if (!codes.has(first as number) || (second !== undefined && codes.get(first as number)?.hash !== second)) return changed(0);
       codes.delete(first as number);
       return changed(1);
     }
     if (sql.startsWith('UPDATE users SET password_hash = ?')) {
-      const user = users.find(({ id }) => id === second);
-      if (user) user.passwordHash = first as string;
+      const user = users.find(({ id, passwordHash }) => id === second && (!third || passwordHash === third));
+      if (user) { user.passwordHash = first as string; user.version++; }
       return changed(user ? 1 : 0);
     }
     if (sql.startsWith('DELETE FROM email_verification_codes WHERE expires_at <= NOW()')) {
@@ -101,24 +105,50 @@ function memoryDatabase(): Database & { queries: () => number } {
       return changed(1);
     }
     if (sql.startsWith('INSERT INTO users (username, nickname, email, password_hash)')) {
-      users.push({ id: users.length + 1, username: first as string, email: third as string, passwordHash: fourth as string });
+      if (users.some(user => user.username === first)) throw Object.assign(new Error('duplicate account'), { code: 'ER_DUP_ENTRY' });
+      users.push({ id: users.length + 1, username: first as string, email: third as string, passwordHash: fourth as string, version: 0 });
       return [{ affectedRows: 1, insertId: users.length }];
     }
     if (sql.startsWith('SELECT password_hash FROM users WHERE id = ?')) {
       return [users.filter(({ id }) => id === first).map(({ passwordHash }) => ({ password_hash: passwordHash }))];
     }
+    if (sql.startsWith('SELECT session_version FROM users WHERE id = ?')) {
+      return [users.filter(({ id }) => id === first).map(({ version }) => ({ session_version: version }))];
+    }
+    if (sql.startsWith('SELECT id, username, nickname, password_hash, session_version')) {
+      return [users.filter(user => user.username === first).map(user => ({ id: user.id, username: user.username, nickname: user.username,
+        password_hash: user.passwordHash, session_version: user.version }))];
+    }
+    if (sql.startsWith('SELECT id, username, nickname, email FROM users')) {
+      return [users.filter(({ id }) => id === first).map(user => ({ id: user.id, username: user.username, nickname: user.username, email: user.email }))];
+    }
     if (sql.startsWith('UPDATE users SET email = ? WHERE id = ?')) {
-      const user = users.find(({ id }) => id === second);
+      const user = users.find(({ id, passwordHash }) => id === second && (!third || passwordHash === third));
       if (user) user.email = first as string;
       return changed(user ? 1 : 0);
     }
     throw new Error(`unexpected query: ${sql}`);
   };
+  let queue = Promise.resolve();
+  const getConnection = async () => {
+    const earlier = queue;
+    let release = () => {};
+    queue = new Promise<void>(resolve => { release = resolve; });
+    await earlier;
+    const before = structuredClone({ users, codes, emailCodes });
+    return { query, beginTransaction: async () => {}, commit: async () => {},
+      rollback: async () => {
+        users.splice(0, users.length, ...before.users);
+        codes.clear(); for (const [key, value] of before.codes) codes.set(key, value);
+        emailCodes.clear(); for (const [key, value] of before.emailCodes) emailCodes.set(key, value);
+      }, release };
+  };
   return {
-    pool: { query } as unknown as Pool,
+    pool: { query, getConnection } as unknown as Pool,
     queries: () => queries,
+    failNext: prefix => { failPrefix = prefix; },
     addUser: async (username, email) => {
-      users.push({ id: users.length + 1, username, email, passwordHash: await hashPassword('old-password') });
+      users.push({ id: users.length + 1, username, email, passwordHash: await hashPassword('old-password'), version: 0 });
       return users.length;
     },
     passwordHash: async userId => users.find(({ id }) => id === userId)!.passwordHash,
@@ -167,14 +197,15 @@ function mailbox() {
 }
 const otherCode = (code: string) => code === '000000' ? '000001' : '000000';
 
-const auth = createAuth({ secret: 'test-only-secret-012345678901234567890', expiresIn: 3600 });
+const jwt = { secret: 'test-only-secret-012345678901234567890', expiresIn: 3600 };
+const auth = createAuth(jwt);
 
 /** Serves the recovery routes and the account routes that spend email codes. A userId signs the request in as that user. */
-async function start(t: TestContext, pool: Pool, mailer: Mailer | null) {
+async function start(t: TestContext, pool: Pool, mailer: Mailer | null, limits: RequestLimits = memoryRequestLimits(() => 1_800_000_001)) {
   const app = express();
   app.use(express.json());
-  app.use('/api/auth', createAuthRouter(pool, auth));
-  app.use('/api/auth', createRecoveryRouter(pool, mailer));
+  app.use('/api/auth', createAuthRouter(pool, createDatabaseAuth(jwt, pool), limits));
+  app.use('/api/auth', createRecoveryRouter(pool, mailer, limits));
   app.use(handleError);
   const server = app.listen(0, '127.0.0.1');
   await once(server, 'listening');
@@ -183,12 +214,17 @@ async function start(t: TestContext, pool: Pool, mailer: Mailer | null) {
     await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
   });
   const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api/auth`;
-  return async (path: string, body: unknown, method = 'POST', userId?: number) => {
+  const request = async (path: string, body: unknown, method = 'POST', bearer?: string) => {
     const headers: Record<string, string> = { 'content-type': 'application/json' };
-    if (userId) headers.authorization = `Bearer ${auth.signToken({ userId, username: 'member' })}`;
+    if (bearer) headers.authorization = `Bearer ${bearer}`;
     const response = await fetch(base + path, { method, headers, body: JSON.stringify(body), signal: AbortSignal.timeout(10000) });
+    return response;
+  };
+  const post = async (path: string, body: unknown, method = 'POST', userId?: number) => {
+    const response = await request(path, body, method, userId ? auth.signToken({ userId, username: 'member' }) : undefined);
     return { status: response.status, message: (await response.json() as { message: string }).message };
   };
+  return Object.assign(post, { request });
 }
 
 test('without SMTP settings the three mail routes answer 503 before reading the database', async t => {
@@ -219,7 +255,7 @@ test('malformed addresses, codes and passwords are rejected before reading the d
   assert.equal(db.queries(), 0);
 });
 
-test('a failed send answers 502 and the same request can be retried at once', async t => {
+test('a failed recovery mail returns the same message as an unknown account and still counts toward the retry limit', async t => {
   t.mock.method(console, 'error', () => undefined);
   const db = memoryDatabase();
   await db.addUser('member', 'member@example.com');
@@ -229,9 +265,66 @@ test('a failed send answers 502 and the same request can be retried at once', as
     if (failures-- > 0) throw new Error('SMTP unavailable');
     sent.push(message);
   });
-  assert.deepEqual(await post('/find-id', { email: 'member@example.com' }), { status: 502, message: '메일을 보내지 못했습니다. 잠시 후 다시 시도해 주세요.' });
-  assert.equal((await post('/find-id', { email: 'member@example.com' })).status, 200);
-  assert.equal(sent.length, 1);
+  assert.deepEqual(await post('/find-id', { email: 'member@example.com' }), await post('/find-id', { email: 'unknown@example.com' }));
+  assert.equal((await post('/find-id', { email: 'member@example.com' })).status, 429);
+  assert.equal(sent.length, 0);
+});
+
+test('a failed account write preserves the valid code and concurrent reuse only succeeds once', async t => {
+  t.mock.method(console, 'error', () => undefined);
+  const db = memoryDatabase();
+  const user = await db.addUser('member', 'member@example.com');
+  const messages = mailbox();
+  const post = await start(t, db.pool, messages.mailer);
+  const legacyToken = auth.signToken({ userId: user, username: 'member' });
+  assert.equal((await post.request('/me', undefined, 'GET', legacyToken)).status, 200);
+  await post('/password-reset', { username: 'member', email: 'member@example.com' });
+  const input = { username: 'member', code: messages.code(), newPassword: 'changed-password' };
+  db.failNext('UPDATE users SET password_hash = ?');
+  assert.equal((await post('/password-reset/confirm', input)).status, 500);
+  assert.ok(await db.storedCode(user));
+  const results = await Promise.all([post('/password-reset/confirm', input), post('/password-reset/confirm', input)]);
+  assert.deepEqual(results.map(result => result.status).sort(), [200, 400]);
+  assert.equal((await post.request('/me', undefined, 'GET', legacyToken)).status, 401);
+  const signIn = await post.request('/login', { username: 'member', password: input.newPassword });
+  assert.equal(signIn.status, 200);
+  const { token } = await signIn.json();
+  assert.equal((await post.request('/me', undefined, 'GET', token)).status, 200);
+});
+
+test('two API processes share the same login and mail limits and tell callers when to retry', async t => {
+  const db = memoryDatabase();
+  let now = 1_800_000_001;
+  const limits = memoryRequestLimits(() => now);
+  const first = await start(t, db.pool, mailbox().mailer, limits);
+  const second = await start(t, db.pool, mailbox().mailer, limits);
+  for (let attempt = 0; attempt < 15; attempt++) {
+    assert.equal((await (attempt % 2 ? first : second)('/login', { username: 'demo', password: 'fixture' })).status, 401);
+  }
+  const blocked = await second.request('/login', { username: 'DEMO', password: 'fixture' });
+  assert.equal(blocked.status, 429);
+  assert.equal(blocked.headers.get('retry-after'), '599');
+  assert.equal((await first('/find-id', { email: 'fixture@example.test' })).status, 200);
+  assert.equal((await second('/find-id', { email: 'fixture@example.test' })).status, 429);
+  now += 600;
+  assert.equal((await second('/login', { username: 'demo', password: 'fixture' })).status, 401);
+});
+
+test('MySQL persists rate counters across API instances and atomically limits concurrent AI work', { skip: SKIP_MYSQL }, async t => {
+  const db = await mysqlDatabase(t);
+  const first = mysqlRequestLimits(db.pool), second = mysqlRequestLimits(db.pool);
+  const rules = [limit('test:account', 4, 3600), limit('test:global', 6, 3600)];
+  const results = await Promise.all(Array.from({ length: 9 }, (_, index) => (index % 2 ? first : second).reserve(rules)));
+  assert.equal(results.filter(wait => wait === 0).length, 4);
+  const restarted = mysqlRequestLimits(db.pool);
+  assert.ok(await restarted.reserve(rules) > 0);
+  const leases = await Promise.all([first.lease('test:ai', 2, 60), second.lease('test:ai', 2, 60), restarted.lease('test:ai', 2, 60)]);
+  const release = leases.filter(lease => lease !== null);
+  assert.equal(release.length, 2);
+  await release[0]();
+  const newLease = await restarted.lease('test:ai', 2, 60);
+  assert.ok(newLease);
+  await Promise.all([release[1](), newLease()]);
 });
 
 test('004 adds the reset-code table to a database at 003 and keeps its users', { skip: SKIP_MYSQL }, async t => {
@@ -253,6 +346,30 @@ test('005 adds the email-code table to a database at 004 and keeps its users', {
   assert.equal(await db.storedEmailCode('member@example.com'), null);
   assert.equal(await db.userEmail('member'), 'member@example.com');
   assert.equal(await comparePassword('old-password', await db.passwordHash(id)), true);
+});
+
+test('006 keeps existing users and accepts their unversioned sessions while enabling SQL limits', { skip: SKIP_MYSQL }, async t => {
+  const before = readFileSync(new URL('../schema.sql', import.meta.url), 'utf8')
+    .replaceAll('\r\n', '\n')
+    .replace(/^  session_version [^\n]*\n/m, '')
+    .replace(/^CREATE TABLE request_(?:limits|leases) \([\s\S]*?^\);\n?/gm, '');
+  assert.doesNotMatch(before, /CREATE TABLE request_(?:limits|leases)/);
+  const db = await mysqlDatabase(t, before);
+  const id = await db.addUser('member', 'member@example.com');
+  const original = auth.signToken({ userId: id, username: 'member' });
+  const migration = readFileSync(new URL('../migrations/006_account_protection.sql', import.meta.url), 'utf8');
+  for (const statement of migration.split(';').map(part => part.trim()).filter(Boolean)) await db.pool.query(statement);
+  const [[row]] = await db.pool.query<RowDataPacket[]>('SELECT session_version FROM users WHERE id = ?', [id]);
+  assert.equal(row.session_version, 0);
+  assert.equal(await comparePassword('old-password', await db.passwordHash(id)), true);
+  const limits = mysqlRequestLimits(db.pool);
+  const request = await start(t, db.pool, mailbox().mailer, limits);
+  const profile = await request.request('/me', undefined, 'GET', original);
+  assert.equal(profile.status, 200);
+  assert.equal((await profile.json()).email, 'member@example.com');
+  const rules = [limit('migration:member', 1, 3600)];
+  assert.equal(await limits.reserve(rules), 0);
+  assert.ok(await limits.reserve(rules) > 0);
 });
 
 const backends: [string, Open, false | string][] = [

@@ -13,7 +13,10 @@ const token = createAuth(config.jwt).signToken({ userId: 1, username: 'tester' }
 async function startApp(t: TestContext, database?: Pool) {
   let queries = 0;
   const unavailableDatabase = {
-    query: async () => { queries += 1; throw new Error('PRIVATE_DATABASE_DETAILS'); },
+    query: async (sql: string) => {
+      if (sql.startsWith('SELECT session_version FROM users')) return [[{ session_version: 0 }]];
+      queries += 1; throw new Error('PRIVATE_DATABASE_DETAILS');
+    },
     getConnection: async () => { queries += 1; throw new Error('PRIVATE_DATABASE_DETAILS'); },
   } as unknown as Pool;
   const server = createApp(config, database ?? unavailableDatabase).listen(0, '127.0.0.1');
@@ -96,6 +99,7 @@ async function accountDatabase() {
   const updates: unknown[] = [];
   const pool = {
     query: async (sql: string, params: unknown[]) => {
+      if (sql.startsWith('SELECT session_version FROM users')) return [[{ session_version: 0 }]];
       if (sql.startsWith('UPDATE')) { updates.push(params); return [{ affectedRows: 1 }]; }
       return [[{ password_hash: passwordHash }]];
     },

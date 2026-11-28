@@ -29,14 +29,15 @@ export function normalizeProfile(value: unknown, mode: string): CameraProfile {
       flipX: grid?.flipX === true, flipY: grid?.flipY === true, turns: Number.isInteger(grid?.turns) ? ((grid!.turns % 4) + 4) % 4 : 0 } };
 }
 const key = (mode: string, device: string) => `moti.camera.v1:${encodeURIComponent(mode)}:${encodeURIComponent(device)}`;
-export function readProfile(storage: Storage, mode: string, device: string): CameraProfile {
+type ProfileStorage = Pick<Storage, 'getItem' | 'setItem'>;
+export function readProfile(storage: ProfileStorage, mode: string, device: string): CameraProfile {
   try { return normalizeProfile(JSON.parse(storage.getItem(key(mode, device)) ?? '{}'), mode); }
   catch { return normalizeProfile({}, mode); }
 }
-export function writeProfile(storage: Storage, mode: string, device: string, profile: CameraProfile) {
+export function writeProfile(storage: ProfileStorage, mode: string, device: string, profile: CameraProfile) {
   if (device) storage.setItem(key(mode, device), JSON.stringify(normalizeProfile(profile, mode)));
 }
-export function resolveProfile(storage: Storage, mode: string, device: string): CameraProfile {
+export function resolveProfile(storage: ProfileStorage, mode: string, device: string): CameraProfile {
   // The old global keyboard profile is claimed by the first actual keyboard camera only.
   if (mode === 'keyboard' && device && !storage.getItem('moti.camera.legacyMigrated')) {
     const legacy = storage.getItem('moti.keyboard.camera');

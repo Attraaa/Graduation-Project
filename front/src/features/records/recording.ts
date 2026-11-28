@@ -11,7 +11,14 @@ export interface CaptureSink { sample(at: number, evaluation: CaptureEvaluation)
 type Active = { collector: CaptureRecorder; generation: Promise<number>; saving: Promise<void> | null; timer: ReturnType<typeof setInterval>; stopped: boolean; error: string | null };
 const active = new Set<Active>();
 const listeners = new Set<() => void>();
-interface RecorderParticipant { retry(): Promise<void>; finish(): void; discard(owner: string): void; error(): string | null; failedForOwner?(owner: string): boolean }
+interface RecorderParticipant {
+  retry(): Promise<void>;
+  finish(): void;
+  discard(owner: string): void;
+  error(): string | null;
+  failedForOwner?(owner: string): boolean;
+  isRunning?(owner: string, id: string): boolean;
+}
 const participants = new Set<RecorderParticipant>();
 export function registerRecorder(participant: RecorderParticipant) { participants.add(participant); return () => { participants.delete(participant); }; }
 let message = '측정한 기록은 서버에 저장됩니다.';
@@ -25,6 +32,9 @@ const announce = (next: string) => {
 export const announceRecording = announce;
 export const subscribeRecording = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; };
 export const recordingMessage = () => message;
+export const isRecordingHere = (owner: string, id: string) =>
+  [...active].some(entry => !entry.stopped && entry.collector.record.owner === owner && entry.collector.record.id === id)
+  || [...participants].some(item => item.isRunning?.(owner, id));
 /** Notification summaries must never reuse another account's pending save failure. */
 export const recordingFailedForCurrentOwner = () => {
   const owner = getCurrentUser()?.id;
@@ -42,6 +52,7 @@ async function save(entry: Active) {
         const batch = entry.collector.batch(generation);
         if (!batch) break;
         await recordValue(recordsApi().write(batch));
+        if (!active.has(entry)) return;
         entry.collector.acknowledge();
         if (batch.record.status !== 'running') { active.delete(entry); recordsChanged(); break; }
       } while (entry.stopped || entry.collector.hasPending);

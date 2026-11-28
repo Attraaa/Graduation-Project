@@ -1,5 +1,5 @@
 import { keyboardCountKey, KEYBOARD_CODES } from '../../../../database/keyboard';
-import type { KeyboardBatch, KeyboardCount, KeyboardRecord } from '../../../../database/keyboard';
+import type { KeyboardBatch, KeyboardCount, KeyboardInputQuality, KeyboardRecord } from '../../../../database/keyboard';
 import { localDateKey } from '../../../../database/contracts';
 import { recordsApi, recordValue } from '../records/api';
 import { announceRecording, registerRecorder } from '../records/recording';
@@ -49,6 +49,7 @@ async function save(entry: Active): Promise<void> {
       do {
         const batch = entry.collector.batch(generation);
         await recordValue(recordsApi().writeKeyboard(batch));
+        if (!active.has(entry)) return;
         entry.collector.acknowledge();
         if (batch.record.status !== 'running') { active.delete(entry); recordsChanged(); break; }
       } while (entry.collector.record.status !== 'running');
@@ -77,10 +78,11 @@ registerRecorder({
   discard: owner => { for (const entry of active) if (entry.collector.record.owner === owner) { clearInterval(entry.timer); entry.collector.finish(entry.now()); active.delete(entry); } },
   error: () => [...active].find(entry => entry.error)?.error ?? null,
   failedForOwner: owner => [...active].some(entry => entry.collector.record.owner === owner && !!entry.error),
+  isRunning: (owner, id) => [...active].some(({ collector: { record } }) => record.owner === owner && record.id === id && record.status === 'running'),
 });
 export function beginKeyboardRecording() {
   const owner = getCurrentUser()?.id;
-  const noop = { press: () => {}, finish: () => {} };
+  const noop = { press: () => {}, quality: () => {}, finish: () => {} };
   if (!owner) { announceRecording('로그인하면 키보드 집계를 저장할 수 있습니다.'); return noop; }
   const epoch = Date.now(), start = performance.now(), now = () => Math.round(epoch + performance.now() - start);
   const collector = new KeyboardCollector({ id: crypto.randomUUID(), owner, startedAt: epoch, updatedAt: epoch,
@@ -92,5 +94,6 @@ export function beginKeyboardRecording() {
     timer: setInterval(() => { collector.touch(now()); void save(entry).catch(() => {}); }, 5000) };
   active.add(entry); announceRecording('키보드 집계 저장 중');
   return { press: (result: KeyboardLiveResult) => { if (active.has(entry)) collector.press(result, now()); },
+    quality: (quality: KeyboardInputQuality) => { if (active.has(entry) && collector.record.status === 'running') collector.record.quality = quality; },
     finish: () => { finishKeyboard(entry); void save(entry).catch(() => {}); } };
 }

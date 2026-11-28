@@ -49,22 +49,26 @@ export function summarizeMetrics(metrics: readonly Metric[]) {
 }
 
 const number = (value: unknown) => typeof value === 'number' && Number.isFinite(value) ? Math.round(value * 10) / 10 : null;
-const text = (value: unknown, max: number) => typeof value === 'string' ? value.slice(0, max) : null;
 const record = (value: unknown) => (value && typeof value === 'object' ? value : {}) as Record<string, unknown>;
+const ROUTES = new Set(['/', '/login', '/register', '/find-id', '/find-password', '/dashboard', '/statistics', '/history', '/ai-review', '/settings']);
+const PHASES = new Set(['idle', 'starting', 'mapping', 'ready', 'error', 'calibrating', 'observing', 'unavailable']);
+const known = (value: unknown, options: Set<string>) => typeof value === 'string' && options.has(value) ? value : null;
 const mode = (value: unknown) => {
   const o = record(value);
-  return { running: o.running === true, paused: o.paused === true, phase: text(o.phase, 40), seconds: number(o.seconds) };
+  return { running: o.running === true, paused: o.paused === true, phase: known(o.phase, PHASES), seconds: number(o.seconds) };
 };
 /** 화면이 보낸 1분 표본에서 정해진 칸만 남깁니다. 다른 값과 긴 문자열은 버립니다. */
 export function sanitizeRendererSample(input: unknown) {
   const o = record(input);
-  return { heapUsedMB: number(o.heapUsedMB), heapLimitMB: number(o.heapLimitMB), route: text(o.route, 60), visible: o.visible === true,
+  const route = typeof o.route === 'string' ? o.route.replace(/^#/, '').split(/[?#]/, 1)[0] : null;
+  return { heapUsedMB: number(o.heapUsedMB), heapLimitMB: number(o.heapLimitMB), route: known(route, ROUTES), visible: o.visible === true,
     upper: mode(o.upper), keyboard: mode(o.keyboard) };
 }
-/** 화면의 처리되지 않은 오류·거부. 메시지와 스택 앞부분만 남깁니다. */
+/** Keep the error category and line without paths, URLs or request data. */
 export function sanitizeRendererError(input: unknown) {
   const o = record(input);
-  return { kind: o.kind === 'rejection' ? 'rejection' : 'error', message: text(o.message, 300), source: text(o.source, 200), line: number(o.line), stack: text(o.stack, 800) };
+  const name = typeof o.message === 'string' ? /^(TypeError|RangeError|ReferenceError|SyntaxError|AbortError|Error)(?::|$)/.exec(o.message)?.[1] : null;
+  return { kind: o.kind === 'rejection' ? 'rejection' : 'error', name: name ?? null, line: number(o.line) };
 }
 
 type Dependencies = {

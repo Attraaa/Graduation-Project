@@ -1,5 +1,8 @@
-import { apiRequest, clearSession, readSession, writeSession } from './apiClient';
-import type { SessionUser } from './apiClient';
+import { apiRequest, clearSession, currentSessionIdentity, isCurrentSession, readSession, writeSession } from './apiClient';
+import type { Session, SessionUser } from './apiClient';
+import type { DesktopSession } from './desktopApiContract';
+import { lockRecordingDeletion } from '../features/records/deletion';
+import { recordsChanged } from '../features/records/refresh';
 
 export type CurrentUser = SessionUser;
 type Result = { ok: boolean; message: string };
@@ -20,11 +23,14 @@ export const registerUser = async (user: { username: string; nickname: string; e
 };
 
 export const loginUser = async (username: string, password: string, signal?: AbortSignal): Promise<Result> => {
+  const previous = currentSessionIdentity();
   try {
-    const { token, user } = await apiRequest<{ token: string; user: { id: number; username: string; nickname: string } }>(
+    const reply = await apiRequest<DesktopSession | { token: string; user: { id: number; username: string; nickname: string } }>(
       '/api/auth/login', { method: 'POST', body: { username: username.trim(), password }, signal });
     signal?.throwIfAborted();
-    writeSession({ token, user: { id: String(user.id), username: user.username, nickname: user.nickname } });
+    if (currentSessionIdentity() !== previous) throw new Error('로그인 상태가 바뀌었어요. 다시 시도해 주세요.');
+    if ('revision' in reply) writeSession(reply);
+    else writeSession({ token: reply.token, revision: crypto.randomUUID(), user: { ...reply.user, id: String(reply.user.id) } });
     return { ok: true, message: '로그인되었습니다.' };
   } catch (error) { return failure(error); }
 };
@@ -36,15 +42,18 @@ export const logoutUser = () => clearSession();
  * If that save fails, confirmUnsaved decides: false keeps the login (and the retry button), true drops the unsaved records.
  */
 export const logoutAfterSaving = async (confirmUnsaved: () => Promise<boolean>) => {
-  const owner = getCurrentUser()?.id;
+  const session = readSession();
+  if (!session) return true;
   const { discardUnsavedRecordings, stopAndSaveRecordings } = await import('../features/records/recording');
+  if (!isCurrentSession(session)) return false;
   try {
     await stopAndSaveRecordings();
   } catch {
-    if (!await confirmUnsaved()) return false;
-    if (owner) discardUnsavedRecordings(owner);
+    if (!isCurrentSession(session) || !await confirmUnsaved() || !isCurrentSession(session)) return false;
+    discardUnsavedRecordings(session.user.id);
   }
-  logoutUser();
+  if (!isCurrentSession(session)) return false;
+  await clearSession(session);
   return true;
 };
 
@@ -52,8 +61,9 @@ export const updateCurrentUser = async (nickname: string, signal?: AbortSignal):
   const session = readSession();
   if (!session) return { ok: false, message: '로그인이 필요합니다.' };
   try {
-    const { message } = await apiRequest<{ message: string }>('/api/auth/me', { method: 'PUT', body: { nickname }, signal });
+    const { message } = await apiRequest<{ message: string }>('/api/auth/me', { method: 'PUT', body: { nickname }, signal, session });
     signal?.throwIfAborted();
+    if (!isCurrentSession(session)) throw new Error('로그인 상태가 바뀌었어요. 다시 시도해 주세요.');
     writeSession({ ...session, user: { ...session.user, nickname: nickname.trim() } });
     return { ok: true, message };
   } catch (error) { return failure(error); }
@@ -65,7 +75,7 @@ const messageRequest = async (path: string, method: string, body: unknown, timeo
     return { ok: true, message };
   } catch (error) { return failure(error); }
 };
-// The server waits for the mail server before answering, which can take longer than the default 15 seconds.
+// Verification codes wait for SMTP. Recovery endpoints acknowledge independently of mail delivery.
 const MAIL_TIMEOUT_MS = 30_000;
 
 /** Mails a 6-digit code to an address that is about to be registered or set as the account's address. */
@@ -91,16 +101,22 @@ export const changeEmail = (email: string, code: string, currentPassword: string
   messageRequest('/api/auth/me/email', 'PUT', { email: email.trim(), code: code.trim(), currentPassword });
 
 /** The registered recovery address, or null when the account has none. */
-export const readAccountEmail = async () => (await apiRequest<{ email: string | null }>('/api/auth/me')).email || null;
+export const readAccountEmail = async (signal?: AbortSignal) => (await apiRequest<{ email: string | null }>('/api/auth/me', { signal })).email || null;
 
-export const clearStatistics = async () => {
-  const owner = getCurrentUser()?.id;
-  if (!owner) throw new Error('로그인이 필요합니다.');
-  const { recordsApi, recordValue } = await import('../features/records/api');
-  const { discardDeletedRecordings } = await import('../features/records/recording');
-  await recordValue(recordsApi().clear(owner));
-  discardDeletedRecordings(owner);
-  const { clearLocalPostureTimelines } = await import('../features/records/postureTimelineRecording');
-  const { clearLocalReviewResults } = await import('../features/records/localReviewResults');
-  await Promise.all([clearLocalPostureTimelines(owner), clearLocalReviewResults(owner)]);
+export const clearStatistics = async (session: Session) => {
+  if (!isCurrentSession(session)) throw new Error('확인창을 연 계정에서 다시 시도해 주세요.');
+  const unlock = lockRecordingDeletion(session);
+  try {
+    const [{ discardDeletedRecordings }, { clearLocalPostureTimelines }, { clearLocalReviewResults }] = await Promise.all([
+      import('../features/records/recording'), import('../features/records/postureTimelineRecording'), import('../features/records/localReviewResults'),
+    ]);
+    await apiRequest('/api/records', { method: 'DELETE', session });
+    if (!isCurrentSession(session)) return;
+    const owner = session.user.id;
+    discardDeletedRecordings(owner);
+    window.dispatchEvent(new Event('moti-stop-measurement'));
+    recordsChanged();
+    try { await Promise.all([clearLocalPostureTimelines(owner), clearLocalReviewResults(owner)]); }
+    catch { throw new Error('서버 기록은 삭제했지만 이 기기의 기록을 모두 지우지 못했어요. 다시 시도해 주세요.'); }
+  } finally { unlock(); }
 };

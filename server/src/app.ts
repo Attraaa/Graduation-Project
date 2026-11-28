@@ -2,7 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import type { Pool } from 'mysql2/promise';
 import type { ServerConfig } from './config.js';
-import { createAuth } from './auth.js';
+import { createDatabaseAuth } from './db.js';
 import { handleError } from './http.js';
 import { createAuthRouter } from './routes/auth.js';
 import { createSessionsRouter } from './routes/sessions.js';
@@ -16,22 +16,25 @@ import { MysqlRecordRepository } from './repositories/records.js';
 import { createMiniPcReviewer } from './services/aiReview.js';
 import { createSmtpMailer } from './services/mail.js';
 import { createKakaoHospitalSearch } from './services/hospitals.js';
+import { mysqlRequestLimits } from './services/requestLimits.js';
 
 export function createApp(config: ServerConfig, pool: Pool) {
   const app = express();
-  const auth = createAuth(config.jwt);
+  const auth = createDatabaseAuth(config.jwt, pool);
+  const limits = mysqlRequestLimits(pool);
+  if (config.trustLoopbackProxy) app.set('trust proxy', 'loopback');
   app.use(cors({ origin: '*' }));
   // Keyboard batches carry cumulative counts (up to 8000 rows), above the default 100kb body limit.
   app.use('/api/records', express.json({ limit: '2mb' }), createRecordsRouter(new MysqlRecordRepository(pool), auth));
   app.use(express.json());
-  app.use('/api/auth', createAuthRouter(pool, auth));
+  app.use('/api/auth', createAuthRouter(pool, auth, limits));
   // Optional: without SMTP settings finding an ID or resetting a password answers 503 and every other route works as before.
-  app.use('/api/auth', createRecoveryRouter(pool, config.mail ? createSmtpMailer(config.mail) : null));
+  app.use('/api/auth', createRecoveryRouter(pool, config.mail ? createSmtpMailer(config.mail) : null, limits));
   app.use('/api/sessions', createSessionsRouter(pool, auth));
   app.use('/api/statistics', createStatisticsRouter(pool, auth));
   app.use('/api/feedback', createFeedbackRouter(pool, auth));
   const reviewer = config.reviewGatewayUrl ? createMiniPcReviewer(config.reviewGatewayUrl) : null;
-  app.use('/api/ai', createAiRouter(reviewer, auth));
+  app.use('/api/ai', createAiRouter(reviewer, auth, limits));
   // Optional: without KAKAO_REST_API_KEY the nearby hospital search answers 503 and every other route works as before.
   app.use('/api/hospitals', createHospitalsRouter(config.kakaoRestApiKey ? createKakaoHospitalSearch(config.kakaoRestApiKey) : null, auth));
   // Liveness only: this intentionally does not imply that a DB has been provisioned.

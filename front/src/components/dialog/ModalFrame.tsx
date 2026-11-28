@@ -2,9 +2,10 @@ import { useLayoutEffect, useRef, type ReactNode } from 'react';
 import { MODAL_VISIBILITY_EVENT } from './modalEvents';
 
 /** Native modal isolation also covers keyboard focus and nested dialogs. */
-export default function ModalFrame({ children, onDismiss, className = '', ...label }: {
+export default function ModalFrame({ children, onDismiss, returnFocus, className = '', ...label }: {
   children: ReactNode;
   onDismiss: () => void;
+  returnFocus?: () => HTMLElement | null;
   className?: string;
   role?: 'dialog' | 'alertdialog';
   'aria-label'?: string;
@@ -12,17 +13,21 @@ export default function ModalFrame({ children, onDismiss, className = '', ...lab
   'aria-describedby'?: string;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
+  const focusAfterClose = useRef(returnFocus);
   useLayoutEffect(() => {
     const dialog = ref.current;
     if (!dialog) return;
     const previous = document.activeElement;
+    const getReturnTarget = focusAfterClose.current;
     dialog.showModal();
     document.dispatchEvent(new Event(MODAL_VISIBILITY_EVENT));
     dialog.querySelector<HTMLElement>('[data-modal-autofocus], [autofocus], input:not([disabled]), button[type="submit"]')?.focus();
     return () => {
       dialog.close();
       document.dispatchEvent(new Event(MODAL_VISIBILITY_EVENT));
-      if (previous instanceof HTMLElement && previous.isConnected) previous.focus();
+      const target = getReturnTarget?.();
+      if (target?.isConnected) target.focus({ preventScroll: true });
+      else if (previous instanceof HTMLElement && previous.isConnected) previous.focus();
     };
   }, []);
   return <dialog ref={ref} role="dialog" aria-modal="true" {...label}

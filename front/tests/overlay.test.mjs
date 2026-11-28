@@ -16,12 +16,12 @@ new Function('module', 'exports', 'require', bundle.outputFiles[0].text)(compile
 const { overlaySnapshot } = compiled.exports;
 const snapshot = (sequence = 1, owner = 'owner-1') => ({ owner, sequence, theme: 'light', savingFailed: false, upper_body: { ...session, blinkRate: 14.2 }, keyboard: { ...session, running: false } });
 class Window extends EventEmitter {
-  destroyed = false; minimized = false; maximized = false; focused = false; shown = 0;
+  destroyed = false; minimized = false; maximized = false; focused = false; shown = 0; boundsWrites = 0;
   bounds = { x: 20, y: 30, width: 1100, height: 800 };
   webContents = Object.assign(new EventEmitter(), { mainFrame: {}, messages: [], send(name, ...args) { this.messages.push([name, ...args]); }, setWindowOpenHandler(handler) { this.openHandler = handler; } });
   constructor(url = 'file:///app/index.html') { super(); this.webContents.mainFrame.url = url; }
   isDestroyed() { return this.destroyed; } isMinimized() { return this.minimized; } isMaximized() { return this.maximized; } isFocused() { return this.focused; }
-  getBounds() { return { ...this.bounds }; } getNormalBounds() { return this.getBounds(); } setBounds(value) { this.bounds = value; }
+  getBounds() { return { ...this.bounds }; } getNormalBounds() { return this.getBounds(); } setBounds(value) { this.bounds = value; this.boundsWrites++; }
   maximize() { this.maximized = true; } unmaximize() { this.maximized = false; } minimize() { this.minimized = true; } restore() { this.minimized = false; }
   show() { this.shown++; } showInactive() { this.shown++; } focus() { this.focused = true; }
   loadURL(url) { this.webContents.mainFrame.url = url; return Promise.resolve(); }
@@ -119,6 +119,28 @@ test('open waits for rendered initial state, opens once, and back restores witho
   assert.equal(h.owner.focused, true); assert.equal(h.children[0].destroyed, true);
   assert.equal(h.owner.webContents.messages.filter(m => m[0] === 'desktop:command').length, 0);
   assert.equal(h.controller.view().snapshot.upper_body.run, 1); h.controller.shutdown();
+});
+
+test('repeated returns leave the operating system bounds alone on the same display', async () => {
+  const h = harness(); h.call('desktop:publish', snapshot());
+  const original = h.owner.getNormalBounds();
+  for (const maximized of [false, true]) {
+    h.owner.maximized = maximized;
+    for (let i = 0; i < 10; i++) {
+      const opening = h.controller.open(); h.childCall('overlay:ready'); await opening;
+      h.controller.back();
+      assert.equal(h.owner.isMaximized(), maximized);
+      assert.deepEqual(h.owner.getNormalBounds(), original);
+    }
+  }
+  assert.equal(h.owner.boundsWrites, 0);
+  h.owner.maximized = false;
+  const opening = h.controller.open(); h.childCall('overlay:ready'); await opening;
+  h.screen.getDisplayMatching = () => ({ id: 2, workArea: { x: 50, y: 50, width: 1020, height: 700 } });
+  h.controller.back();
+  assert.deepEqual(h.owner.getNormalBounds(), { x: 50, y: 50, width: 1020, height: 700 });
+  assert.equal(h.owner.boundsWrites, 1);
+  h.controller.shutdown();
 });
 
 test('wrong sender, frame, URL, and backwards state cannot replace the owner snapshot', async () => {

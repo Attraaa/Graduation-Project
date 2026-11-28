@@ -58,9 +58,10 @@ registerRecorder({
   } },
   error: () => [...active].find(entry => entry.error)?.error ?? null,
   failedForOwner: owner => [...active].some(entry => entry.collector.record.owner === owner && !!entry.error),
+  isRunning: (owner, id) => [...active].some(({ collector: { record } }) => record.owner === owner && record.id === id && record.status === 'running'),
 });
 export interface EyeSink { sample(at: number, value: EyeSample): void; rest(completed: number): void; finish(): void }
-export function beginEyeRecording(sensitivity: EyeSensitivity = 'normal'): EyeSink {
+export function beginEyeRecording(sensitivity: EyeSensitivity = 'normal', id: string = crypto.randomUUID()): EyeSink {
   const owner = getCurrentUser()?.id;
   const noop = { sample: () => {}, rest: () => {}, finish: () => {} };
   if (!owner) {
@@ -68,7 +69,7 @@ export function beginEyeRecording(sensitivity: EyeSensitivity = 'normal'): EyeSi
     return noop;
   }
   const epoch = Date.now(), at = performance.now();
-  const collector = new EyeRecorder({ ...emptyEyeTotals(), id: crypto.randomUUID(), owner, mode: 'eye',
+  const collector = new EyeRecorder({ ...emptyEyeTotals(), id, owner, mode: 'eye',
     startedAt: epoch, updatedAt: epoch, offsetMinutes: new Date(epoch).getTimezoneOffset(), policyVersion: eyePolicyVersion(sensitivity), status: 'running' }, at);
   const generation = recordValue(recordsApi().generation(owner)); void generation.catch(() => {});
   const entry: Active = { collector, generation, saving: null, error: null,
