@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { LoaderCircle, Sparkles } from 'lucide-react';
 import { requestAiReview } from '../features/ai-review/api';
-import { inputRows } from '../features/ai-review/input';
+import { inputDetails, inputRows } from '../features/ai-review/input';
 import type { AiReview as Review } from '../features/ai-review/input';
 import ReviewCards from '../features/ai-review/ReviewCards';
 import { SourceError } from '../features/dashboard/SourceState';
@@ -65,14 +65,22 @@ export default function AiReview() {
         </div>
         {!loading && (failed ? <SourceError onRetry={retry} />
           : input ? (
-            <ul className="space-y-2">
-              {inputRows(input).map(row => (
-                <li key={row.mode} className="flex gap-2 text-sm text-heading">
-                  <span aria-hidden="true" className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${DOTS[row.mode]}`} />
-                  <span><span className="font-semibold">{row.name}</span>{` · ${row.text}`}</span>
-                </li>
-              ))}
-            </ul>
+            <>
+              <ul className="space-y-2">
+                {inputRows(input).map(row => (
+                  <li key={row.mode} className="flex gap-2 text-sm text-heading">
+                    <span aria-hidden="true" className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${DOTS[row.mode]}`} />
+                    <span><span className="font-semibold">{row.name}</span>{` · ${row.text}`}</span>
+                  </li>
+                ))}
+              </ul>
+              <details className="text-sm text-heading">
+                <summary className="cursor-pointer text-muted">날짜별·시간대별 값도 함께 보내요</summary>
+                <ul className="mt-2 space-y-1">
+                  {inputDetails(input).map(detail => <li key={detail.label}><span className="font-semibold">{detail.label}</span>{` · ${detail.text}`}</li>)}
+                </ul>
+              </details>
+            </>
           ) : <p className="text-sm text-muted">이 기간에 측정한 기록이 없어요. 측정을 시작하면 총평을 받을 수 있어요.</p>)}
         {loadingLabel && (
           <p role="status" className="flex items-center gap-2 text-sm text-muted">

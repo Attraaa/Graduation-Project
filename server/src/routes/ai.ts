@@ -25,7 +25,10 @@ export function createAiRouter(reviewer: Reviewer | null, auth: Auth) {
       throw new HttpError(429, `AI 총평은 한 시간에 ${HOURLY_LIMIT}번까지 받을 수 있어요. 잠시 후 다시 시도해 주세요.`);
     }
     recent.set(userId, [...times, now]);
-    res.json({ ...await reviewer(input), generatedAt: new Date(now).toISOString() });
+    const review = await reviewer(input);
+    // App builds before 2026-11-28 read summary, strengths and improvements.
+    res.json({ ...review, summary: review.sections[0].text, improvements: review.weaknesses.length ? review.weaknesses : review.goals,
+      generatedAt: new Date(now).toISOString() });
   }));
 
   return router;

@@ -4,7 +4,7 @@ import 'fake-indexeddb/auto';
 import { build } from 'esbuild';
 import { loggedIn } from './fixtures/memory-records.mjs';
 import { createPostureScoreTimeline } from '../src/features/posture/scoreTimeline.ts';
-import { localPostureReview, readReviewSession } from '../src/features/records/reviewSession.ts';
+import { localPostureDaily, localPostureReview, readReviewSession } from '../src/features/records/reviewSession.ts';
 
 test('independent sensor clocks keep time-weighted seconds, genuine zero and the final partial second', () => {
   const points = [];
@@ -37,6 +37,20 @@ test('local summary read filters the period, preserves previous policy, weights 
   assert.deepEqual(after.side, { current: 75, previous: null });
   assert.equal(after.sideMetric, 'balance');
   assert.equal(readReviewSession(raw(10, 'v3', 102, 100), 0, 100), null);
+});
+
+test('device sessions give the review its daily and hourly means, observed minutes and the longest session', () => {
+  const at = (date, hour, minute = 0) => new Date(`${date}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00`).getTime();
+  const session = (startedAt, minutes, neck, side, policy = 'upper-body-balance-v1-test') => ({ startedAt, endedAt: startedAt + minutes * 60_000,
+    scorePolicyVersions: { neck: policy, shoulder: policy },
+    neck: { validMs: minutes * 60_000, meanPoints: neck, mostObservedBand: null }, shoulder: { validMs: minutes * 30_000, meanPoints: side, mostObservedBand: null } });
+  const sessions = [session(at('2026-11-20', 9), 30, 80, 90), session(at('2026-11-20', 9, 40), 10, 60, 70), session(at('2026-11-21', 15), 50, 76, 86)];
+  const since = at('2026-11-15', 0);
+  const review = localPostureReview(sessions, since);
+  assert.deepEqual(review.hourly, [{ hour: 9, neck: 75, side: 85, minutes: 40 }, { hour: 15, neck: 76, side: 86, minutes: 50 }]);
+  assert.equal(review.longestMinutes, 50);
+  assert.deepEqual(localPostureDaily(sessions, since, ['2026-11-19', '2026-11-20', '2026-11-21']), [
+    { date: '2026-11-19', neck: null, side: null }, { date: '2026-11-20', neck: 75, side: 85 }, { date: '2026-11-21', neck: 76, side: 86 }]);
 });
 
 test('finishing eye and keyboard records saves review data under the signed-in owner while AWS is offline', async t => {
