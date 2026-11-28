@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { Sparkles } from 'lucide-react';
+import { LoaderCircle, Sparkles } from 'lucide-react';
 import { requestAiReview } from '../features/ai-review/api';
-import { inputRows } from '../features/ai-review/input';
+import { inputDetails, inputRows } from '../features/ai-review/input';
 import type { AiReview as Review, AiReviewDays } from '../features/ai-review/input';
 import ReviewCards from '../features/ai-review/ReviewCards';
-import { SourceError, SourceLoading } from '../features/dashboard/SourceState';
+import { SourceError } from '../features/dashboard/SourceState';
 import { todayDateKey } from '../features/records/views';
 import { BUTTON, BUTTON_STRONG } from '../features/settings/parts';
 import { CARD } from '../features/statistics/parts';
@@ -25,6 +25,8 @@ export default function AiReview() {
   const key = `${owner}:${days}:${today}`;
   useEffect(() => () => { pending.current?.abort(); pending.current = null; }, [key]);
   const shown = result?.key === key ? result : null;
+  const generating = shown?.status === 'loading';
+  const loadingLabel = generating ? '총평 작성 중' : loading ? '기록 불러오는 중' : null;
 
   const generate = async () => {
     if (!input || pending.current) return;
@@ -56,32 +58,37 @@ export default function AiReview() {
       <section aria-label="AI에게 보내는 기록" className={`${CARD} space-y-3`}>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="font-bold text-heading">AI에게 보내는 기록</h2>
-          <button type="button" className={BUTTON_STRONG} disabled={!input || shown?.status === 'loading'} onClick={() => void generate()}>
+          <button type="button" className={BUTTON_STRONG} disabled={!input || generating} aria-busy={generating} onClick={() => void generate()}>
             <Sparkles aria-hidden="true" size={16} />{shown?.status === 'done' ? '다시 받기' : '총평 받기'}
           </button>
         </div>
-        {loading ? <SourceLoading className="h-16" />
-          : failed ? <SourceError onRetry={retry} />
+        {!loading && (failed ? <SourceError onRetry={retry} />
           : input ? (
-            <ul className="space-y-2">
-              {inputRows(input).map(row => (
-                <li key={row.mode} className="flex gap-2 text-sm text-heading">
-                  <span aria-hidden="true" className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${DOTS[row.mode]}`} />
-                  <span><span className="font-semibold">{row.name}</span>{` · ${row.text}`}</span>
-                </li>
-              ))}
-            </ul>
-          ) : <p className="text-sm text-muted">이 기간에 측정한 기록이 없어요. 측정을 시작하면 총평을 받을 수 있어요.</p>}
-        <p className="text-xs text-muted">총평 받기를 누르면 위 집계를 AWS를 거쳐 미니 PC로 보내요. 이 기기에 기록이 없는 항목은 기존 통계를 사용해요.</p>
+            <>
+              <ul className="space-y-2">
+                {inputRows(input).map(row => (
+                  <li key={row.mode} className="flex gap-2 text-sm text-heading">
+                    <span aria-hidden="true" className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${DOTS[row.mode]}`} />
+                    <span><span className="font-semibold">{row.name}</span>{` · ${row.text}`}</span>
+                  </li>
+                ))}
+              </ul>
+              <details className="text-sm text-heading">
+                <summary className="cursor-pointer text-muted">날짜별·시간대별 값도 함께 보내요</summary>
+                <ul className="mt-2 space-y-1">
+                  {inputDetails(input).map(detail => <li key={detail.label}><span className="font-semibold">{detail.label}</span>{` · ${detail.text}`}</li>)}
+                </ul>
+              </details>
+            </>
+          ) : <p className="text-sm text-muted">이 기간에 측정한 기록이 없어요. 측정을 시작하면 총평을 받을 수 있어요.</p>)}
+        {loadingLabel && (
+          <p role="status" className="flex items-center gap-2 text-sm text-muted">
+            <LoaderCircle size={16} aria-hidden="true" className="motion-safe:animate-spin" />
+            {loadingLabel}
+          </p>
+        )}
       </section>
 
-      {shown?.status === 'loading' && (
-        <div aria-live="polite" className="space-y-4">
-          <p className="text-sm text-muted">AI가 총평을 쓰고 있어요…</p>
-          <SourceLoading className="h-28" />
-          <div className="grid gap-4 md:grid-cols-2"><SourceLoading className="h-32" /><SourceLoading className="h-32" /></div>
-        </div>
-      )}
       {shown?.status === 'error' && (
         <div role="alert" className={`${CARD} flex flex-wrap items-center justify-between gap-3 text-sm text-heading`}>
           <span>{shown.message}</span>

@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { createHash } from 'node:crypto';
 import type { Auth } from '../auth.js';
 import { asyncHandler, HttpError } from '../http.js';
-import { parseReviewInput, type Reviewer } from '../services/aiReview.js';
+import { parseReviewInput, type Review, type Reviewer } from '../services/aiReview.js';
 import { enforce, limit, memoryRequestLimits, type RequestLimits } from '../services/requestLimits.js';
 
 const HOURLY_LIMIT = 10;
@@ -13,7 +13,7 @@ const HOURLY_LIMIT = 10;
  */
 export function createAiRouter(reviewer: Reviewer | null, auth: Auth, limits: RequestLimits = memoryRequestLimits()) {
   const router = Router();
-  const active = new Map<string, Promise<{ generatedAt: string } & Awaited<ReturnType<Reviewer>>>>();
+  const active = new Map<string, Promise<Review & { summary: string; improvements: string[]; generatedAt: string }>>();
   router.use(auth.requireAuth);
 
   router.post('/review', asyncHandler(async (req, res) => {
@@ -33,7 +33,14 @@ export function createAiRouter(reviewer: Reviewer | null, auth: Auth, limits: Re
         try {
           await enforce(limits, [limit(`ai:account:${userId}`, HOURLY_LIMIT, 3600), limit('ai:total', 90, 3600)],
             'AI 총평 요청 한도에 도달했어요. 잠시 후 다시 시도해 주세요.');
-          return { ...await reviewer(input), generatedAt: new Date().toISOString() };
+          const review = await reviewer(input);
+          // Older app builds read summary, strengths and improvements.
+          return {
+            ...review,
+            summary: review.sections[0].text,
+            improvements: review.weaknesses.length ? review.weaknesses : review.goals,
+            generatedAt: new Date().toISOString(),
+          };
         } finally { await free().catch(() => {}); }
       } finally { await unique().catch(() => {}); }
     })();

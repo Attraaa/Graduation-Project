@@ -168,6 +168,7 @@ test('deviation hours sum neck and balance episodes over the shown hour range', 
   ]);
   assert.deepEqual(hours.map(hour => [hour.hour, hour.count, hour.strong]),
     [[9, 3, true], [10, 0, false], [11, 0, false], [12, 4, true]]);
+  assert.deepEqual(hours.map(hour => hour.observedMs), [60_000, 0, 0, 60_000]); // neck and balance overlap, so the longer one counts
   assert.deepEqual(deviationHours([]), []);
 });
 

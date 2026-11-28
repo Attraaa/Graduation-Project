@@ -21,7 +21,8 @@ export interface TimelineEntry {
   interrupted: boolean;
   source: EntrySource;
 }
-export interface DeviationHour { hour: number; count: number; strong: boolean }
+/** observedMs: the longer of neck and balance observation in that hour, so a count can be read as a rate. */
+export interface DeviationHour { hour: number; count: number; strong: boolean; observedMs: number }
 /**
  * A record still marked running whose last save is older than this ended without its last save (the app was killed,
  * crashed or lost power). Running records save every 1–5 s, so it is shown as interrupted, not as still recording.
@@ -184,8 +185,10 @@ export function deviationHours(rows: StatisticsRow[]): DeviationHour[] {
   if (!rows.length) return [];
   const hours = rows.map(row => Number(row.hour));
   const first = Math.min(...hours), last = Math.max(...hours);
-  const counts = Array.from({ length: last - first + 1 }, (_, index) =>
-    total(rows.filter(row => Number(row.hour) === first + index), row => row.deviationEpisodeCount));
+  const atHour = Array.from({ length: last - first + 1 }, (_, index) => rows.filter(row => Number(row.hour) === first + index));
+  const counts = atHour.map(hourRows => total(hourRows, row => row.deviationEpisodeCount));
+  const observed = (hourRows: StatisticsRow[], mode: string) => total(hourRows.filter(row => row.mode === mode), row => row.validMs);
   const peak = Math.max(...counts);
-  return counts.map((count, index) => ({ hour: first + index, count, strong: peak > 0 && count >= peak * 0.75 }));
+  return counts.map((count, index) => ({ hour: first + index, count, strong: peak > 0 && count >= peak * 0.75,
+    observedMs: Math.max(observed(atHour[index], 'turtle'), observed(atHour[index], 'balance')) }));
 }

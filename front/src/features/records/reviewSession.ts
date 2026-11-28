@@ -1,3 +1,4 @@
+import { localDateKey } from '../../../../database/contracts.ts';
 import type { LocalPostureReview, ObservedBand } from '../../../../database/localReview.ts';
 
 type Part = { validMs: number; meanPoints: number | null; mostObservedBand: ObservedBand | null };
@@ -42,16 +43,42 @@ function mean(rows: ReviewSession[], key: 'neck' | 'shoulder', version: string) 
   return ms ? round(sum / ms) : null;
 }
 
-export function localPostureReview(sessions: ReviewSession[], since: number): LocalPostureReview | null {
+/** Sessions of the period, newest first, and the score policies of the latest one (older policies are not mixed in). */
+function currentOf(sessions: ReviewSession[], since: number) {
   const current = sessions.filter(s => s.startedAt >= since).sort((a, b) => b.startedAt - a.startedAt);
-  const previous = sessions.filter(s => s.startedAt < since);
-  if (!current.length) return null;
-  const policies = {
+  const policies = current.length ? {
     neck: (current.find(s => s.neck.validMs > 0) ?? current[0]).scorePolicyVersions.neck,
     shoulder: (current.find(s => s.shoulder.validMs > 0) ?? current[0]).scorePolicyVersions.shoulder,
-  };
+  } : null;
+  return { current, policies };
+}
+const startDate = (session: ReviewSession) => localDateKey(session.startedAt, new Date(session.startedAt).getTimezoneOffset());
+
+export function localPostureReview(sessions: ReviewSession[], since: number): LocalPostureReview | null {
+  const { current, policies } = currentOf(sessions, since);
+  const previous = sessions.filter(s => s.startedAt < since);
+  if (!policies) return null;
   const pair = (key: 'neck' | 'shoulder') => ({ current: mean(current, key, policies[key]), previous: mean(previous, key, policies[key]) });
+  // Sessions are grouped by the hour they started; minutes are the longer of neck and side observation.
+  const byHour = new Map<number, ReviewSession[]>();
+  for (const session of current) {
+    const hour = new Date(session.startedAt).getHours();
+    byHour.set(hour, [...(byHour.get(hour) ?? []), session]);
+  }
+  const hourly = [...byHour].sort(([a], [b]) => a - b).map(([hour, rows]) => ({ hour,
+    neck: mean(rows, 'neck', policies.neck), side: mean(rows, 'shoulder', policies.shoulder),
+    minutes: round(rows.reduce((n, s) => n + Math.max(s.neck.validMs, s.shoulder.validMs), 0) / 60_000) }));
   return { sessions: current.length, measuredMinutes: round(current.reduce((n, s) => n + s.endedAt - s.startedAt, 0) / 60_000),
     sideMetric: policies.shoulder.startsWith('upper-body-balance-') ? 'balance' : 'shoulder',
-    neck: pair('neck'), side: pair('shoulder'), latestNeckBand: current[0].neck.mostObservedBand };
+    neck: pair('neck'), side: pair('shoulder'), latestNeckBand: current[0].neck.mostObservedBand,
+    hourly, longestMinutes: round(Math.max(...current.map(s => s.endedAt - s.startedAt)) / 60_000) };
+}
+
+/** Neck and side means per local start date, for each date of the period (null where nothing was measured). */
+export function localPostureDaily(sessions: ReviewSession[], since: number, dates: string[]) {
+  const { current, policies } = currentOf(sessions, since);
+  return dates.map(date => {
+    const day = current.filter(session => startDate(session) === date);
+    return { date, neck: policies && day.length ? mean(day, 'neck', policies.neck) : null, side: policies && day.length ? mean(day, 'shoulder', policies.shoulder) : null };
+  });
 }

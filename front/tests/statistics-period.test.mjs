@@ -102,7 +102,7 @@ test('deviation hours follow the chosen period and leave out the previous one', 
     postureRow({ date: '2026-09-29', hour: '15', recordIds: ['s0:turtle'], deviationEpisodeCount: 5 }),  // 7일 기준 이전 기간
     postureRow({ date: '2026-09-20', hour: '20', recordIds: ['s9:turtle'], deviationEpisodeCount: 9 }),
   ];
-  assert.deepEqual(build({ posture }).upper.deviationHours, [{ hour: 9, count: 3, strong: true }]);
+  assert.deepEqual(build({ posture }).upper.deviationHours, [{ hour: 9, count: 3, strong: true, observedMs: 60_000 }]);
   const month = build({ posture, days: 30 }).upper.deviationHours;
   assert.deepEqual([month[0].hour, month.at(-1).hour], [9, 20]);
   assert.deepEqual(month.filter(hour => hour.strong).map(hour => [hour.hour, hour.count]), [[20, 9]]);

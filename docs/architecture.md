@@ -79,10 +79,10 @@ Electron 개발 앱의 키보드 모드는 로컬 Python 프로세스를 자동 
 | `front/src/pages/Statistics.tsx`, `front/src/features/statistics/` | 통계(1/7/30일, 기본 1일, 직전 같은 길이 기간 비교, 상체·키보드·안구 탭). `period.ts`가 세 출처 응답으로 기간 값(상체의 시간대별 점수·기준 이탈이 잦은 시간 포함)을 계산하는 순수 함수(상체는 점수 정책으로만 묶어 기준 이탈 규칙이 다른 기록도 함께 셈, `dashboard/summary.ts`의 `latestPolicyGroups`), `useStatisticsData.ts`가 불러옴. 키보드 탭은 `features/keyboard/KeyboardStatistics.tsx`(계산은 키보드 담당). [설계](superpowers/specs/2026-10-06-stats-history-redesign-design.md) |
 | `front/src/pages/LearningHistory.tsx`, `front/src/features/history/` | 학습이력(주간·월간 달력, 시작일별 기록 줄(2026-11-25부터 최신순), 오른쪽 상세, 기록 없는 날). `calendar.ts`가 달력·기록 줄·앞뒤 기록을 계산하고 `currentPolicies.ts`가 "이전 기준"을 판단. 2026-11-25부터 마지막 저장이 3분 넘게 지난 `running` 기록(앱이 마지막 저장 없이 꺼짐)은 "중단됨"으로 봄(`dashboard/summary.ts`의 `STALE_RUNNING_MS`). 오른쪽 상세(`RecordDetail.tsx`)는 세 모드가 같은 틀: 머리줄(모드·시각·상태) → 상자 없는 숫자 3–4개(`detail.ts`의 `detailStats`, 기록 줄 자료만 씀) → 그림 하나(상체 분별 목·좌우 균형 점수, 안구 분별 깜빡임 빈도, 키보드는 `KeyboardRecordDetail`의 키 히트맵·선택 키) |
 | `front/src/pages/Settings.tsx`, `front/src/features/settings/` | 계정, 비밀번호·이메일, 화면 테마, 알림, 데이터 관리, 키보드·승인 앱 관찰을 카드로 표시함. `parts.tsx`는 카드·입력·버튼·스위치·단계 조절을 공유함. `preferences.ts`는 상체 측정의 고정값(좌우 균형 10%, 추정 CVA 50°, 깜빡임 보통)을 제공함. 알림 카드에서 상체와 키보드 각각의 경고 점수·유지 시간과 소리를 설정함. 같은 경고는 상황별 한 번, 새 상황에 최소 5초 간격으로 표시함. [알림 규칙](monitoring.md#windows-자세-경고-알림) |
-| `front/src/pages/AiReview.tsx`, `front/src/features/ai-review/` | AI 총평(별도 메뉴 `/ai-review`, 최종 위치 미정). 통계와 같은 기간 수치를 `input.ts`가 요청 형태로 바꾸고 보내기 전에 모두 표시하며, `ReviewCards.tsx`가 총평·잘한 점·개선할 점을 표시. 저장하지 않음. [안내](ai-review.md) |
+| `front/src/pages/AiReview.tsx`, `front/src/features/ai-review/` | AI 총평(`/ai-review`, 7·30일). `input.ts`가 측정 집계를 요청 형태로 바꾸고 보내기 전에 표시하며, `ReviewCards.tsx`가 한 줄 요약·총평·영역별 문단·잘한 점·아쉬운 점·다음 목표를 보여 줌. 상체는 날짜별·시간대별 값을 포함한 기기 측정 요약을 우선 사용하고, 없으면 서버 통계를 씀(`useReviewInput.ts`). [안내](ai-review.md) |
 | `front/src/features/hospitals/` | 주변 병원 찾기(AI 총평 화면 맨 아래, 점수·총평과 연결하지 않음). 진료과와 동네·주소 또는 약 1km로 반올림한 현재 위치로 `GET /api/hospitals`를 부르고, `kakaoMap.ts`가 불러온 카카오 지도 SDK에 마커와 목록을 함께 표시. [안내](nearby-hospitals.md) |
 | `front/src/features/keyboard/KeyboardRecordDetail.tsx`, `KeyboardKeyExploration.tsx`, `keyExploration.ts` | 학습이력 키보드 세션의 키 히트맵(카드 없이 상세 패널 위), 통계/이력 공용 히트맵·선택 키 표시, DOM 없는 키별 집계. 카메라/실시간 점수 정책을 소유하지 않음 |
-| `server/src/server.ts`, `config.ts` | 환경 검증 후 서버 시작. JWT 비밀값 자동 기본값 없음. AI 총평 키(`ANTHROPIC_API_KEY`)는 선택 |
+| `server/src/server.ts`, `config.ts` | 환경 검증 후 서버 시작. JWT 비밀값 자동 기본값 없음. AI 총평 미니 PC 주소(`MOTI_REVIEW_GATEWAY_URL`)는 선택 |
 | `server/src/app.ts`, `http.ts` | API 조립과 공통 비동기 오류 응답 |
 | `server/src/validation.ts` | HTTP 입력을 런타임에서 검사 |
 | `server/src/routes/` | HTTP 계약/인증/응답 변환 |
@@ -90,7 +90,7 @@ Electron 개발 앱의 키보드 모드는 로컬 Python 프로세스를 자동 
 | `server/src/services/statistics.ts` | 오늘·달력의 세션 수 가중 평균. 누락 평균과 실제 0점 구분 |
 | `server/src/repositories/sessions.ts` | MySQL SQL, 행 잠금, 트랜잭션, 통계 집계, 지표·날짜별 측정 데이터 기록/조회 |
 | `server/src/routes/feedback.ts` | 날짜·모드 단위 피드백 기록/조회. 서버가 요약을 만들지는 않음 |
-| `server/src/routes/ai.ts`, `services/aiReview.ts` | AI 총평 `POST /api/ai/review`(토큰 사용자만, 계정당 시간당 10회). 숫자·키 코드만 검사해 받고 `ANTHROPIC_API_KEY`로 Claude를 호출. 키가 없으면 503, 결과는 저장하지 않음. [안내](ai-review.md) |
+| `server/src/routes/ai.ts`, `services/aiReview.ts` | AI 총평 `POST /api/ai/review`. 인증과 MySQL 요청 한도를 적용하고, `reviewFacts.ts`가 측정 집계로 한 줄 요약·영역별 문단·목록을 만듦. 미니 PC(`MOTI_REVIEW_GATEWAY_URL`)가 고른 습관은 총평 문단 끝에 붙음(`reviewAdvice.ts`). 게이트웨이 주소가 없으면 503을 반환하며 총평 결과는 저장하지 않음. [안내](ai-review.md) |
 | `server/src/routes/hospitals.ts`, `services/hospitals.ts` | 주변 병원 찾기 `GET /api/hospitals`(토큰 사용자만). 진료과 4개만 받고, 카카오 로컬 API로 위치를 찾은 뒤 반경 5km 병원을 거리순 15곳 반환. `KAKAO_REST_API_KEY`가 없으면 503, 위치는 저장·로그하지 않음. [안내](nearby-hospitals.md) |
 | `server/src/routes/records.ts`, `repositories/records.ts`, `migrations/002_record_tables.sql` | 앱 기록 API(토큰 사용자만), MySQL 트랜잭션 저장·조회·삭제 세대 |
 | `server/migrations/` | 기존 DB에 적용하는 변경. `schema.sql`은 새 DB용 전체 정의 |

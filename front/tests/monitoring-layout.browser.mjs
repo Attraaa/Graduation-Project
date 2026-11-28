@@ -647,21 +647,31 @@ try {
   const generation = () => click('button', '총평 받기');
   const periodSelect = days => click('[aria-label="기간"] button', days + '일');
   const pendingReview = days => eventually(() => read(`typeof fixture.reviews[${days}] === 'function'`), Boolean, `review request ${days}`);
-  const resolveReview = (days, label, status = 200) => read(`fixture.reviews[${days}](Response.json({
-    summary: '${label}', strengths: [], improvements: [], model: 'fixture', generatedAt: new Date().toISOString(), message: '${label}'
-  }, { status: ${status} }))`);
+  const resolveReview = (days, body, status = 200) => read(`fixture.reviews[${days}](Response.json(${JSON.stringify(body)}, { status: ${status} }))`);
+  const reviewMeta = { strengths: [], model: 'fixture', generatedAt: new Date().toISOString() };
+  const recentReview = {
+    ...reviewMeta, headline: '최근 삼십일 응답', sections: [
+      { key: 'overall', title: '최근 30일 총평', text: '기록한 날이 늘었어요.' },
+      { key: 'keyboard', title: '키보드', text: '훈련 점수가 올랐어요.' },
+    ], weaknesses: [], goals: ['같은 시간에 다시 측정하기'], caution: null,
+  };
   await generation(); await pendingReview(7);
+  await text('[role="status"]', '총평 작성 중');
+  assert.equal(await read(`[...document.querySelectorAll('main [role="status"]')].filter(node => node.textContent.includes('총평 작성 중')).length`), 1);
   await periodSelect(30); await generation(); await pendingReview(30);
-  await resolveReview(30, '최근 삼십일 응답');
+  await resolveReview(30, recentReview);
   await text('main', '최근 삼십일 응답');
-  await resolveReview(7, '늦은 칠일 오류', 503);
+  await text('section[aria-label="키보드"]', '훈련 점수가 올랐어요.');
+  await text('section[aria-label="다음 목표"]', '같은 시간에 다시 측정하기');
+  await resolveReview(7, { message: '늦은 칠일 오류' }, 503);
   assert.equal(await read(`document.querySelector('main').textContent.includes('늦은 칠일 오류')`), false);
   await read('fixture.reviews = {}');
   await click('button', '다시 받기'); await pendingReview(30);
   await periodSelect(7); await generation(); await pendingReview(7);
-  await resolveReview(7, '최근 칠일 응답');
+  await resolveReview(7, { ...reviewMeta, summary: '최근 칠일 응답', improvements: ['카메라 위치 확인하기'] });
   await text('main', '최근 칠일 응답');
-  await resolveReview(30, '늦은 삼십일 응답');
+  await text('section[aria-label="아쉬운 점"]', '카메라 위치 확인하기');
+  await resolveReview(30, { ...recentReview, headline: '늦은 삼십일 응답' });
   await text('main', '최근 칠일 응답');
   const typeAddress = value => read(`(() => {
     const input = document.querySelector('input[aria-label="동네 이름이나 주소"]');
