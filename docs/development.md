@@ -608,6 +608,7 @@ macOS `bash scripts/moti.sh check`에서 타입·린트, 프론트 264개(상세
   - 백업은 `~/moti-backups/20261128-132806-before-hospitals/`, `…-141520-before-hospitals-post/`에 있습니다.
   - 4999 포트 시험 실행 뒤 재시작했습니다. 임시 계정으로 POST 주소·좌표, GET 좌표 검색이 200인 것을 확인하고 계정을 지웠습니다.
 - **iframe 지도:** `http://localhost:5173`에서 지도가 비던 문제를 `mapFrame.html` CSP에 카카오 CDN의 http 주소를 더해 고쳤습니다. 카카오 SDK는 http 페이지에서 http로 불러옵니다. `nearby-hospitals.test.mjs`에 CSP 검사를 더했고, 고치기 전 파일에서는 실패하고 고친 뒤에는 통과합니다.
+- **지도 키 공유:** 팀원 앱에는 "지도 키가 설정되지 않아 목록으로 보여 드려요"가 떴습니다. JS 키가 git에서 빠진 `front/.env.local`에만 있었기 때문입니다. 사용자 결정으로 키를 추적되는 `front/.env`에 넣었습니다(공개 저장소, [보안 기준](security.md)에 예외로 적음).
 - **남은 것:**
   - 운영 nginx는 여전히 쿼리까지 기록하므로, 기존 설치본(GET)이 보낸 위치가 접근 로그에 남습니다.
   - 새 앱 화면 안에서 지도를 본 것은 아닙니다.
