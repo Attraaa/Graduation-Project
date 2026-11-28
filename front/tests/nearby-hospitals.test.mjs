@@ -56,3 +56,17 @@ test('before a search the card offers the four departments, a place box and the 
   assert.match(out, />현재 위치<\/button>/);
   assert.doesNotMatch(out, /병원 위치 지도/);
 });
+
+test('the map frame lets the Kakao SDK load over http, as it does on the http dev server', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const html = await readFile(new URL('../src/features/hospitals/mapFrame.html', import.meta.url), 'utf8');
+  const policy = Object.fromEntries(html.match(/Content-Security-Policy" content="([^"]+)"/)[1].split(';')
+    .map(part => part.trim().split(/\s+/)).map(([name, ...sources]) => [name, sources]));
+  for (const host of ['t1.daumcdn.net', 't1.kakaocdn.net']) {
+    for (const directive of ['script-src', 'style-src']) {
+      assert.ok(policy[directive].includes(`https://${host}`) && policy[directive].includes(`http://${host}`), `${directive} ${host}`);
+    }
+  }
+  assert.ok(policy['img-src'].includes('http://*.kakaocdn.net'), 'map tiles come from mts.kakaocdn.net');
+  assert.deepEqual(policy['default-src'], ["'none'"]);
+});

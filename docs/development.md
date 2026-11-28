@@ -596,3 +596,18 @@ macOS `bash scripts/moti.sh check`에서 타입·린트, 프론트 264개(상세
 - **고르기:** 설정의 "열려 있는 앱에서 고르기"가 창이 있는 프로그램을 파일 설명·아이콘으로 보여 줍니다(PowerShell `Get-Process`, 창 제목은 읽지 않음). Windows 폴더의 셸 프로그램(Explorer·설정 등), Moti, 게임은 뺍니다. 승인은 main이 10분 안에 보여 준 목록의 경로만 받습니다. "실행 파일·바로가기 직접 선택"은 시작 메뉴 폴더에서 열리고, 바로가기는 그것이 실행하는 .exe로 승인하며 실행 파일이 없는 바로가기(Store 앱 등)는 거부합니다.
 - **시험:** Python `tests/test_approved_apps.py` 7개(main 토큰만 허용, 잘못된 목록 거부, 측정 중 첫 앱 추가 시 관찰 시작, 실행 중 목록 교체, 빈 목록이면 `off`, 일시정지 중 추가는 시작하지 않음, `set_approved`). 프론트 `keyboard-settings.test.mjs` 3개(열린 앱 필터·PowerShell 단일 객체, 보여 준 목록 밖 경로 거부, 바로가기 대상 승인·실행 파일 없는 바로가기 거부). Python 31개, 프론트 타입·린트와 306개 중 304개 통과(2개 skip). 실제 분석기 프로세스에서 페이지 토큰 401, main 토큰 200, 잘못된 목록 400을 확인했습니다. 이 PC의 열린 앱 목록에서 Chrome이 "Google Chrome"으로 잡혔습니다(PowerShell 약 3.5초).
 - **한계:** 실제 Chrome 입력이 측정 중 승인 직후 판정되는지는 앱에서 사람이 확인해야 합니다. Electron 설치 파일 전체와 서버는 이번에 바꾸거나 검사하지 않았습니다.
+
+## 2026-11-28 주변 병원 찾기 운영 반영과 iframe 지도 CSP
+
+[안내](nearby-hospitals.md#운영-반영과-iframe-지도-2026-11-28)
+
+- **증상:** 팀원 PC에서 병원 검색이 되지 않았습니다. 운영 nginx 로그에서 새 앱의 `POST /api/hospitals`는 404였습니다. 운영 서버에는 병원 경로가 없었고(11-25 반영 때 제외), `KAKAO_REST_API_KEY`도 없었습니다.
+- **운영 반영:**
+  - 운영 소스는 `e3d1c2a`에서 병원 줄만 빠진 상태였습니다. 여기에 `app.ts`, `config.ts`, `services/hospitals.ts`(`e3d1c2a`)와 POST·GET을 함께 받는 `routes/hospitals.ts`(`4da9281`)만 더해 서버에서 빌드했습니다.
+  - 미니 PC 총평과 `1ea1e1f`의 다른 서버 변경(006 이전 등)은 올리지 않았습니다.
+  - 백업은 `~/moti-backups/20261128-132806-before-hospitals/`, `…-141520-before-hospitals-post/`에 있습니다.
+  - 4999 포트 시험 실행 뒤 재시작했습니다. 임시 계정으로 POST 주소·좌표, GET 좌표 검색이 200인 것을 확인하고 계정을 지웠습니다.
+- **iframe 지도:** `http://localhost:5173`에서 지도가 비던 문제를 `mapFrame.html` CSP에 카카오 CDN의 http 주소를 더해 고쳤습니다. 카카오 SDK는 http 페이지에서 http로 불러옵니다. `nearby-hospitals.test.mjs`에 CSP 검사를 더했고, 고치기 전 파일에서는 실패하고 고친 뒤에는 통과합니다.
+- **남은 것:**
+  - 운영 nginx는 여전히 쿼리까지 기록하므로, 기존 설치본(GET)이 보낸 위치가 접근 로그에 남습니다.
+  - 새 앱 화면 안에서 지도를 본 것은 아닙니다.
