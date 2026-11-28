@@ -228,10 +228,12 @@ python keylog\examples\live_console_test.py</code></pre>
     <tr><td><code>keylog/service.py</code></td><td>테스트</td><td>선택형 Socket.IO 웹 테스트 서버. 실제 런타임 필수 아님</td></tr>
     <tr><td><code>src/keyboard_mapper.py</code></td><td>예</td><td>기존 AI 모듈 메인. 프레임에서 전체 키 polygon 계산</td></tr>
     <tr><td><code>src/auto_map.py</code></td><td>예</td><td>YOLO 4코너 검출, 전처리, homography 유틸</td></tr>
+    <tr><td><code>src/corner_detector.py</code></td><td>예</td><td><code>best.onnx</code>를 ONNX Runtime으로 실행. PyTorch 없이 Ultralytics와 같은 전처리·후처리</td></tr>
     <tr><td><code>src/identify_key.py</code></td><td>예</td><td>픽셀 좌표가 어떤 key polygon 안에 있는지 판별</td></tr>
-    <tr><td><code>models/best.pt</code></td><td>예</td><td>학습된 YOLO 4코너 감지 모델</td></tr>
+    <tr><td><code>models/best.onnx</code></td><td>예</td><td>학습된 YOLO 4코너 감지 모델(실행용). <code>best.pt</code>에서 <code>scripts/export_onnx.py</code>로 내보냄</td></tr>
+    <tr><td><code>models/best.pt</code></td><td>학습</td><td>학습 원본. 실행에는 쓰지 않음</td></tr>
     <tr><td><code>data/perfect_map.json</code></td><td>예</td><td>SVG 기준 키보드 61키 좌표</td></tr>
-    <tr><td><code>requirements.txt</code></td><td>예</td><td>OpenCV, MediaPipe, YOLO, pynput 등 실행 의존성</td></tr>
+    <tr><td><code>requirements.txt</code></td><td>예</td><td>OpenCV, MediaPipe, ONNX Runtime, pynput 등 실행 의존성</td></tr>
   </table>
 </section>
 

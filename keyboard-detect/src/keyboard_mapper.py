@@ -25,6 +25,7 @@ from auto_map import (
     load_perfect_map,
     transform_all_keys,
 )
+from corner_detector import OnnxCornerDetector
 from identify_key import identify_key
 
 
@@ -100,11 +101,10 @@ class KeyboardCoordinateMapper:
 
     def __init__(
         self,
-        model_path: str = "models/best.pt",
+        model_path: str = "models/best.onnx",
         perfect_map_path: str = "data/perfect_map.json",
         imgsz: int = 800,
         conf: float = 0.1,
-        tta: bool = False,
         enhance: str = "auto",
         min_confidence: float = 0.18,
         min_area_ratio: float = 0.015,
@@ -119,14 +119,11 @@ class KeyboardCoordinateMapper:
         if not os.path.exists(perfect_map_path):
             raise FileNotFoundError(perfect_map_path)
 
-        from ultralytics import YOLO
-
-        self.model = YOLO(model_path)
+        self.model = OnnxCornerDetector(model_path, imgsz=imgsz)
         self.perfect_map = load_perfect_map(perfect_map_path)
 
         self.imgsz = imgsz
         self.conf = conf
-        self.tta = tta
         self.enhance = enhance
         self.min_confidence = min_confidence
         self.min_area_ratio = min_area_ratio
@@ -162,7 +159,6 @@ class KeyboardCoordinateMapper:
             self.model,
             frame,
             conf=self.conf,
-            tta=self.tta,
             imgsz=self.imgsz,
             enhance=self.enhance,
         )

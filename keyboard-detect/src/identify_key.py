@@ -24,7 +24,7 @@ if __name__ == "__main__":
 
     ap = argparse.ArgumentParser()
     ap.add_argument("--image", required=True)
-    ap.add_argument("--model", default="models/best.pt")
+    ap.add_argument("--model", default="models/best.onnx")
     ap.add_argument("--map", default="data/perfect_map.json")
     ap.add_argument("--xy", nargs=2, type=float, required=True, metavar=("X", "Y"))
     args = ap.parse_args()

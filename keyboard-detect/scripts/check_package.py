@@ -22,6 +22,11 @@ STARTUP_STAGE_SECONDS = 45
 
 def check_package(executable):
     executable = str(Path(executable).resolve(strict=True))
+    # The analyzer runs best.onnx; model tools in the bundle would add hundreds of MB.
+    bundled = Path(executable).parent / "_internal"
+    leaked = [name for name in ("torch", "torchvision", "ultralytics") if (bundled / name).exists()]
+    if leaked:
+        raise AssertionError(f"Model tools were packaged: {leaked}")
     token = secrets.token_urlsafe(32)
     with tempfile.TemporaryDirectory(prefix="moti-keyboard-package-") as temporary:
         env = dict(os.environ)
@@ -30,7 +35,6 @@ def check_package(executable):
         # No project Python, DLLs, config directories or approved apps in the child environment.
         env.update(PATH=str(Path(os.environ["SystemRoot"]) / "System32"),
                    MOTI_KEYBOARD_TOKEN=token, MOTI_APPROVED_APPS="[]",
-                   YOLO_CONFIG_DIR=str(Path(temporary) / "ultralytics"),
                    MPLCONFIGDIR=str(Path(temporary) / "matplotlib"))
         log_path = Path(temporary) / "service.log"
         with log_path.open("wb") as log:

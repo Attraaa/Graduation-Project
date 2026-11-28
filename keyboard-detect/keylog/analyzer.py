@@ -36,7 +36,7 @@ class KeyboardPressAnalyzer:
         imgsz: int = 800,
     ):
         self.mapper = mapper or KeyboardCoordinateMapper(
-            model_path=str(model_path or ROOT / "models" / "best.pt"),
+            model_path=str(model_path or ROOT / "models" / "best.onnx"),
             perfect_map_path=str(perfect_map_path or ROOT / "data" / "perfect_map.json"),
             imgsz=imgsz,
             enhance="auto",

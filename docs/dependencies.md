@@ -80,34 +80,37 @@ front와 server는 각각 `package.json`과 `package-lock.json`을 유지합니�
 
 | 설치 구분 | 포함 대상 | 사용 방법 |
 | --- | --- | --- |
-| 기본 | OpenCV, NumPy, MediaPipe, YOLO, PyTorch, pynput 등 | `uv sync --locked` |
+| 기본 | OpenCV, NumPy, MediaPipe, ONNX Runtime(키보드 YOLO 실행), pynput 등 | `uv sync --locked` |
 | `web` extra | 기본 + Flask, Flask-SocketIO, simple-websocket | 표준 setup의 `--extra web` |
 | `build` 그룹 | PyInstaller 6.22.3와 잠긴 빌드 의존성 | Windows 설치 파일 생성 시 `--group build --extra web` |
 | `dev` 그룹 | Roboflow 등 모델 개발 도구 | 필요한 개발자만 `--group dev --extra web` 추가 |
+| `model` 그룹 | Ultralytics, PyTorch·torchvision(CPU), onnx, onnxslim | `best.pt` 학습·`best.onnx` 내보내기·일치 검사 때만 `--group model` 추가 |
 
-`default-groups=[]`이므로 모델 개발 도구는 기본 설치에서 제외됩니다. 최종 setup에서 기본+web **68개 패키지** 설치/동기화를 확인했습니다. 잠금에는 선택하지 않은 dev 그룹도 기록되므로 잠금의 전체 패키지 수와 설치 수는 같을 필요가 없습니다. [uv 잠금과 동기화](https://docs.astral.sh/uv/concepts/projects/sync/)
+`default-groups=[]`이므로 모델 개발 도구는 기본 설치에서 제외됩니다. 2026-11-28부터 키보드 분석기는 `models/best.onnx`를 ONNX Runtime으로 실행하므로 PyTorch·Ultralytics가 기본 설치에 없습니다. 이때 기본+web 설치는 **43개 패키지**입니다. 잠금에는 선택하지 않은 dev·model 그룹도 기록되므로 잠금의 전체 패키지 수와 설치 수는 같을 필요가 없습니다. [uv 잠금과 동기화](https://docs.astral.sh/uv/concepts/projects/sync/)
 
 | 핵심 패키지 | 잠금 버전 | 선택 이유·주의점 |
 | --- | --- | --- |
 | mediapipe | 0.10.21 | 기존 `mp.solutions.hands` API 유지 |
 | numpy | 1.26.4 | 현재 MediaPipe/OpenCV 호환 범위 |
-| opencv-python | 4.11.0.86 | 기존 분석·Ultralytics 요구 |
+| opencv-python | 4.11.0.86 | 분석 코드의 `cv2`. model 그룹의 Ultralytics도 요구 |
 | opencv-contrib-python | 4.11.0.86 | MediaPipe 전이 의존성 |
-| torch | 2.14.0+cpu | CUDA 설치 없이 공통 실행 |
-| torchvision | 0.29.0+cpu | CPU PyTorch와 함께 고정 |
-| ultralytics | 8.4.142 | 기존 `models/best.pt` 로드 |
+| onnxruntime | 1.32.0 | 키보드 YOLO `models/best.onnx` 실행(CPU) |
+| torch | 2.14.0+cpu | model 그룹. CUDA 설치 없이 학습·내보내기 |
+| torchvision | 0.29.0+cpu | model 그룹. CPU PyTorch와 함께 고정 |
+| ultralytics | 8.4.142 | model 그룹. `best.pt` 로드·학습·ONNX 내보내기 |
+| onnx, onnxslim | 1.22.0, 0.1.99 | model 그룹. Ultralytics의 ONNX 내보내기·그래프 정리 |
 
 PyTorch와 torchvision은 `explicit=true`로 정의한 PyTorch CPU 인덱스에만 연결했습니다. GPU 최적화는 아직 진행하지 않았으며 CPU 선택이 GPU보다 빠르다는 의미는 아닙니다.
 
-기본+web 환경에는 OpenCV 배포 패키지가 **두 개** 설치됩니다. 두 패키지는 같은 `cv2` 모듈 경로를 제공하므로 개별 갱신하면 안 됩니다. 현재 같은 4.11.0.86으로 잠그고 import와 모델 로드를 확인했습니다. 중복 자체를 해결했다는 의미는 아닙니다. MediaPipe/Ultralytics 이전 시 함께 정리해야 합니다. 선택 dev 그룹은 Roboflow를 통해 `opencv-python-headless`도 요구하므로 dev 환경을 사용할 때 추가 검증이 필요합니다.
+기본+web 환경에는 OpenCV 배포 패키지가 **두 개** 설치됩니다. 두 패키지는 같은 `cv2` 모듈 경로를 제공하므로 개별 갱신하면 안 됩니다. 현재 같은 4.11.0.86으로 잠그고 import와 모델 로드를 확인했습니다. 중복 자체를 해결했다는 의미는 아닙니다. MediaPipe 이전 시 함께 정리해야 합니다. 선택 dev 그룹은 Roboflow를 통해 `opencv-python-headless`도 요구하므로 dev 환경을 사용할 때 추가 검증이 필요합니다.
 
 Python의 `mp.solutions.hands`와 브라우저의 기존 `Pose`는 Legacy API입니다. Google은 기존 코드·바이너리를 as-is로 제공하므로 최신 Tasks API로 바꿀 때 입력·출력, 모델 파일, 좌표 의미와 수명 관리를 함께 이전해야 합니다. 패키지 버전만 교체하지 않습니다. [MediaPipe 공식 가이드](https://developers.google.com/edge/mediapipe/solutions/guide)
 
-[check_environment.py](../keyboard-detect/scripts/check_environment.py)는 카메라나 전역 키보드 관찰 없이 Python 버전, 라이브러리 import, `mp.solutions`, 기존 모델과 `perfect_map.json` 로드를 검사합니다. 모델 로드 성공은 실제 손가락 판별 정확도나 실시간 성능 검증과 구분합니다.
+[check_environment.py](../keyboard-detect/scripts/check_environment.py)는 카메라나 전역 키보드 관찰 없이 Python 버전, 라이브러리 import, `mp.solutions`, `best.onnx` 로드와 빈 프레임 한 번 추론, `perfect_map.json` 로드를 검사합니다. 모델 로드 성공은 실제 손가락 판별 정확도나 실시간 성능 검증과 구분합니다.
 
 ### requirements 파일의 역할
 
-`requirements.txt`, `requirements-web.txt`, `requirements-dev.txt`는 잠금에서 생성한 **호환용 내보내기 파일**입니다. 직접 수정하거나 `pip freeze`로 덮어쓰지 않습니다. 표준 설치는 pyproject/uv.lock과 `setup.cmd`입니다.
+`requirements.txt`, `requirements-web.txt`, `requirements-dev.txt`, `requirements-model.txt`는 잠금에서 생성한 **호환용 내보내기 파일**입니다. 직접 수정하거나 `pip freeze`로 덮어쓰지 않습니다. 표준 설치는 pyproject/uv.lock과 `setup.cmd`입니다.
 
 내보낸 파일에는 정확한 버전, 플랫폼 조건, 해시와 PyTorch CPU 추가 인덱스가 포함됩니다. requirements 형식은 uv의 패키지별 인덱스 지정까지 보존하지 못하므로 uv와 완전히 같은 인덱스 선택 정책이라고 가정하지 않습니다.
 
@@ -117,7 +120,7 @@ Python의 `mp.solutions.hands`와 브라우저의 기존 `Pose`는 Legacy API입
 2. 루트 PowerShell에서 `. .\scripts\toolchain.ps1`로 프로젝트 도구를 불러옵니다. npm 명령은 `& $MotiNode $MotiNpm ...`, uv 명령은 `& $MotiUv ...`로 실행합니다.
 3. JS는 해당 front/server 폴더에서 필요한 패키지만 `npm install 패키지@버전`으로 바꾸고 선언과 잠금을 함께 검토합니다. 재현은 `npm ci`로 확인합니다. 서버 `qs` override도 상위 패키지가 해결하는지 확인한 뒤 제거합니다.
 4. Python은 pyproject를 수정하고 `uv lock` 또는 `uv lock --upgrade-package 패키지`로 필요한 변경을 해결합니다. `uv sync --locked --extra web`과 환경 검사, 영향을 받는 실제 분석 경로를 확인합니다.
-5. Python 잠금 변경 시 아래 세 내보내기 파일도 함께 갱신합니다. 명령은 `keyboard-detect` 폴더에서 프로젝트 uv로 실행합니다.
+5. Python 잠금 변경 시 아래 네 내보내기 파일도 함께 갱신합니다. 명령은 `keyboard-detect` 폴더에서 프로젝트 uv로 실행합니다.
 6. `.\moti.cmd check`와 프론트 빌드를 실행합니다. 카메라·모델·IPC·설치 파일에 영향이 있으면 해당 동작도 검증합니다. 감사 경고는 수정 범위와 호환성을 검토하며 `npm audit fix --force`를 일괄 적용하지 않습니다.
 7. 런타임 변경 시 toolchain 버전·공식 SHA-256, 두 package.json의 engines/packageManager, Python 버전 파일과 문서를 함께 갱신합니다. 다른 팀원도 새 clone에서 setup/check를 재현합니다.
 
@@ -125,6 +128,7 @@ Python의 `mp.solutions.hands`와 브라우저의 기존 `Pose`는 Legacy API입
 & $MotiUv export --locked --no-dev --emit-index-url --output-file requirements.txt
 & $MotiUv export --locked --no-dev --extra web --emit-index-url --output-file requirements-web.txt
 & $MotiUv export --locked --group dev --extra web --emit-index-url --output-file requirements-dev.txt
+& $MotiUv export --locked --no-dev --group model --emit-index-url --output-file requirements-model.txt
 ```
 
 ## 5. 검증 범위와 배포 경계
@@ -133,7 +137,7 @@ Python의 `mp.solutions.hands`와 브라우저의 기존 `Pose`는 Legacy API입
 
 MySQL 드라이버와 기존 저장소 구현은 남아 있지만 최종 서버 DB 제품·버전·운영 환경은 미정입니다. setup은 MySQL 설치나 스키마 실행을 하지 않습니다. 특히 `server/schema.sql`은 기존 테이블을 삭제하므로 일반 설치 과정으로 실행하면 안 됩니다.
 
-Windows 설치 파일 생성 경로는 `moti.cmd package`입니다. 개발 앱은 프로젝트 `.venv`의 Python 분석기를 자동 실행합니다. 설치 파일 생성 시에는 `scripts/package-keyboard.ps1`이 잠긴 `build` 그룹으로 PyInstaller를 실행해 `keyboard-detect/dist/moti-keyboard/`에 Python 실행 환경·분석 코드·CPU PyTorch/OpenCV·MediaPipe 모델·`best.pt`·`perfect_map.json`을 묶습니다. 분석기 실행 검사를 통과하면 Electron `extraResources`가 **폴더 전체**를 `resources/keyboard/`에 복사합니다. 사용자는 별도 Python·Node·CUDA 설치 없이 키보드 분석기를 실행하는 구조입니다. 실행 파일 옆 `_internal` 폴더도 필수이며, 빌드는 Windows x64에서 수행합니다. 자원 배치는 [PyInstaller 공식 가이드](https://pyinstaller.org/en/stable/runtime-information.html)를 따릅니다. 깨끗한 PC의 실제 손캠·설치 검증은 별도입니다.
+Windows 설치 파일 생성 경로는 `moti.cmd package`입니다. 개발 앱은 프로젝트 `.venv`의 Python 분석기를 자동 실행합니다. 설치 파일 생성 시에는 `scripts/package-keyboard.ps1`이 잠긴 `build` 그룹으로 PyInstaller를 실행해 `keyboard-detect/dist/moti-keyboard/`에 Python 실행 환경·분석 코드·ONNX Runtime·OpenCV·MediaPipe 모델·`best.onnx`·`perfect_map.json`을 묶습니다. PyTorch·Ultralytics는 묶지 않으며 실행 검사가 들어가지 않았는지도 확인합니다. 분석기 실행 검사를 통과하면 Electron `extraResources`가 **폴더 전체**를 `resources/keyboard/`에 복사합니다. 사용자는 별도 Python·Node·CUDA 설치 없이 키보드 분석기를 실행하는 구조입니다. 실행 파일 옆 `_internal` 폴더도 필수이며, 빌드는 Windows x64에서 수행합니다. 자원 배치는 [PyInstaller 공식 가이드](https://pyinstaller.org/en/stable/runtime-information.html)를 따릅니다. 깨끗한 PC의 실제 손캠·설치 검증은 별도입니다.
 
 원격 API 서버·MySQL·서버의 AI 키와 SMTP 설정은 설치 파일에 넣지 않습니다. 로그인·기록 저장·통계·AI 총평·메일 복구에는 인터넷과 운영 서버 구성이 필요합니다. Python 패키징 빌드 도구는 기본 setup 대상에 추가하지 않으며 `package` 명령이 필요한 그룹을 동기화합니다.
 

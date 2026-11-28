@@ -42,8 +42,8 @@ VDT 프로젝트에 모듈로 붙일 때는 아래 파일과 기존 AI 모듈 �
 | `keylog/frame_buffer.py` | 프레임-키 이벤트 시간 매칭 |
 | `keylog/finger_tracker.py` | 테스트용 또는 단독 실행용 MediaPipe 손끝 검출 |
 | `keylog/analyzer.py` | 최종 판별 로직 |
-| `src/keyboard_mapper.py`, `src/auto_map.py`, `src/identify_key.py` | 기존 AI 키보드 mapping 모듈 |
-| `models/best.pt` | YOLO 4코너 검출 모델 |
+| `src/keyboard_mapper.py`, `src/auto_map.py`, `src/corner_detector.py`, `src/identify_key.py` | 기존 AI 키보드 mapping 모듈 |
+| `models/best.onnx` | YOLO 4코너 검출 모델(ONNX Runtime으로 실행, `best.pt`에서 내보냄) |
 | `data/perfect_map.json` | 기준 61키 polygon |
 
 이미 VDT 프로젝트 안에 카메라/MediaPipe 기능이 있다면 `finger_tracker.py`는 필수가 아닙니다. 그 프로젝트에서 만든 손끝 좌표를 `FingerPoint` 리스트로 넘기고 `KeyboardPressAnalyzer.analyze(..., fingers=points)` 형태로 쓰면 됩니다.
