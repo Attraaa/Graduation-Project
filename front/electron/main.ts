@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { trustedRecordUrl } from './recordHandlers'
-import { readKeyboardSettings, chooseKeyboardApp, updateKeyboardSettings } from './keyboardSettings'
+import { readKeyboardSettings, chooseKeyboardApp, updateKeyboardSettings, listOpenApps, approveOpenApp, type KeyboardSettings } from './keyboardSettings'
 import { cameraSettingsUrl, canOpenCameraSettings } from './cameraWindow'
 import { isKakaoPlaceUrl } from './externalLinks'
 import { windowAppearance } from './windowAppearance'
@@ -64,6 +64,9 @@ let keyboardProcess: ChildProcessWithoutNullStreams | null = null
 let keyboardService: { origin: string; token: string } | null = null
 let keyboardStarting: Promise<{ origin: string; token: string }> | null = null
 let keyboardGeneration = 0
+// Only main holds this token; with it main changes the running analyzer's approved apps without trusting the page.
+let keyboardControl: { origin: string; token: string; external: boolean } | null = null
+let keyboardSettingsVersion = 0
 
 const completeClose = async (saved: boolean) => {
   if (!win || !closingTimer) return
@@ -92,8 +95,34 @@ const stopKeyboardService = () => {
   const processToStop = keyboardProcess
   keyboardProcess = null
   keyboardService = null
+  keyboardControl = null
   keyboardStarting = null
   if (processToStop && !processToStop.killed) processToStop.kill()
+}
+
+/** Sends the saved approval list to the running analyzer. If that fails, keyboard analysis stops rather than keep observing an old list. */
+const pushApprovedApps = async () => {
+  const control = keyboardControl
+  if (!control?.external) return
+  try {
+    const response = await fetch(`${control.origin}/api/approved-apps`, {
+      method: 'POST', signal: AbortSignal.timeout(5000),
+      headers: { 'Content-Type': 'application/json', 'X-Moti-Control-Token': control.token },
+      body: JSON.stringify({ apps: readKeyboardSettings().apps.map(item => item.path) }),
+    })
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+  } catch {
+    if (keyboardControl !== control) return
+    diagnostics.write('keyboard-approved-apps-failed')
+    // The page sees its connection close and shows the keyboard error; posture measurement keeps running.
+    stopKeyboardService()
+  }
+}
+/** Every approval change reaches a running analyzer at once, removals included. */
+const approvalsChanged = async (settings: KeyboardSettings) => {
+  keyboardSettingsVersion += 1
+  await pushApprovedApps()
+  return settings
 }
 
 const startKeyboardService = async (external: boolean) => {
@@ -104,7 +133,9 @@ const startKeyboardService = async (external: boolean) => {
     const generation = keyboardGeneration
     const settings = readKeyboardSettings()
     const observeApps = external && settings.apps.length > 0
+    const settingsVersion = keyboardSettingsVersion
     const token = randomBytes(32).toString('base64url')
+    const controlToken = randomBytes(32).toString('base64url')
     let command: string
     let args: string[]
     let cwd: string
@@ -128,7 +159,8 @@ const startKeyboardService = async (external: boolean) => {
 
     const child = spawn(command, args, {
       cwd,
-      env: { ...process.env, MOTI_KEYBOARD_TOKEN: token, MOTI_APPROVED_APPS: JSON.stringify(observeApps ? settings.apps.map(item => item.path) : []), PYTHONUNBUFFERED: '1' },
+      env: { ...process.env, MOTI_KEYBOARD_TOKEN: token, MOTI_KEYBOARD_CONTROL_TOKEN: controlToken,
+        MOTI_APPROVED_APPS: JSON.stringify(observeApps ? settings.apps.map(item => item.path) : []), PYTHONUNBUFFERED: '1' },
       windowsHide: true,
     })
     if (generation !== keyboardGeneration) {
@@ -147,6 +179,7 @@ const startKeyboardService = async (external: boolean) => {
       if (keyboardProcess === child) {
         keyboardProcess = null
         keyboardService = null
+        keyboardControl = null
       }
     })
 
@@ -159,8 +192,13 @@ const startKeyboardService = async (external: boolean) => {
       if (!child.killed) child.kill()
       throw error
     }
-    keyboardService = { origin: `http://127.0.0.1:${port}`, token }
+    const origin = `http://127.0.0.1:${port}`
+    keyboardService = { origin, token }
+    keyboardControl = { origin, token: controlToken, external }
     diagnostics.write('keyboard-service-ready', { milliseconds: Math.round(performance.now() - spawnedAt), packaged: app.isPackaged })
+    // Approvals changed while the analyzer was loading; it gets the current list before the page connects.
+    if (settingsVersion !== keyboardSettingsVersion) await pushApprovedApps()
+    if (keyboardProcess !== child) throw new Error('승인 앱 목록을 키보드 분석기에 전달하지 못했습니다. 다시 시작해 주세요.')
     return keyboardService
   })()
   keyboardStarting = starting
@@ -208,9 +246,12 @@ ipcMain.handle('keyboard-service:stop', event => { trustedAppWindow(event); stop
 ipcMain.handle('keyboard-settings:read', event => { trustedAppWindow(event); return readKeyboardSettings() })
 ipcMain.handle('keyboard-settings:choose', async event => {
   trustedAppWindow(event); nativeDialogs++; presentationChanged()
-  try { return await chooseKeyboardApp(win!) } finally { nativeDialogs--; presentationChanged() }
+  const chosen = chooseKeyboardApp(win!).finally(() => { nativeDialogs--; presentationChanged() })
+  return approvalsChanged(await chosen)
 })
-ipcMain.handle('keyboard-settings:update', (event, input: unknown) => { trustedAppWindow(event); return updateKeyboardSettings(input) })
+ipcMain.handle('keyboard-settings:update', (event, input: unknown) => { trustedAppWindow(event); return approvalsChanged(updateKeyboardSettings(input)) })
+ipcMain.handle('keyboard-settings:open-apps', event => { trustedAppWindow(event); return listOpenApps() })
+ipcMain.handle('keyboard-settings:approve-open-app', (event, file: unknown) => { trustedAppWindow(event); return approvalsChanged(approveOpenApp(file)) })
 ipcMain.handle('window:set-theme', (event, theme: unknown, dimmed: unknown) => {
   trustedAppWindow(event)
   if (typeof dimmed !== 'boolean') throw Error('잘못된 창 제목 표시줄 상태입니다.')
