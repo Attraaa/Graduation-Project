@@ -36,7 +36,7 @@ class ApprovedAppUpdateTests(unittest.TestCase):
                    patch('keylog.service.RawInputObserver', FakeObserver)]
         for item in patches:
             item.start(); self.addCleanup(item.stop)
-        service = RealtimeAttributionService(token='page-token', control_token='main-token', expose_test_page=False,
+        service = RealtimeAttributionService(token='page-token', control_token='main-token',
                                              use_mediapipe=False, approved_apps=approved)
         self.addCleanup(service.close)
         return service
@@ -56,7 +56,7 @@ class ApprovedAppUpdateTests(unittest.TestCase):
         for token in [None, 'page-token', 'wrong']:
             self.assertEqual(self.post(service, [EDITOR], token).status_code, 401)
         self.assertIsNone(service.observer)
-        without_control = RealtimeAttributionService(token='page-token', expose_test_page=False, use_mediapipe=False)
+        without_control = RealtimeAttributionService(token='page-token', use_mediapipe=False)
         self.addCleanup(without_control.close)
         self.assertEqual(self.post(without_control, [EDITOR]).status_code, 401)
 

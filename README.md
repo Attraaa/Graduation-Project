@@ -10,7 +10,7 @@
 
 설정 스크립트가 프로젝트 안에 Node/npm, uv 관리 Python, JS/Python 의존성을 설치합니다. PC 전체의 PATH나 기존 Python을 바꾸지 않습니다. 현재 자동 설치 대상은 **Windows x64**이며 ARM64는 AI wheel 검증이 별도로 필요합니다.
 
-macOS arm64에서는 같은 역할의 `setup.command`, `moti.command`를 씁니다(`moti.command check` 형태로 같은 작업 이름을 받습니다). 프론트와 서버는 동작하지만 **`keyboard-detect`의 Python 환경은 아직 설치되지 않습니다.** `keyboard-detect/uv.lock`이 `sys_platform == 'win32' and platform_machine == 'AMD64'`로만 잠겨 있어 `moti.command keyboard`, `keyboard-web`과 `check`의 Python 단계가 실패합니다. `package`(Windows 설치 파일)도 macOS 경로에서 검증하지 않았습니다.
+macOS arm64에서는 같은 역할의 `setup.command`, `moti.command`를 씁니다(`moti.command check` 형태로 같은 작업 이름을 받습니다). 프론트와 서버는 동작하지만 **`keyboard-detect`의 Python 환경은 아직 설치되지 않습니다.** `keyboard-detect/uv.lock`이 `sys_platform == 'win32' and platform_machine == 'AMD64'`로만 잠겨 있어 `moti.command keyboard`와 `check`의 Python 단계가 실패합니다. `package`(Windows 설치 파일)도 macOS 경로에서 검증하지 않았습니다.
 
 | 명령 | 역할 |
 | --- | --- |
@@ -18,7 +18,6 @@ macOS arm64에서는 같은 역할의 `setup.command`, `moti.command`를 씁니�
 | `moti.cmd app` | Electron 앱 개발 실행 |
 | `moti.cmd server` | API 서버 개발 실행. DB 접속 정보는 별도 설정 |
 | `moti.cmd keyboard` | 독립 Python 키보드/손가락 테스트. 기본값은 전역 키 수집 꺼짐 |
-| `moti.cmd keyboard-web` | Python 웹 테스트 서버 |
 | `moti.cmd check` | 프론트 타입/린트/테스트, 서버 빌드/테스트, Python 환경 확인 |
 | `moti.cmd package` | Windows 설치 파일 생성 |
 

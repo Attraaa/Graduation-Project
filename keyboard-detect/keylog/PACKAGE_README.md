@@ -1,6 +1,6 @@
 # Keyboard Detect Runtime Package
 
-이 패키지는 웹 프로젝트 전용이 아닙니다. `keylog`의 핵심 모듈은 Python 코드에서 직접 import해서 쓰는 구조이고, `service.py`와 `templates/`는 브라우저로 빠르게 확인하기 위한 선택형 테스트 도구입니다.
+`keylog`의 핵심 모듈은 Python 코드에서 직접 가져다 쓸 수 있습니다. Electron 앱은 `service.py`를 내장 분석 서비스로 실행합니다.
 
 ## 통합에 필요한 핵심 흐름
 
@@ -18,7 +18,7 @@ Electron 같은 데스크톱 앱에서는 JS/Electron 쪽에서 키 이벤트와
 |---|---|
 | `keylog/` | 실시간 키 입력-프레임-손끝 매칭 모듈 |
 | `keylog/examples/live_console_test.py` | 웹 없이 OpenCV 창으로 테스트하는 예제 |
-| `keylog/service.py` | 선택형 웹 테스트 서버 |
+| `keylog/service.py` | Electron의 내장 분석 서비스 |
 | `src/keyboard_mapper.py` | 기존 AI 모듈 메인 |
 | `src/auto_map.py` | YOLO 코너 검출, homography |
 | `src/corner_detector.py` | `best.onnx`를 ONNX Runtime으로 실행(PyTorch 불필요) |
@@ -87,17 +87,6 @@ python keylog\examples\live_console_test.py --camera-delay-ms 60 --analysis-wait
 | `keyboard ok keys=61`인데 손가락 매칭이 안 됨 | 손끝 검출 또는 타이밍 문제 | 손이 카메라에 잘 보이게 하고 `--camera-delay-ms`, `--analysis-wait-ms` 값을 조정합니다. |
 
 키 입력 캡처만 먼저 보고 싶으면 OpenCV 미리보기 창을 클릭한 상태에서 키를 누르세요. 이때는 전역 키로거가 실패해도 `source=opencv_preview` 이벤트가 들어옵니다.
-
-## 선택형 웹 테스트
-
-웹 기반 프로젝트로 쓰라는 뜻이 아니라, 오버레이를 빠르게 확인하기 위한 테스트 도구입니다.
-
-```powershell
-cd "D:\keyboard detect"
-python -m keylog.service
-```
-
-브라우저에서 `http://127.0.0.1:5055`를 엽니다.
 
 ## 최소 코드 예시
 

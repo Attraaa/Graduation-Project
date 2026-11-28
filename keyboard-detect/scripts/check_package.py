@@ -64,7 +64,7 @@ def check_package(executable):
                         origin = f"http://127.0.0.1:{port}"
                         with urlopen(origin + "/api/status", timeout=1) as response:
                             status = json.load(response)
-                        assert status["ok"] and not status["keylogger_running"]
+                        assert status["ok"]
                         break
                     except (URLError, TimeoutError):
                         if time.monotonic() >= deadline:

@@ -1,7 +1,7 @@
-param([ValidateSet('help', 'setup', 'app', 'server', 'keyboard', 'keyboard-web', 'check', 'package')][string]$Task = 'app')
+param([ValidateSet('help', 'setup', 'app', 'server', 'keyboard', 'check', 'package')][string]$Task = 'app')
 . (Join-Path $PSScriptRoot 'toolchain.ps1')
 if ($Task -eq 'help') {
-    Write-Host 'moti.cmd setup | app | server | keyboard | keyboard-web | check | package'
+    Write-Host 'moti.cmd setup | app | server | keyboard | check | package'
     exit 0
 }
 if ($Task -eq 'setup') { & (Join-Path $PSScriptRoot 'setup.ps1'); exit $LASTEXITCODE }
@@ -30,14 +30,10 @@ switch ($Task) {
         }
         finally { Pop-Location }
     }
-    { $_ -in @('keyboard', 'keyboard-web') } {
+    'keyboard' {
         Push-Location (Join-Path $MotiRoot 'keyboard-detect')
         try {
-            if ($Task -eq 'keyboard-web') {
-                Invoke-MotiCommand $MotiUv @('run', '--locked', '--managed-python', '--extra', 'web', 'python', '-m', 'keylog.service')
-            } else {
-                Invoke-MotiCommand $MotiUv @('run', '--locked', '--managed-python', '--extra', 'web', 'python', 'keylog/examples/live_console_test.py', '--no-global-keylogger')
-            }
+            Invoke-MotiCommand $MotiUv @('run', '--locked', '--managed-python', '--extra', 'web', 'python', 'keylog/examples/live_console_test.py', '--no-global-keylogger')
         } finally { Pop-Location }
     }
 }

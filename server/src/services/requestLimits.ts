@@ -38,8 +38,13 @@ export function mysqlRequestLimits(pool: Pool): RequestLimits {
           const [[row]] = await connection.query<RowDataPacket[]>('SELECT hits FROM request_limits WHERE bucket_id = ? FOR UPDATE', [bucket.key]);
           if (Number(row.hits) >= bucket.max) wait = Math.max(wait, bucket.end - now);
         }
-        if (!wait) for (const { key } of buckets) await connection.query('UPDATE request_limits SET hits = hits + 1 WHERE bucket_id = ?', [key]);
-        await connection.commit();
+        if (wait > 0) {
+          // Discard any new buckets created while checking a request that was denied.
+          await connection.rollback();
+        } else {
+          for (const { key } of buckets) await connection.query('UPDATE request_limits SET hits = hits + 1 WHERE bucket_id = ?', [key]);
+          await connection.commit();
+        }
         if (now - lastPrune >= 60) {
           lastPrune = now;
           void pool.query('DELETE FROM request_limits WHERE expires_at < ? LIMIT 1000', [now]).catch(() => {});

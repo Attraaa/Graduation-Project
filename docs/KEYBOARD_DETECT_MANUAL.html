@@ -154,8 +154,7 @@
   <h1>Keyboard Detect Runtime Manual</h1>
   <p>
     VDT 증후군 개선 프로젝트에 붙이기 위한 비웹 런타임 문서입니다.
-    이 패키지는 Electron 같은 데스크톱 환경에서도 Python 모듈로 직접 사용할 수 있으며,
-    웹 테스트 서버는 선택형 디버그 도구일 뿐입니다.
+    Electron 앱은 이 패키지의 로컬 분석 서비스를 내장 모드로 실행합니다.
   </p>
 </header>
 
@@ -223,9 +222,9 @@ python keylog\examples\live_console_test.py</code></pre>
     <tr><td><code>keylog/analyzer.py</code></td><td>예</td><td>키 이벤트, 프레임, 손끝 좌표, 키보드 매핑을 합쳐 최종 판정</td></tr>
     <tr><td><code>keylog/key_capture.py</code></td><td>선택</td><td>명시적 ON/OFF 전역 키 입력 캡처. Electron 쪽에서 키 이벤트를 직접 넘기면 생략 가능</td></tr>
     <tr><td><code>keylog/finger_tracker.py</code></td><td>선택</td><td>테스트용 MediaPipe Hands 래퍼. VDT 프로젝트에 이미 손끝 좌표가 있으면 생략 가능</td></tr>
-    <tr><td><code>keylog/secure_channel.py</code></td><td>선택</td><td>선택형 웹 테스트 서버의 로컬 토큰/HMAC 유틸</td></tr>
+    <tr><td><code>keylog/secure_channel.py</code></td><td>선택</td><td>내장 분석 서비스의 로컬 토큰/HMAC 유틸</td></tr>
     <tr><td><code>keylog/examples/live_console_test.py</code></td><td>테스트</td><td>웹 없이 OpenCV 창에서 카메라, 키 입력, MediaPipe, 매핑 고정을 확인</td></tr>
-    <tr><td><code>keylog/service.py</code></td><td>테스트</td><td>선택형 Socket.IO 웹 테스트 서버. 실제 런타임 필수 아님</td></tr>
+    <tr><td><code>keylog/service.py</code></td><td>Electron</td><td>내장 키보드 분석용 로컬 Socket.IO 서비스</td></tr>
     <tr><td><code>src/keyboard_mapper.py</code></td><td>예</td><td>기존 AI 모듈 메인. 프레임에서 전체 키 polygon 계산</td></tr>
     <tr><td><code>src/auto_map.py</code></td><td>예</td><td>YOLO 4코너 검출, 전처리, homography 유틸</td></tr>
     <tr><td><code>src/corner_detector.py</code></td><td>예</td><td><code>best.onnx</code>를 ONNX Runtime으로 실행. PyTorch 없이 Ultralytics와 같은 전처리·후처리</td></tr>
@@ -327,7 +326,7 @@ analyzer.unfreeze_mapping()</code></pre>
 
 <section id="tests">
   <h2>테스트 실행법</h2>
-  <h3>1. 비웹 콘솔 테스트</h3>
+  <h3>콘솔 테스트</h3>
   <pre><code>cd "D:\keyboard detect"
 python keylog\examples\live_console_test.py</code></pre>
 
@@ -346,12 +345,6 @@ python keylog\examples\live_console_test.py --camera-delay-ms 60 --analysis-wait
 
 # 전역 키로거 대신 OpenCV 창 포커스 키 입력만 사용
 python keylog\examples\live_console_test.py --no-global-keylogger</code></pre>
-
-  <h3>2. 선택형 웹 오버레이 테스트</h3>
-  <p>웹 프로젝트용 런타임이 아닙니다. 오버레이를 빠르게 확인하기 위한 디버그 도구입니다.</p>
-  <pre><code>cd "D:\keyboard detect"
-python -m keylog.service</code></pre>
-  <p>브라우저에서 <code>http://127.0.0.1:5055</code>를 엽니다.</p>
 </section>
 
 <section id="integration">

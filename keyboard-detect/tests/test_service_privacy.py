@@ -15,19 +15,23 @@ class ServicePrivacyTests(unittest.TestCase):
     def setUp(self):
         self.patch = patch('keylog.service.KeyboardPressAnalyzer', DummyAnalyzer)
         self.patch.start()
-        self.service = RealtimeAttributionService(token='test-token-only', expose_test_page=False, use_mediapipe=False)
+        self.service = RealtimeAttributionService(token='test-token-only', use_mediapipe=False)
     def tearDown(self):
         self.service.close(); self.patch.stop()
     def connect(self): return self.service.socketio.test_client(self.service.app, auth={'token': 'test-token-only'})
 
-    def test_token_required_and_legacy_global_hook_disabled(self):
+    def test_token_required(self):
         unauthorized = self.service.socketio.test_client(self.service.app, auth={'token': 'wrong'})
         self.assertFalse(unauthorized.is_connected())
         client = self.connect(); self.assertTrue(client.is_connected())
         second = self.connect(); self.assertFalse(second.is_connected())
         self.assertFalse(client.emit('browser_key', {'token': 'wrong', 'code': 'KeyQ'}, callback=True)['ok'])
-        self.assertEqual(self.service.app.test_client().post('/api/keylogger/start', json={'token': 'test-token-only'}).status_code, 403)
         client.disconnect()
+
+    def test_standalone_web_routes_are_not_registered(self):
+        routes = {route.rule for route in self.service.app.url_map.iter_rules()}
+        self.assertTrue(routes.isdisjoint({'/', '/api/keylogger/start', '/api/keylogger/stop', '/api/timing'}))
+        self.assertEqual(self.service.app.test_client().get('/').status_code, 404)
 
     def test_aggregate_source_never_accepts_text_and_clears_pending_input_on_pause(self):
         client = self.connect(); self.service.analyzer.frozen = True

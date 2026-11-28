@@ -6,14 +6,14 @@ Assert-MotiPlatform
 Task="${1:-app}"
 case "$Task" in
     help)
-        echo 'moti.command setup | app | server | keyboard | keyboard-web | check | package'
+        echo 'moti.command setup | app | server | keyboard | check | package'
         exit 0 ;;
     setup)
         exec "$MotiScripts/setup.sh" ;;
-    app|server|keyboard|keyboard-web|check|package) ;;
+    app|server|keyboard|check|package) ;;
     *)
         echo "Unknown task: $Task" >&2
-        echo 'moti.command setup | app | server | keyboard | keyboard-web | check | package' >&2
+        echo 'moti.command setup | app | server | keyboard | check | package' >&2
         exit 1 ;;
 esac
 Assert-MotiToolchain
@@ -40,8 +40,6 @@ case "$Task" in
         Invoke-ProjectNpm server test
         Invoke-KeyboardPython python -m unittest discover -s tests
         Invoke-KeyboardPython python scripts/check_environment.py ;;
-    keyboard-web)
-        Invoke-KeyboardPython python -m keylog.service ;;
     keyboard)
         Invoke-KeyboardPython python keylog/examples/live_console_test.py --no-global-keylogger ;;
 esac

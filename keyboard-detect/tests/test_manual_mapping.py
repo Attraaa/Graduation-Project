@@ -67,7 +67,7 @@ class ManualMappingTests(unittest.TestCase):
             def unfreeze_mapping(self): self.frozen = False
             def freeze_mapping(self, mapping): self.frozen = True; self.mapping = mapping; return True
         with patch('keylog.service.KeyboardPressAnalyzer', lambda **kwargs: Analyzer()):
-            service = RealtimeAttributionService(token='camera-test', use_mediapipe=False, expose_test_page=False)
+            service = RealtimeAttributionService(token='camera-test', use_mediapipe=False)
         try:
             client = service.socketio.test_client(service.app, auth={'token': 'camera-test'})
             _, jpeg = cv2.imencode('.jpg', np.zeros((480, 640, 3), dtype=np.uint8))

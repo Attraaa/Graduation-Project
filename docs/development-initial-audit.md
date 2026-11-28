@@ -67,9 +67,9 @@ npm run dev
 Invoke-RestMethod http://localhost:4000/health
 ```
 
-`status: ok`는 HTTP 프로세스 확인이며 DB 준비 완료를 증명하지 않습니다. DB 연결은 테스트 계정 가입·로그인·세션 저장까지 확인해야 합니다. `npm run seed`는 DB에 기본 데모 계정을 쓰므로 선택된 개발 DB를 확인하고 사용합니다. 감사 중에는 실행하지 않았습니다.
+`status: ok`는 HTTP 프로세스 확인이며 DB 준비 완료를 증명하지 않습니다. DB 연결은 테스트 계정을 직접 가입한 뒤 로그인과 세션 저장으로 확인합니다.
 
-`npm run build`는 `src`를 `dist`로 컴파일하고 `npm start`는 `dist/server.js`를 실행합니다. `seed.ts`는 `tsconfig.json`의 `include: ["src"]` 밖에 있으므로 빌드 검사 대상에 포함되지 않습니다.
+`npm run build`는 `src`를 `dist`로 컴파일하고 `npm start`는 `dist/server.js`를 실행합니다.
 
 ## 4. Python 키보드 분석
 
@@ -91,15 +91,6 @@ python -m venv .venv
 ```
 
 위 명령은 OpenCV 미리보기 창에 입력한 키로 검사합니다. 다른 앱의 입력까지 검사해야 하는 별도 실험에서만 해당 옵션을 빼고 실행합니다. 카메라 변경은 `--camera-index 1`, 종료는 미리보기에서 ESC입니다. 실행 중에는 키보드 전체와 손이 보이도록 구도를 잡습니다.
-
-선택형 웹 테스트는 추가 의존성이 필요합니다.
-
-```powershell
-.\.venv\Scripts\python.exe -m pip install -r requirements-web.txt
-.\.venv\Scripts\python.exe -m keylog.service
-```
-
-브라우저에서 [로컬 테스트 페이지](http://127.0.0.1:5055)를 엽니다. Flask는 기본 requirements에 없으므로 기존 키보드 README의 기본 설치 명령만으로 웹 테스트가 준비되지는 않습니다. 해당 문서의 `D:\keyboard detect`는 과거 작성자의 경로이므로 이 저장소의 `keyboard-detect` 경로로 읽습니다.
 
 ## 5. 이번 감사의 검증 결과
 

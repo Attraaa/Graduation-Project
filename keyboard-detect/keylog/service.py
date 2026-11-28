@@ -1,10 +1,4 @@
-"""Local realtime test server for key press attribution.
-
-Run from the project root:
-    python -m keylog.service
-Then open:
-    http://127.0.0.1:5055
-"""
+"""Loopback realtime key press attribution service for Electron."""
 
 from __future__ import annotations
 
@@ -16,25 +10,19 @@ import queue
 import sys
 import threading
 import time
-from pathlib import Path
 from typing import Optional
 
 import cv2
 import numpy as np
-from flask import Flask, abort, jsonify, render_template, request
+from flask import Flask, jsonify, request
 
 from .analyzer import KeyboardPressAnalyzer
 from .events import FrameSnapshot, KeyEvent
 from .finger_tracker import MediaPipeFingerTracker
 from .frame_buffer import FrameBuffer
-from .key_capture import RealTimeKeyLogger
 from .secure_channel import LocalSessionSecurity
 from .raw_input import RawInputObserver, key_label, SCAN_CODES, EXTENDED_CODES
 from .manual_mapping import manual_mapping
-
-
-ROOT = Path(__file__).resolve().parent.parent
-
 
 def decode_data_url(data_url: str):
     if isinstance(data_url, (bytes, bytearray)):
@@ -50,17 +38,15 @@ def decode_data_url(data_url: str):
 
 
 class RealtimeAttributionService:
-    """Owns the local test server state."""
+    """Owns the local keyboard analyzer state."""
 
     def __init__(
         self,
         camera_receive_delay_ms: float = 80.0,
         analysis_wait_ms: float = 120.0,
         max_frames: int = 12,
-        enable_global_keylogger: bool = False,
         use_mediapipe: bool = True,
         token: Optional[str] = None,
-        expose_test_page: bool = True,
         approved_apps=None,
         control_token: Optional[str] = None,
     ):
@@ -68,7 +54,7 @@ class RealtimeAttributionService:
             from flask_socketio import SocketIO
         except ImportError as exc:
             raise RuntimeError(
-                "flask-socketio and simple-websocket are required for the test server. "
+                "flask-socketio and simple-websocket are required for the keyboard service. "
                 "Install them with: pip install flask-socketio simple-websocket"
             ) from exc
 
@@ -78,7 +64,6 @@ class RealtimeAttributionService:
         self.frame_buffer = FrameBuffer(max_frames=max_frames)
         self.camera_receive_delay_ms = camera_receive_delay_ms
         self.analysis_wait_ms = analysis_wait_ms
-        self.expose_test_page = expose_test_page
         self.event_queue: "queue.Queue[KeyEvent]" = queue.Queue(maxsize=64)
         self._quality_lock = threading.Lock()
         self._quality = {"observed": 0, "processed": 0, "dropped": 0, "maxQueueWaitMs": 0}
@@ -99,13 +84,12 @@ class RealtimeAttributionService:
         self._stop_event = threading.Event()
         self._worker = threading.Thread(target=self._process_events, daemon=True)
 
-        self._announce_startup("hands")
+        print("MOTI_KEYBOARD_LOADING hands", flush=True)
         tracker = MediaPipeFingerTracker() if use_mediapipe else None
-        self._announce_startup("layout")
+        print("MOTI_KEYBOARD_LOADING layout", flush=True)
         self.analyzer = KeyboardPressAnalyzer(finger_tracker=tracker)
-        self.keylogger = RealTimeKeyLogger(on_event=self.enqueue_key_event)
 
-        self.app = Flask(__name__, template_folder=str(Path(__file__).parent / "templates"))
+        self.app = Flask(__name__)
         self.socketio = SocketIO(
             self.app,
             async_mode="threading",
@@ -117,12 +101,6 @@ class RealtimeAttributionService:
         self._bind_routes()
         self._bind_socket_events()
         self._worker.start()
-        if enable_global_keylogger:
-            self.keylogger.start()
-
-    def _announce_startup(self, stage: str) -> None:
-        if not self.expose_test_page:
-            print(f"MOTI_KEYBOARD_LOADING {stage}", flush=True)
 
     def enqueue_key_event(self, event: KeyEvent) -> None:
         dropped = None
@@ -185,44 +163,16 @@ class RealtimeAttributionService:
             return self.observation_status
 
     def _bind_routes(self) -> None:
-        @self.app.route("/")
-        def index():
-            if not self.expose_test_page:
-                abort(404)
-            return render_template(
-                "test_page.html",
-                token=self.security.token,
-                camera_delay_ms=self.camera_receive_delay_ms,
-                analysis_wait_ms=self.analysis_wait_ms,
-            )
-
         @self.app.route("/api/status")
         def status():
             return jsonify(
                 {
                     "ok": True,
-                    "keylogger_running": self.keylogger.running,
                     "frames": len(self.frame_buffer),
                     "camera_receive_delay_ms": self.camera_receive_delay_ms,
                     "analysis_wait_ms": self.analysis_wait_ms,
                 }
             )
-
-        @self.app.route("/api/keylogger/start", methods=["POST"])
-        def start_keylogger():
-            if not self.expose_test_page:
-                return jsonify({'ok': False, 'error': 'disabled_in_embedded_mode'}), 403
-            if not self._authorized_request():
-                return jsonify({"ok": False, "error": "unauthorized"}), 401
-            self.keylogger.start()
-            return jsonify({"ok": True, "running": self.keylogger.running})
-
-        @self.app.route("/api/keylogger/stop", methods=["POST"])
-        def stop_keylogger():
-            if not self._authorized_request():
-                return jsonify({"ok": False, "error": "unauthorized"}), 401
-            self.keylogger.stop()
-            return jsonify({"ok": True, "running": self.keylogger.running})
 
         @self.app.route("/api/approved-apps", methods=["POST"])
         def update_approved_apps():
@@ -232,21 +182,6 @@ class RealtimeAttributionService:
             if not _valid_app_paths(apps):
                 return jsonify({"ok": False, "error": "invalid_apps"}), 400
             return jsonify({"ok": True, "status": self.set_approved_apps(apps)})
-
-        @self.app.route("/api/timing", methods=["POST"])
-        def update_timing():
-            if not self._authorized_request():
-                return jsonify({"ok": False, "error": "unauthorized"}), 401
-            payload = request.get_json(force=True)
-            self.camera_receive_delay_ms = float(payload.get("camera_receive_delay_ms", self.camera_receive_delay_ms))
-            self.analysis_wait_ms = float(payload.get("analysis_wait_ms", self.analysis_wait_ms))
-            return jsonify(
-                {
-                    "ok": True,
-                    "camera_receive_delay_ms": self.camera_receive_delay_ms,
-                    "analysis_wait_ms": self.analysis_wait_ms,
-                }
-            )
 
     def _bind_socket_events(self) -> None:
         @self.socketio.on("connect")
@@ -413,12 +348,6 @@ class RealtimeAttributionService:
                 response.update(size=[snapshot.width, snapshot.height], mode='frozen')
                 return {'ok': True, 'mapping': response}
 
-    def _authorized_request(self) -> bool:
-        token = request.headers.get("X-Keylog-Token") or request.args.get("token")
-        if not token and request.is_json:
-            token = (request.get_json(silent=True) or {}).get("token")
-        return self.security.require_token(token)
-
     def _process_events(self) -> None:
         while not self._stop_event.is_set():
             try:
@@ -451,22 +380,17 @@ class RealtimeAttributionService:
                     payload["quality"] = dict(self._quality)
                 self.socketio.emit("press_result", payload, to=self._client)
 
-    def run(self, host: str, port: int, debug: bool = False) -> None:
-        if not self.expose_test_page:
-            from werkzeug.serving import make_server
+    def run(self, port: int) -> None:
+        from werkzeug.serving import make_server
 
-            server = make_server("127.0.0.1", port, self.app, threaded=True)
-            print(f"MOTI_KEYBOARD_READY {server.server_port}", flush=True)
-            server.serve_forever()
-            return
-        print(f"[keylog] open http://{host}:{port}")
-        self.socketio.run(self.app, host=host, port=port, debug=debug, allow_unsafe_werkzeug=True)
+        server = make_server("127.0.0.1", port, self.app, threaded=True)
+        print(f"MOTI_KEYBOARD_READY {server.server_port}", flush=True)
+        server.serve_forever()
 
     def close(self) -> None:
         self._stop_event.set()
         if self.observer: self.observer.stop()
         self._clear_transient()
-        self.keylogger.stop()
         if self.analyzer.finger_tracker:
             self.analyzer.finger_tracker.close()
 
@@ -489,27 +413,27 @@ def _optional_float(value) -> Optional[float]:
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--host", default="127.0.0.1")
+    parser.add_argument("--host", choices=["127.0.0.1"])
     parser.add_argument("--port", type=int, default=5055)
     parser.add_argument("--camera-delay-ms", type=float, default=80.0)
     parser.add_argument("--analysis-wait-ms", type=float, default=120.0)
-    parser.add_argument("--global-keylogger", action="store_true")
     parser.add_argument("--no-mediapipe", action="store_true")
-    parser.add_argument("--embedded", action="store_true")
+    parser.add_argument("--embedded", action="store_true", required=True)
     args = parser.parse_args(argv)
+    token = os.environ.get("MOTI_KEYBOARD_TOKEN")
+    if not token:
+        parser.error("MOTI_KEYBOARD_TOKEN is required")
 
     service = RealtimeAttributionService(
         camera_receive_delay_ms=args.camera_delay_ms,
         analysis_wait_ms=args.analysis_wait_ms,
-        enable_global_keylogger=args.global_keylogger,
         use_mediapipe=not args.no_mediapipe,
-        token=os.environ.get("MOTI_KEYBOARD_TOKEN"),
-        expose_test_page=not args.embedded,
+        token=token,
         approved_apps=json.loads(os.environ.get('MOTI_APPROVED_APPS', '[]')),
         control_token=os.environ.get("MOTI_KEYBOARD_CONTROL_TOKEN"),
     )
     try:
-        service.run(args.host, args.port)
+        service.run(args.port)
     finally:
         service.close()
     return 0

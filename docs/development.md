@@ -34,7 +34,6 @@ Electron 앱은 주 창이 `ready-to-show` 상태가 되면 즉시 표시합니�
 | `.\moti.cmd app` | Vite와 Electron 개발 앱 실행 |
 | `.\moti.cmd server` | Express API 개발 서버 실행 |
 | `.\moti.cmd keyboard` | Python 키보드/손가락 콘솔 테스트, 전역 키 수집 비활성 |
-| `.\moti.cmd keyboard-web` | Python 웹 테스트 서버, 기본 주소 `http://127.0.0.1:5055` |
 | `.\moti.cmd check` | 프론트 타입·린트·테스트, 서버 빌드·테스트, Python import/모델 검사 |
 | `.\moti.cmd package` | Python 키보드 분석기 빌드·실행 검사 후 프론트/Electron과 Windows x64 설치 패키징 |
 
@@ -46,7 +45,7 @@ Python 콘솔 테스트는 OpenCV 미리보기에서 키를 입력하고 ESC로 
 
 설치 스크립트는 `server/.env`가 없을 때만 예시에서 생성하고 임의 JWT 비밀값을 넣습니다. 기존 파일을 덮어쓰지 않습니다. `.env`는 커밋하거나 공유 문서에 복사하지 않습니다. 기존 JWT가 예시값/짧은 값이면 서버가 시작을 거부하므로 충분히 긴 임의 값으로 교체합니다.
 
-2026-10-03 서버 전용 MySQL 저장으로 결정했습니다. `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` 설정과 호환 스키마가 있어야 DB 기능이 동작합니다. 기존 서버에는 002 다음에 `server/migrations/003_eye_records.sql`을 적용해야 안구 API를 사용할 수 있습니다. 설치 스크립트는 DB 생성·초기화·seed를 실행하지 않습니다.
+2026-10-03 서버 전용 MySQL 저장으로 결정했습니다. `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` 설정과 호환 스키마가 있어야 DB 기능이 동작합니다. 기존 서버에는 002 다음에 `server/migrations/003_eye_records.sql`을 적용해야 안구 API를 사용할 수 있습니다. DB 생성과 초기화는 설치와 별도로 진행합니다.
 
 **`server/schema.sql`은 테이블을 삭제합니다.** `front/database_schema.sql`도 서버 쿼리와 다릅니다. 대상 DB와 데이터 보존 여부를 확인한 뒤 비파괴 마이그레이션을 준비해야 합니다.
 
