@@ -38,7 +38,6 @@ export default function ReviewCards({ review }: { review: AiReview }) {
         <CardHeading icon={<Sparkles size={16} />} iconClass="bg-track text-heading">{overall?.title ?? '총평'}</CardHeading>
         {review.headline && <p className="text-lg font-bold leading-snug text-heading">{review.headline}</p>}
         {overall && <p className="leading-relaxed text-heading">{overall.text}</p>}
-        {review.adviceSource === 'record' && <p className="text-xs text-muted">측정 기록에 맞춘 기본 습관 제안을 표시했어요.</p>}
       </section>
       {areas.length > 0 && (
         <div className={`grid gap-4 ${areas.length > 1 ? 'lg:grid-cols-2' : ''}`}>
@@ -57,10 +56,7 @@ export default function ReviewCards({ review }: { review: AiReview }) {
         <ListCard title="아쉬운 점" icon={<CircleAlert size={16} />} iconClass="bg-track text-heading" items={review.weaknesses} />
         <ListCard title="다음 목표" icon={<Target size={16} />} iconClass="bg-mode-keyboard-soft text-mode-keyboard" items={review.goals} />
       </div>
-      <div className="space-y-1 text-xs text-muted">
-        {review.caution && <p>{review.caution}</p>}
-        <p>숫자와 판단은 기록으로 앱이 계산했고, 의학적 진단이 아니에요.</p>
-      </div>
+      {review.caution && <p className="text-xs text-muted">{review.caution}</p>}
     </div>
   );
 }

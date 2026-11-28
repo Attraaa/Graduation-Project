@@ -2,10 +2,11 @@ import type { RecordsApi, RecordsResult } from '../../../../database/contracts.t
 import { apiRequest, readSession } from '../../utils/apiClient';
 
 import type { PostureTimelineBatch } from './postureTimelineContract';
-import type { ReviewSession } from './reviewSession';
+import type { DailyTimelineSession, ReviewSession } from './reviewSession';
 declare global { interface Window { motiRecords?: {
   writePostureTimeline(batch: PostureTimelineBatch): Promise<void>;
   readPostureSummaries(owner: string, from: number, to: number): Promise<ReviewSession[]>;
+  readPostureDay(owner: string, from: number, to: number): Promise<DailyTimelineSession[]>;
   clearPostureTimelines(owner: string): Promise<void>;
   onClosing(listener: () => Promise<boolean>): () => void } } }
 

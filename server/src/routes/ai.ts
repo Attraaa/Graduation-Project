@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { json, Router } from 'express';
 import { createHash } from 'node:crypto';
 import type { Auth } from '../auth.js';
 import { asyncHandler, HttpError } from '../http.js';
@@ -16,7 +16,7 @@ export function createAiRouter(reviewer: Reviewer | null, auth: Auth, limits: Re
   const active = new Map<string, Promise<Review & { summary: string; improvements: string[]; generatedAt: string }>>();
   router.use(auth.requireAuth);
 
-  router.post('/review', asyncHandler(async (req, res) => {
+  router.post('/review', json({ limit: '128kb' }), asyncHandler(async (req, res) => {
     if (!reviewer) throw new HttpError(503, '미니 PC 총평 서버가 아직 설정되지 않았어요.');
     const input = parseReviewInput(req.body);
     const userId = req.user!.userId;

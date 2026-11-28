@@ -4,132 +4,115 @@ import { build } from 'esbuild';
 import { createRequire } from 'node:module';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { aiReviewInput, inputDetails, inputRows } from '../src/features/ai-review/input.ts';
+import { buildDailyReviewInput, inputRows } from '../src/features/ai-review/input.ts';
 
 const bundle = await build({ entryPoints: ['src/features/ai-review/ReviewCards.tsx'], bundle: true, write: false, logLevel: 'error',
   platform: 'node', format: 'cjs', jsx: 'automatic', external: ['react', 'react-dom'] });
 const compiled = { exports: {} };
 new Function('module', 'exports', 'require', bundle.outputFiles[0].text)(compiled, compiled.exports, createRequire(import.meta.url));
 const ReviewCards = compiled.exports.default;
+const eyeBundle = await build({ entryPoints: ['src/features/ai-review/dailyEye.ts'], bundle: true, write: false, platform: 'node', format: 'esm' });
+const { loadDailyEye } = await import('data:text/javascript;base64,' + Buffer.from(eyeBundle.outputFiles[0].text).toString('base64'));
 
-const dates = ['2026-10-11', '2026-10-12', '2026-10-13', '2026-10-14', '2026-10-15', '2026-10-16', '2026-10-17'];
-const none = { current: null, previous: null, change: null };
-const summary = ({ upper = {}, eye = {}, days = [] } = {}) => ({
-  range: { from: '2026-10-04', to: '2026-10-17', dates, previousDates: [] }, days, upperFloor: 0, eyeMax: 20,
-  upper: { present: false, turtle: none, balance: none, runMs: 0, sessions: 0, averageMs: null, longestMs: 0,
-    deviations: 0, deviationRate: null, validRate: null, unmeasuredMs: 0, hourly: [], hourlyFloor: 0, deviationHours: [], ...upper },
-  eye: { present: false, rate: null, previousRate: null, validMs: 0, runMs: 0, breaks: 0, nearReminders: 0, openReminders: 0,
-    validRate: null, hourly: [], hourlyMax: 20, ...eye },
-});
-const record = (policyVersion, counts) => ({ counts, record: { id: policyVersion, owner: '1', startedAt: 0, updatedAt: 0, offsetMinutes: -540,
-  status: 'finished', policyVersion, recognitionVersion: 'hands-label-distance-v2', nearbyCredit: 70, total: 0 } });
+const date = '2026-11-28', yesterday = '2026-11-27';
+const record = (nearbyCredit, counts) => ({ counts, record: { nearbyCredit } });
 const count = (date, code, verdict, n) => ({ date, code, context: 'plain', finger: 'left:index', verdict, reason: verdict, count: n });
+const eye = (date, validMs, blinks) => ({ date, validMs, blinks });
 
-test('nothing measured in the period means nothing to send', () => {
-  assert.equal(aiReviewInput(summary(), [], 7), null);
-  // Keyboard counts from the previous period alone do not make a current keyboard section.
-  assert.equal(aiReviewInput(summary(), [record('p1', [count('2026-10-05', 'KeyA', 'preferred', 20)])], 7), null);
+test('only the selected date can enable the review', () => {
+  assert.equal(buildDailyReviewInput(date, null, [], []), null);
+  assert.equal(buildDailyReviewInput(date, null, [eye(yesterday, 60_000, 14)],
+    [record(70, [count(yesterday, 'KeyA', 'preferred', 20)])]), null);
 });
 
-test('upper body and eye values are the Statistics numbers, rounded, with minutes instead of milliseconds', () => {
-  const input = aiReviewInput(summary({
-    upper: { present: true, turtle: { current: 82.44, previous: 78.06, change: 4 }, balance: { current: 100.0000001, previous: null, change: null },
-      runMs: 12_030_000, sessions: 4, deviations: 12, deviationRate: 8.25, validRate: 91.04 },
-    eye: { present: true, rate: 14.26, previousRate: null, validMs: 9_000_000 },
-  }), [], 30);
-  assert.deepEqual(input, {
-    days: 30, measuredDays: 0, daily: [],
-    upper: { neck: { current: 82.4, previous: 78.1 }, balance: { current: 100, previous: null }, measuredMinutes: 200.5,
-      sessions: 4, deviations: 12, deviationRate: 8.3, validRate: 91, longestMinutes: 0, hourly: [], deviationHours: [] },
-    eye: { blinkRate: 14.3, previousBlinkRate: null, validMinutes: 150 },
-    keyboard: null,
+test('every observation on the selected date contributes to the frequency, regardless of session', () => {
+  const result = buildDailyReviewInput(date, null, [eye(date, 60_000, 12), eye(date, 120_000, 30), eye(yesterday, 60_000, 100)], []);
+  assert.deepEqual(result, { date, posture: null, keyboard: null, eye: { blinkRate: 14, validMinutes: 3 } });
+  assert.deepEqual(buildDailyReviewInput(date, null, [eye(date, 15_000, 3)], []).eye, { blinkRate: null, validMinutes: 0.25 });
+});
+
+function mockEyeApi(t, responder) {
+  const fetch = globalThis.fetch;
+  globalThis.localStorage = { getItem: () => JSON.stringify({ token: 'eye-test', user: { id: '1' } }) };
+  globalThis.fetch = async (path, options) => {
+    assert.equal(options.headers.Authorization, 'Bearer eye-test');
+    options.signal.throwIfAborted();
+    return responder(new URL(path, 'https://example.test'));
+  };
+  t.after(() => { globalThis.fetch = fetch; delete globalThis.localStorage; });
+}
+
+const localEye = (id, validMs, blinks) => ({ id, rows: [eye(date, validMs, blinks)] });
+const detailEye = (status, validMs, blinks) => Response.json({
+  record: { status, offsetMinutes: -540 },
+  buckets: [{ minute: Date.parse(date + 'T09:00:00+09:00'), validMs, blinks }],
+});
+
+test('eye totals include all sessions, counting complete, pending and local-only observations once', async t => {
+  mockEyeApi(t, url => {
+    if (url.pathname.endsWith('/done')) return detailEye('finished', 60_000, 10);
+    if (url.pathname.endsWith('/pending')) return detailEye('running', 20_000, 3);
+    if (url.pathname.endsWith('/unsynced')) return Response.json({}, { status: 404 });
+    assert.equal(url.searchParams.get('from'), date);
+    assert.equal(url.searchParams.get('to'), date);
+    return Response.json([eye(date, 200_000, 33)]);
   });
+  const signal = new AbortController().signal;
+  const local = [localEye('done', 60_000, 10), localEye('pending', 50_000, 8), localEye('unsynced', 10_000, 2)];
+  assert.deepEqual(await loadDailyEye('1', date, local, signal), [eye(date, 240_000, 40)]);
+  await assert.rejects(loadDailyEye('2', date, local, signal), /계정/);
 });
 
-test('keyboard uses only the latest policy group and names at most three keys with at least ten judged presses', () => {
-  const current = '2026-10-15', previous = '2026-10-05';
-  const input = aiReviewInput(summary(), [
-    record('old-policy', [count(current, 'KeyQ', 'mismatch', 50)]),
-    record('new-policy', [
-      count(previous, 'KeyA', 'preferred', 10),
-      count(current, 'KeyA', 'preferred', 10), count(current, 'KeyA', 'mismatch', 5),
-      count(current, 'KeyS', 'preferred', 3), count(current, 'KeyS', 'nearby', 2),
-      count(current, 'KeyD', 'preferred', 20), count(current, 'KeyD', 'nearby', 10),
-      count(current, 'KeyF', 'preferred', 12), count(current, 'KeyJ', 'mismatch', 12), count(current, 'KeyK', 'nearby', 11),
+test('an eye session that syncs during the aggregate read is reconciled against the fresh cloud totals', async t => {
+  let reads = 0;
+  mockEyeApi(t, url => {
+    if (url.pathname.endsWith('/saving')) return reads === 0 ? Response.json({}, { status: 404 }) : detailEye('finished', 30_000, 6);
+    return Response.json(++reads === 1 ? [eye(date, 60_000, 9)] : [eye(date, 90_000, 15)]);
+  });
+  const result = await loadDailyEye('1', date, [localEye('saving', 30_000, 6)], new AbortController().signal);
+  assert.deepEqual(result, [eye(date, 90_000, 15)]);
+  assert.equal(reads, 2);
+});
+
+test('keyboard combines selected-date sessions using the credits applied to each press', () => {
+  const result = buildDailyReviewInput(date, null, [], [
+    record(70, [
+      count(yesterday, 'KeyZ', 'preferred', 500),
+      count(date, 'KeyA', 'preferred', 10), count(date, 'KeyA', 'nearby', 5), count(date, 'KeyA', 'mismatch', 5),
     ]),
-  ], 7);
-  assert.equal(input.upper, null);
-  assert.equal(input.eye, null);
-  assert.deepEqual(input.keyboard, {
-    score: 71.9, previousScore: 100, coverage: 100, consistency: 100, judged: 85,
-    frequentKeys: [{ code: 'KeyJ', differentRate: 100 }, { code: 'KeyK', differentRate: 100 }, { code: 'KeyD', differentRate: 33.3 }],
-  });
-});
-
-test('the request is shown in words before it is sent, with readable key names', () => {
-  const rows = inputRows({ days: 7, upper: null, eye: { blinkRate: null, previousBlinkRate: 12, validMinutes: 0.4 },
-    keyboard: { score: 71.88, previousScore: null, coverage: 88, consistency: null, judged: 85,
-      frequentKeys: [{ code: 'KeyJ', differentRate: 100 }, { code: 'Semicolon', differentRate: 33.3 }] } });
-  assert.deepEqual(rows.map(row => row.mode), ['eye', 'keyboard']);
-  assert.equal(rows[0].text, '깜빡임 자료 부족 (직전 분당 12회) · 유효 관찰 1분 미만');
-  assert.equal(rows[1].text, '훈련 점수 71.9 · 판정 가능 88% · 일관성 — · 판정 85회 · 자주 다른 키 J 100%, ; 33%');
-});
-
-test('daily scores, hourly scores and deviation hours go along, and are listed before sending', () => {
-  const day = (date, turtle, balance, score, hasRecords = true) => ({ date, hasRecords, upper: { turtle, balance }, keyboard: { score } });
-  const input = aiReviewInput(summary({
-    days: [day('2026-10-16', null, null, null, false), day('2026-10-17', 81.26, 84, 77.04)],
-    upper: { present: true, turtle: { current: 81.26, previous: null, change: null }, balance: { current: 84, previous: null, change: null },
-      runMs: 600_000, sessions: 1, longestMs: 420_000,
-      hourly: [{ hour: 9, turtle: 80.04, balance: null }, { hour: 10, turtle: null, balance: null }],
-      deviationHours: [{ hour: 9, count: 3, strong: true, observedMs: 1_620_000 }, { hour: 10, count: 0, strong: false, observedMs: 0 }] },
-  }), [], 7);
-  assert.equal(input.measuredDays, 1);
-  assert.deepEqual(input.daily, [{ date: '2026-10-16', neck: null, side: null, keyboard: null }, { date: '2026-10-17', neck: 81.3, side: 84, keyboard: 77 }]);
-  assert.deepEqual([input.upper.longestMinutes, input.upper.hourly, input.upper.deviationHours],
-    [7, [{ hour: 9, neck: 80, balance: null }, { hour: 10, neck: null, balance: null }], [{ hour: 9, count: 3, minutes: 27 }, { hour: 10, count: 0, minutes: 0 }]]);
-  assert.deepEqual(inputDetails(input), [
-    { label: '측정한 날', text: '7일 중 1일' },
-    { label: '날짜별 점수', text: '10월 16일 기록 없음, 10월 17일 목 81·좌우 균형 84·키보드 77' },
-    { label: '시간대별 점수', text: '9시 목 80·좌우 균형 —, 10시 목 —·좌우 균형 —' },
-    { label: '기준 이탈 시간대', text: '9시 3회(관찰 27분), 10시 0회(관찰 0분)' },
+    record(50, [count(date, 'KeyB', 'preferred', 5), count(date, 'KeyB', 'nearby', 5), count(date, 'KeyB', 'mismatch', 10)]),
   ]);
-  assert.match(inputRows(input)[0].text, /가장 길게 이어진 측정 7분$/);
+  assert.deepEqual(result.keyboard, { score: 52.5, judged: 40, coverage: 100, consistency: 100,
+    frequentKeys: [{ code: 'KeyB', differentRate: 75 }, { code: 'KeyA', differentRate: 50 }] });
 });
 
-test('device summaries list their hours with observed minutes and keep the old shoulder label', () => {
-  const localPosture = { sideMetric: 'shoulder', sessions: 3, measuredMinutes: 95, longestMinutes: 40,
-    neck: { current: 80.4, previous: null }, side: { current: 86, previous: null }, latestNeckBand: null,
-    hourly: [{ hour: 9, neck: 84, side: 88, minutes: 40 }] };
-  const input = { days: 7, measuredDays: 2, daily: [{ date: '2026-10-17', neck: 80.4, side: 86, keyboard: null }], localPosture, upper: null, eye: null, keyboard: null };
-  assert.deepEqual(inputDetails(input).slice(1), [
-    { label: '날짜별 점수', text: '10월 17일 목 80·어깨 86' },
-    { label: '시간대별 점수', text: '9시 목 84·어깨 88(관찰 40분)' },
+test('the selected-date preview preserves separate balance and older shoulder labels', () => {
+  const score = (metric, mean) => ({ metric, mean, validMinutes: 10, beforeLastTen: null, lastTen: null, periods: [] });
+  const posture = { sessions: 3, measuredMinutes: 29.7, scores: [score('neck', 85.5), score('balance', 75), score('shoulder', 60)] };
+  const rows = inputRows({ date, posture, keyboard: null, eye: { blinkRate: null, validMinutes: 0.4 } });
+  assert.deepEqual(rows, [
+    { mode: 'upper', name: '상체', text: '목 85.5점 · 좌우 균형 75점 · 어깨 60점 · 측정 30분 · 3회' },
+    { mode: 'eye', name: '안구', text: '깜빡임 자료 부족 · 유효 관찰 1분 미만' },
   ]);
-  assert.match(inputRows(input)[0].text, /가장 길게 이어진 측정 40분/);
 });
 
 const review = {
-  headline: '목 점수가 오른 한 주였어요.',
+  headline: '마지막 10분에 목 점수가 내려갔어요.',
   sections: [
-    { key: 'overall', title: '최근 7일 총평', text: '최근 7일 중 5일 동안 측정했어요. 화면을 볼 때 턱이 앞으로 나오는지 가끔 확인해 보세요.' },
+    { key: 'overall', title: '11월 28일 총평', text: '상체를 30분 동안 측정했어요. 측정 후반에 턱이 앞으로 나오는지 확인해 보세요.' },
     { key: 'upper', title: '목·좌우 균형', text: '목 점수는 평균 81점이었어요.' },
-    { key: 'keyboard', title: '키보드', text: '손가락을 판정한 입력은 1,240회였어요.' },
   ],
-  strengths: ['측정을 꾸준히 켰어요.'], weaknesses: [], goals: ['B 키를 권장 손가락으로 천천히 연습하기'],
-  caution: '키보드 기록은 측정이 부족해 참고용으로 봐 주세요.', model: 'gemma3:4b', adviceSource: 'model', generatedAt: '2026-11-28T05:12:00.000Z',
+  strengths: ['이날 상체를 세 번 측정했어요.'], weaknesses: ['마지막 10분에 목 점수가 내려갔어요.'],
+  goals: ['측정 후반에 턱이 앞으로 나오는지 확인하기'],
+  caution: '좌우 균형은 관찰 시간이 짧았어요.', model: 'gemma3:4b', adviceSource: 'record', generatedAt: '2026-11-28T05:12:00.000Z',
 };
 
-test('a review shows the headline, the overall and area paragraphs, then strengths, weaknesses and goals, without generation metadata', () => {
+test('daily results show the overview and feedback without generation annotations', () => {
   const out = renderToStaticMarkup(createElement(ReviewCards, { review }));
-  for (const title of ['총평', '목·좌우 균형', '키보드', '잘한 점', '아쉬운 점', '다음 목표']) assert.match(out, new RegExp(`<section aria-label="${title}"`));
-  assert.ok(out.indexOf('목 점수가 오른 한 주였어요.') < out.indexOf('최근 7일 중 5일 동안 측정했어요.'));
-  assert.match(out, /최근 7일 총평/);
-  assert.match(out, /<li[^>]*>B 키를 권장 손가락으로 천천히 연습하기<\/li>/);
-  assert.match(out, /이번 총평에는 따로 꼽은 내용이 없어요/);
-  assert.match(out, /키보드 기록은 측정이 부족해 참고용으로 봐 주세요\./);
-  assert.doesNotMatch(out, /gemma3:4b|기본 습관 제안/);
-  const fallback = renderToStaticMarkup(createElement(ReviewCards, { review: { ...review, adviceSource: 'record', caution: null } }));
-  assert.match(fallback, /측정 기록에 맞춘 기본 습관 제안을 표시했어요/);
-  assert.doesNotMatch(fallback, /참고용/);
+  for (const title of ['총평', '목·좌우 균형', '잘한 점', '아쉬운 점', '다음 목표']) assert.match(out, new RegExp(`<section aria-label="${title}"`));
+  assert.ok(out.indexOf(review.headline) < out.indexOf('상체를 30분 동안 측정했어요.'));
+  assert.match(out, /11월 28일 총평/);
+  assert.match(out, /<li[^>]*>측정 후반에 턱이 앞으로 나오는지 확인하기<\/li>/);
+  assert.match(out, /좌우 균형은 관찰 시간이 짧았어요/);
+  assert.doesNotMatch(out, /gemma3:4b|기본 습관 제안|AI 코멘트/);
 });

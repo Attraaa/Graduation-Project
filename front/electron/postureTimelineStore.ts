@@ -1,5 +1,5 @@
 import { mkdir, open, readdir, readFile, rm } from 'node:fs/promises';
-import { readReviewSession, type ReviewSession } from '../src/features/records/reviewSession.ts';
+import { readDailyTimelineSession, readPostureSecond, readReviewSession, type DailyTimelineSession, type ReviewSession } from '../src/features/records/reviewSession.ts';
 import { join, sep } from 'node:path';
 import { savePostureTimelineSummary } from './postureTimelineSummaryFile.ts';
 import {
@@ -107,5 +107,38 @@ export function createPostureTimelineStore(root: string) {
     }
     return sessions;
   });
-  return { write, read, clear };
+
+  const readDay = (owner: unknown, from: number, to: number) => enqueue(async () => {
+    const directory = accountDirectory(root, owner);
+    if (!Number.isFinite(from) || !Number.isFinite(to) || to <= from || to - from > 25 * 3_600_000) throw new Error('잘못된 조회 날짜입니다.');
+    const files = await readdir(directory, { withFileTypes: true }).catch((error: NodeJS.ErrnoException) => {
+      if (error.code === 'ENOENT') return [];
+      throw error;
+    });
+    const sessions: DailyTimelineSession[] = [];
+    for (const file of files) {
+      if (!file.isFile() || !file.name.endsWith('.summary.json')) continue;
+      try {
+        const summary = JSON.parse(await readFile(join(directory, file.name), 'utf8'));
+        const session = readDailyTimelineSession(summary, from, to);
+        if (!session || file.name !== `${session.id}.summary.json`) continue;
+        const raw = await readFile(join(directory, `${session.id}.jsonl`), 'utf8').catch((error: NodeJS.ErrnoException) => {
+          if (error.code === 'ENOENT') return '';
+          throw error;
+        });
+        const lines = raw.trimEnd().split(/\r?\n/);
+        const first = Math.max(1, Math.floor((from - session.startedAt) / 1000) + 1);
+        const end = Math.min(lines.length - 1, Math.ceil((to - session.startedAt) / 1000) + 1);
+        const points = lines.slice(first, end).flatMap((line, index) => {
+          try {
+            const point = readPostureSecond(JSON.parse(line), index + first);
+            return point ? [point] : [];
+          } catch (error) { if (error instanceof SyntaxError) return []; throw error; }
+        });
+        sessions.push({ ...session, points });
+      } catch (error) { if (!(error instanceof SyntaxError)) throw error; }
+    }
+    return sessions;
+  });
+  return { write, read, readDay, clear };
 }

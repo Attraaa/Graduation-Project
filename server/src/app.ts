@@ -26,6 +26,8 @@ export function createApp(config: ServerConfig, pool: Pool) {
   app.use(cors({ origin: '*' }));
   // Keyboard batches carry cumulative counts (up to 8000 rows), above the default 100kb body limit.
   app.use('/api/records', express.json({ limit: '2mb' }), createRecordsRouter(new MysqlRecordRepository(pool), auth));
+  const reviewer = config.reviewGatewayUrl ? createMiniPcReviewer(config.reviewGatewayUrl) : null;
+  app.use('/api/ai', createAiRouter(reviewer, auth, limits));
   app.use(express.json());
   app.use('/api/auth', createAuthRouter(pool, auth, limits));
   // Optional: without SMTP settings finding an ID or resetting a password answers 503 and every other route works as before.
@@ -33,8 +35,6 @@ export function createApp(config: ServerConfig, pool: Pool) {
   app.use('/api/sessions', createSessionsRouter(pool, auth));
   app.use('/api/statistics', createStatisticsRouter(pool, auth));
   app.use('/api/feedback', createFeedbackRouter(pool, auth));
-  const reviewer = config.reviewGatewayUrl ? createMiniPcReviewer(config.reviewGatewayUrl) : null;
-  app.use('/api/ai', createAiRouter(reviewer, auth, limits));
   // Optional: without KAKAO_REST_API_KEY the nearby hospital search answers 503 and every other route works as before.
   app.use('/api/hospitals', createHospitalsRouter(config.kakaoRestApiKey ? createKakaoHospitalSearch(config.kakaoRestApiKey) : null, auth));
   // Liveness only: this intentionally does not imply that a DB has been provisioned.

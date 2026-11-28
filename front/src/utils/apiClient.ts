@@ -11,6 +11,14 @@ const SESSION_KEY = 'moti.session';
 const SESSION_CHANGED = 'moti-session-changed';
 
 export type Session = BrowserSession | DesktopSession;
+export class ApiHttpError extends Error {
+  readonly status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.status = status;
+  }
+}
 let desktopSession: DesktopSession | null = null;
 const desktop = () => typeof window === 'undefined' ? undefined : window.motiApi;
 
@@ -121,6 +129,6 @@ export async function apiRequest<T>(path: string, options: { method?: string; bo
   }
   if (status === 204) return undefined as T;
   const message = (data as { message?: unknown } | null)?.message;
-  if (status < 200 || status >= 300) throw new Error(typeof message === 'string' ? message : `서버 요청에 실패했습니다. (${status})`);
+  if (status < 200 || status >= 300) throw new ApiHttpError(typeof message === 'string' ? message : `서버 요청에 실패했습니다. (${status})`, status);
   return data as T;
 }

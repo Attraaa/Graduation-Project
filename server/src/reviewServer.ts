@@ -12,7 +12,7 @@ import { mysqlRequestLimits } from './services/requestLimits.js';
 const config = readConfig(process.env);
 const app = express();
 const pool = createDatabase(config.database);
-app.use(cors(), express.json({ limit: '16kb' }));
+app.use(cors());
 app.use('/api/ai', createAiRouter(config.reviewGatewayUrl ? createMiniPcReviewer(config.reviewGatewayUrl) : null,
   createDatabaseAuth(config.jwt, pool), mysqlRequestLimits(pool)));
 app.use(handleError);

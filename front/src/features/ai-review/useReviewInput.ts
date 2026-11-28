@@ -1,52 +1,49 @@
 import { useCallback, useSyncExternalStore } from 'react';
-import { latestPolicyGroups } from '../dashboard/summary';
+import type { KeyboardStored } from '../../../../database/keyboard.ts';
 import { getCurrentUser } from '../../utils/authStore';
-import { readBrowserPostureSummaries } from '../records/postureTimelineBrowser';
-import { localReviewRevision, subscribeLocalReview } from '../records/reviewRefresh';
+import { shiftDate } from '../dashboard/summary';
+import { recordsApi, recordValue } from '../records/api';
+import { loadDailyPosture } from '../records/dailyPostureReview';
 import { readLocalReviewResults } from '../records/localReviewResults';
-import { localPostureDaily, localPostureReview } from '../records/reviewSession';
+import { localReviewRevision, subscribeLocalReview } from '../records/reviewRefresh';
 import { useRecordQuery } from '../records/useRecordQuery';
-import { buildStatistics, statisticsRange } from '../statistics/period';
-import { useStatisticsData } from '../statistics/useStatisticsData';
-import { aiReviewInput, type AiReviewDays, type AiReviewInput, type DailyScores } from './input';
+import { loadDailyEye } from './dailyEye';
+import { buildDailyReviewInput } from './input';
 
-export function useReviewInput(today: string, days: AiReviewDays) {
+function mergeKeyboardSessions(server: KeyboardStored[], local: KeyboardStored[]) {
+  const sessions = new Map(server.map(session => [session.record.id, session]));
+  for (const session of local) {
+    const current = sessions.get(session.record.id)?.record;
+    if (!current || session.record.updatedAt > current.updatedAt ||
+      (session.record.updatedAt === current.updatedAt && session.record.total >= current.total)) {
+      sessions.set(session.record.id, session);
+    }
+  }
+  return [...sessions.values()];
+}
+
+export function useReviewInput(date: string) {
   const owner = getCurrentUser()?.id ?? '';
-  const cloud = useStatisticsData(today, days);
-  const { from, to, dates } = statisticsRange(today, days);
-  const since = dates[0];
-  const load = useCallback(async () => {
-    if (!owner) throw new Error('로그인이 필요합니다.');
-    const midnight = (date: string) => new Date(date + 'T00:00:00');
-    const until = midnight(to);
-    until.setDate(until.getDate() + 1);
-    const read = window.motiRecords?.readPostureSummaries ?? readBrowserPostureSummaries;
-    const [sessions, aux] = await Promise.all([
-      read(owner, midnight(from).getTime(), until.getTime()), readLocalReviewResults(owner, from, to),
-    ]);
-    const summary = buildStatistics({ end: to, days, posture: null, eye: aux.eye, keyboard: aux.keyboard });
-    const group = latestPolicyGroups({ posture: null, eye: null, keyboard: aux.keyboard });
-    const input = aiReviewInput(summary, group.keyboard, days);
-    // Daily values come from this device too: posture from the session summaries, keyboard and eye from the saved results.
-    const posture = localPostureDaily(sessions, midnight(since).getTime(), summary.range.dates);
-    const tenth = (value: number | null) => (value === null ? null : Math.round(value * 10) / 10);
-    const daily: DailyScores = summary.days.map((day, i) => ({ date: day.date, neck: posture[i].neck, side: posture[i].side, keyboard: tenth(day.keyboard.score) }));
-    const measuredDays = summary.days.filter((day, i) => day.hasRecords || posture[i].neck !== null || posture[i].side !== null).length;
-    return { posture: localPostureReview(sessions, midnight(since).getTime()), eye: input?.eye, keyboard: input?.keyboard, daily, measuredDays };
-  }, [owner, from, since, to, days]);
   const saved = useSyncExternalStore(subscribeLocalReview, localReviewRevision, localReviewRevision);
-  const local = useRecordQuery(`local-review:${owner}:${from}:${to}:${saved}`, load);
-  const legacy = aiReviewInput(cloud.summary, cloud.keyboard, days);
-  const data = local.data;
-  // With device posture summaries the daily values are this device's; otherwise they are the server statistics'.
-  const fromDevice = !!data?.posture || !legacy;
-  const input: AiReviewInput = { days, measuredDays: (fromDevice ? data?.measuredDays : legacy?.measuredDays) ?? 0,
-    daily: (fromDevice ? data?.daily : legacy?.daily) ?? [], upper: data?.posture ? null : legacy?.upper ?? null,
-    ...(data?.posture ? { localPosture: data.posture } : {}),
-    eye: data?.eye ?? legacy?.eye ?? null, keyboard: data?.keyboard ?? legacy?.keyboard ?? null };
-  const hasInput = !!(input.localPosture || input.upper || input.eye || input.keyboard);
-  const sources = Object.values(cloud.status);
-  const loading = local.loading || sources.includes('loading');
-  const failed = !!local.error || !hasInput && sources.includes('error');
-  return { owner, input: loading || failed || !hasInput ? null : input, loading, failed, retry: () => { local.retry(); cloud.retry(); } };
+  const load = useCallback(async ({ signal }: { signal: AbortSignal }) => {
+    if (!owner) throw new Error('로그인이 필요합니다.');
+    const query = { owner, from: date, to: date };
+    // A completed snapshot is filed by its end date, including sessions ending after midnight.
+    const device = readLocalReviewResults(owner, date, date, shiftDate(date, 1)).catch(() => null);
+    const readKeyboard = () => recordValue(recordsApi().keyboardStatistics(query)).catch(async error => {
+      if ((await device)?.keyboard.length) return [];
+      throw error;
+    });
+    const [posture, eye, serverKeyboard, local] = await Promise.all([
+      loadDailyPosture(owner, date, signal),
+      device.then(snapshots => loadDailyEye(owner, date, snapshots?.eye ?? [], signal)),
+      readKeyboard(),
+      device,
+    ]);
+    signal.throwIfAborted();
+    const keyboard = mergeKeyboardSessions(serverKeyboard, local?.keyboard ?? []);
+    return buildDailyReviewInput(date, posture, eye, keyboard);
+  }, [owner, date]);
+  const review = useRecordQuery(`daily-review:${owner}:${date}:${saved}`, load);
+  return { owner, input: review.data, loading: review.loading, failed: !!review.error, retry: review.retry };
 }

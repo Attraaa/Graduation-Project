@@ -1,7 +1,7 @@
 import { postureTimelineEnd, postureTimelineHeader, postureTimelineSample, type PostureTimelineBatch } from './postureTimelineContract';
 import { buildPostureTimelineSummary } from './postureTimelineSummary';
 
-import { readReviewSession, type ReviewSession } from './reviewSession';
+import { readDailyTimelineSession, readPostureSecond, readReviewSession, type DailyTimelineSession, type ReviewSession } from './reviewSession';
 
 const STORE = 'posture-timeline';
 let opening: Promise<IDBDatabase> | undefined;
@@ -44,11 +44,38 @@ export const writeBrowserPostureTimeline = ({ owner, session, points, endedAt }:
   });
 
 export async function readBrowserPostureSummaries(owner: string, from: number, to: number) {
+  return readBrowserTimeline(owner, (value, _id, _store, result: ReviewSession[]) => {
+    const summary = readReviewSession(value, from, to);
+    if (summary) result.push(summary);
+  });
+}
+
+export async function readBrowserPostureDay(owner: string, from: number, to: number) {
+  return readBrowserTimeline(owner, (value, id, store, result: DailyTimelineSession[]) => {
+    const session = readDailyTimelineSession(value, from, to);
+    if (!session || id !== session.id) return;
+    const first = Math.max(1, Math.floor((from - session.startedAt) / 1000) + 1);
+    const end = Math.ceil((Math.min(to, session.endedAt) - session.startedAt) / 1000);
+    if (end < first) return;
+    const samples = store.getAll(IDBKeyRange.bound([owner, id, first], [owner, id, end]));
+    samples.onsuccess = () => {
+      const points = samples.result.flatMap(row => {
+        const second = row?.second;
+        const point = Number.isInteger(second) && second >= first && second <= end ? readPostureSecond(row, second) : null;
+        return point ? [point] : [];
+      });
+      result.push({ ...session, points });
+    };
+  });
+}
+
+async function readBrowserTimeline<T>(owner: string,
+  collect: (value: unknown, id: IDBValidKey, store: IDBObjectStore, result: T[]) => void) {
   const db = await openTimelineDatabase();
-  return new Promise<ReviewSession[]>((resolve, reject) => {
+  return new Promise<T[]>((resolve, reject) => {
     const tx = db.transaction(STORE);
     const store = tx.objectStore(STORE);
-    const rows: ReviewSession[] = [];
+    const rows: T[] = [];
     const cursor = store.openCursor(IDBKeyRange.bound([owner], [owner, []], false, true));
     cursor.onsuccess = () => {
       const item = cursor.result;
@@ -56,10 +83,7 @@ export async function readBrowserPostureSummaries(owner: string, from: number, t
       const [, id, key] = item.key as IDBValidKey[];
       // Jump over the raw seconds with a composite-key seek, including unfinished sessions.
       if (typeof key === 'number') { item.continue([owner, id, 'summary']); return; }
-      if (key === 'summary') {
-        const session = readReviewSession(item.value, from, to);
-        if (session) rows.push(session);
-      }
+      if (key === 'summary') collect(item.value, id, store, rows);
       item.continue();
     };
     tx.oncomplete = () => resolve(rows);

@@ -1,14 +1,24 @@
 /** Only these aggregate values leave the device when a review is requested. */
 export interface ObservedBand { fromPoints: number; toPoints: number; percentOfValidTime: number }
-export interface LocalPostureReview {
+
+export interface ScorePeriod { mean: number; validMinutes: number }
+export interface DailyPostureScore extends ScorePeriod {
+  metric: 'neck' | 'balance' | 'shoulder';
+  beforeLastTen: ScorePeriod | null;
+  lastTen: ScorePeriod | null;
+  periods: (ScorePeriod & { startMinute: number; endMinute: number })[];
+}
+export interface DailyPostureReview {
   sessions: number;
   measuredMinutes: number;
-  sideMetric: 'shoulder' | 'balance';
-  neck: { current: number | null; previous: number | null };
-  side: { current: number | null; previous: number | null };
-  latestNeckBand: ObservedBand | null;
-  /** By the hour each session started, with the minutes observed in that hour (since 2026-11-28; older apps omit it). */
-  hourly?: { hour: number; neck: number | null; side: number | null; minutes: number }[];
-  /** The longest single session, in minutes (since 2026-11-28). */
-  longestMinutes?: number;
+  scores: DailyPostureScore[];
+}
+export interface DailyReviewInput {
+  date: string;
+  posture: DailyPostureReview | null;
+  eye: { blinkRate: number | null; validMinutes: number } | null;
+  keyboard: {
+    score: number | null; coverage: number | null; consistency: number | null;
+    judged: number; frequentKeys: { code: string; differentRate: number }[];
+  } | null;
 }

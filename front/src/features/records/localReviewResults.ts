@@ -4,6 +4,7 @@ import { registerRecorder, announceRecording } from './recording';
 import { localReviewSaved } from './reviewRefresh';
 
 type Snapshot = { kind: 'eye'; rows: EyeStatisticsRow[] } | { kind: 'keyboard'; session: KeyboardStored };
+export interface LocalEyeSession { id: string; rows: EyeStatisticsRow[] }
 const STORE = 'completed';
 let opening: Promise<IDBDatabase> | undefined;
 function database() {
@@ -55,12 +56,30 @@ export function saveLocalReviewResult(owner: string, date: string, id: string, s
   void save(entry).catch(() => {});
 }
 
-export async function readLocalReviewResults(owner: string, from: string, to: string) {
-  const range = IDBKeyRange.bound([owner, from], [owner, to, []]);
-  const rows: Snapshot[] = await transaction('readonly', s => s.getAll(range));
-  return { eye: rows.flatMap(row => row.kind === 'eye' ? row.rows.filter(r => r.date >= from && r.date <= to) : []),
-    keyboard: rows.flatMap(row => row.kind === 'keyboard' ? [{ ...row.session,
-      counts: row.session.counts.filter(r => r.date >= from && r.date <= to) }] : []) };
+export async function readLocalReviewResults(owner: string, from: string, to: string, endingBy = to) {
+  const db = await database();
+  return new Promise<{ eye: LocalEyeSession[]; keyboard: KeyboardStored[] }>((resolve, reject) => {
+    const tx = db.transaction(STORE, 'readonly');
+    const range = IDBKeyRange.bound([owner, from], [owner, endingBy, []]);
+    const cursor = tx.objectStore(STORE).openCursor(range);
+    const eye: LocalEyeSession[] = [], keyboard: KeyboardStored[] = [];
+    const inRange = (row: { date: string }) => row.date >= from && row.date <= to;
+    cursor.onsuccess = () => {
+      const entry = cursor.result;
+      if (!entry) return;
+      const row: Snapshot = entry.value;
+      if (row.kind === 'eye') {
+        const rows = row.rows.filter(inRange);
+        if (rows.length) eye.push({ id: (entry.key as [string, string, string])[2], rows });
+      } else {
+        const counts = row.session.counts.filter(inRange);
+        if (counts.length) keyboard.push({ ...row.session, counts });
+      }
+      entry.continue();
+    };
+    tx.oncomplete = () => resolve({ eye, keyboard });
+    tx.onabort = () => reject(tx.error ?? new Error('이 기기의 측정 요약을 열지 못했습니다.'));
+  });
 }
 
 export const clearLocalReviewResults = (owner: string) =>

@@ -1,25 +1,25 @@
 import type { ReviewInput } from './aiReview.js';
+import type { PostureMetric } from './reviewFacts.js';
 
 interface Advice { text: string; topic: RegExp }
-const neck: Advice = { text: '화면을 볼 때 턱이 앞으로 나오는지 가끔 확인해 보세요.', topic: /목|턱|머리/ };
-const shoulder: Advice = { text: '화면을 정면에 두고 양쪽 어깨에 힘을 빼 보세요.', topic: /어깨|균형/ };
+const posture: Record<PostureMetric, Advice> = {
+  neck: { text: '화면을 오래 볼 때 중간에 턱이 앞으로 나왔는지 확인하고 가볍게 당겨 보세요.', topic: /목|턱|머리/ },
+  balance: { text: '화면을 오래 볼 때 중간에 체중이 한쪽으로 쏠렸는지 확인하고 앉은 자세를 바로잡아 보세요.', topic: /균형|체중|한쪽/ },
+  shoulder: { text: '화면을 오래 볼 때 중간에 양쪽 어깨의 힘을 빼고 자세를 확인해 보세요.', topic: /어깨/ },
+};
 const eye: Advice = { text: '화면에서 잠시 시선을 떼고 눈을 편하게 깜빡여 보세요.', topic: /눈|깜빡|시선/ };
 const keyboard: Advice = { text: '다음 타자 연습은 속도를 낮추고 손가락을 기본 자리에 놓고 시작해 보세요.', topic: /손가락|타자|키보드/ };
 
-export function reviewAdvice(input: ReviewInput): Advice[] {
-  const n = input.localPosture?.neck.current ?? input.upper?.neck.current;
-  const s = input.localPosture?.side.current ?? input.upper?.balance.current;
-  const options: Advice[] = [];
-  if (n != null && s != null) options.push(...(n <= s ? [neck, shoulder] : [shoulder, neck]));
-  else if (n != null) options.push(neck);
-  else if (s != null) options.push(shoulder);
+export function reviewAdvice(input: ReviewInput, focus: PostureMetric | null): Advice[] {
+  if (focus) return [posture[focus]];
+  const scores = (input.posture?.scores ?? []).slice().sort((a, b) => a.mean - b.mean);
+  const options = scores.map(score => posture[score.metric]);
   if (input.eye) options.push(eye);
   if (input.keyboard) options.push(keyboard);
-  if (!options.length) options.push({ text: '다음 측정 전에 카메라에 얼굴과 양쪽 어깨가 보이는지 확인해 보세요.', topic: /카메라|얼굴|어깨/ });
   return options;
 }
 
-/** Keep the model's actionable sentence. The app itself renders every measurement and change in units. */
+// The factual part of the review is set by the records. Keep only the model's matching habit suggestion.
 export function pickAdvice(text: string, options: Advice[]) {
   const sentences = text.split(/(?<=[.!?。])\s*|\n+/u).map(s => s.trim()).filter(Boolean);
   const found = sentences.find(s => s.length <= 180 && !/[0-9%~]|점수|평균|감소|증가|분당|도수|진단|질환|치료|통증|질병|증후군|디스크|거북목|예방/u.test(s)

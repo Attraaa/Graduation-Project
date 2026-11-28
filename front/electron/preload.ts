@@ -79,6 +79,7 @@ contextBridge.exposeInMainWorld('motiKeyboard', {
 contextBridge.exposeInMainWorld('motiRecords', {
   writePostureTimeline: (batch: PostureTimelineBatch) => ipcRenderer.invoke('records:posture-timeline-write', batch),
   readPostureSummaries: (owner: string, from: number, to: number) => ipcRenderer.invoke('records:posture-timelines-read', owner, from, to),
+  readPostureDay: (owner: string, from: number, to: number) => ipcRenderer.invoke('records:posture-timelines-day', owner, from, to),
   clearPostureTimelines: (owner: string) => ipcRenderer.invoke('records:posture-timelines-clear', owner),
   onClosing: (listener: () => Promise<boolean>) => {
     const handle = () => { void listener().then(ok => ipcRenderer.send('records:close-ready', ok)).catch(() => ipcRenderer.send('records:close-ready', false)) }

@@ -178,6 +178,7 @@ const cancelApiRequests = registerDesktopApi(ipcMain, trustedAppWindow, MOTI_DES
 const timelines = createPostureTimelineStore(path.join(app.getPath('userData'), 'posture-timelines'))
 ipcMain.handle('records:posture-timeline-write', (event, batch) => { trustedAppWindow(event); return timelines.write(batch) })
 ipcMain.handle('records:posture-timelines-read', (event, owner, from, to) => { trustedAppWindow(event); return timelines.read(owner, from, to) })
+ipcMain.handle('records:posture-timelines-day', (event, owner, from, to) => { trustedAppWindow(event); return timelines.readDay(owner, from, to) })
 ipcMain.handle('records:posture-timelines-clear', (event, owner) => { trustedAppWindow(event); return timelines.clear(owner) })
 const clearNotifications = registerNotificationHandlers(ipcMain, {
   trusted: trustedAppWindow,
