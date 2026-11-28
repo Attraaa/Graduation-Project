@@ -21,8 +21,10 @@ Electron 같은 데스크톱 앱에서는 JS/Electron 쪽에서 키 이벤트와
 | `keylog/service.py` | 선택형 웹 테스트 서버 |
 | `src/keyboard_mapper.py` | 기존 AI 모듈 메인 |
 | `src/auto_map.py` | YOLO 코너 검출, homography |
+| `src/corner_detector.py` | `best.onnx`를 ONNX Runtime으로 실행(PyTorch 불필요) |
 | `src/identify_key.py` | 좌표가 어떤 key polygon 안인지 판별 |
-| `models/best.pt` | YOLO 4코너 검출 모델 |
+| `models/best.onnx` | YOLO 4코너 검출 모델(실행용, `best.pt`에서 내보냄) |
+| `models/best.pt` | 학습 원본. 바꾸면 `scripts/export_onnx.py`로 다시 내보냄 |
 | `data/perfect_map.json` | 기준 키보드 61키 좌표 |
 | `requirements.txt` | 실행 의존성 |
 

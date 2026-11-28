@@ -1,2 +1,4 @@
 /build/
 /dist/
+# Roboflow exports (training images) stay local; see scripts/check_onnx_parity.py.
+/datasets/

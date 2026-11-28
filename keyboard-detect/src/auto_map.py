@@ -91,12 +91,12 @@ def merge_corner_detections(*detections) -> Dict[str, Tuple[float, float, float]
 
 
 def detect_corners_robust(model, image: np.ndarray, conf: float = 0.1,
-                          tta: bool = False, imgsz: int = None,
+                          imgsz: int = None,
                           enhance: str = "auto",
                           min_good_conf: float = 0.28
                           ) -> Tuple[Dict[str, Tuple[float, float, float]], dict]:
     """Fast-path original frame, then fallback to enhanced frame if needed."""
-    raw = detect_corners_raw(model, image, conf=conf, tta=tta, imgsz=imgsz)
+    raw = detect_corners_raw(model, image, conf=conf, imgsz=imgsz)
     required = set(CORNER_ALIASES)
     complete = required <= set(raw)
     min_conf = min((v[2] for v in raw.values()), default=0.0)
@@ -106,7 +106,7 @@ def detect_corners_robust(model, image: np.ndarray, conf: float = 0.1,
         return raw, {"passes": used, "min_conf": min_conf}
 
     enhanced = enhance_for_detection(image)
-    enhanced_raw = detect_corners_raw(model, enhanced, conf=conf, tta=tta, imgsz=imgsz)
+    enhanced_raw = detect_corners_raw(model, enhanced, conf=conf, imgsz=imgsz)
     used.append("enhanced")
     merged = merge_corner_detections(raw, enhanced_raw)
     return merged, {
@@ -116,28 +116,21 @@ def detect_corners_robust(model, image: np.ndarray, conf: float = 0.1,
 
 
 def detect_corners_raw(model, image: np.ndarray, conf: float = 0.1,
-                       tta: bool = False, imgsz: int = None
+                       imgsz: int = None
                        ) -> Dict[str, Tuple[float, float, float]]:
     """Detect whatever corners are visible. Returns canonical -> (cx, cy, conf).
-    Set tta=True for multi-scale/flip Test-Time Augmentation (slower, more accurate)."""
-    kw = {"verbose": False, "conf": conf, "augment": tta}
-    if imgsz:
-        kw["imgsz"] = imgsz
-    results = model(image, **kw)[0]
-    if results.boxes is None:
-        return {}
-    names = results.names
+
+    `model` is a corner_detector.OnnxCornerDetector (or anything with the same
+    best_per_class method); each corner uses its most confident box's center."""
     best: Dict[str, Tuple[float, float, float]] = {}
-    for box in results.boxes:
-        cls_idx = int(box.cls.item())
-        c = float(box.conf.item())
-        canon = normalize_class_name(names[cls_idx])
+    for name, detection in model.best_per_class(image, conf=conf, imgsz=imgsz).items():
+        canon = normalize_class_name(name)
         if not canon:
             continue
-        x1, y1, x2, y2 = box.xyxy[0].tolist()
+        x1, y1, x2, y2 = detection.box
         cx, cy = (x1 + x2) / 2.0, (y1 + y2) / 2.0
-        if canon not in best or c > best[canon][2]:
-            best[canon] = (cx, cy, c)
+        if canon not in best or detection.conf > best[canon][2]:
+            best[canon] = (cx, cy, detection.conf)
     return best
 
 
@@ -162,20 +155,20 @@ def transform_all_keys(perfect_map: dict, M: np.ndarray) -> Dict[str, np.ndarray
 
 
 def auto_map(image_path: str,
-             model_path: str = "models/best.pt",
+             model_path: str = "models/best.onnx",
              perfect_map_path: str = "data/perfect_map.json"
              ) -> Tuple[np.ndarray, Dict[str, np.ndarray], dict]:
-    from ultralytics import YOLO
+    from corner_detector import OnnxCornerDetector
 
     img = cv2.imread(image_path)
     if img is None:
         raise FileNotFoundError(image_path)
     if not os.path.exists(model_path):
         raise FileNotFoundError(
-            f"{model_path} not found. Train it first via: python src/train_yolo.py"
+            f"{model_path} not found. Export it from best.pt via: python scripts/export_onnx.py"
         )
 
-    model = YOLO(model_path)
+    model = OnnxCornerDetector(model_path, imgsz=960)
     raw, det_info = detect_corners_robust(model, img, conf=0.1, imgsz=960)
     missing = set(CORNER_ALIASES) - set(raw)
     if missing:
@@ -198,7 +191,7 @@ def auto_map(image_path: str,
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--image", required=True)
-    ap.add_argument("--model", default="models/best.pt")
+    ap.add_argument("--model", default="models/best.onnx")
     ap.add_argument("--map", default="data/perfect_map.json")
     args = ap.parse_args()
 

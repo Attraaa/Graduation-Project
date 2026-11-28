@@ -74,7 +74,16 @@ MediaPipe Pose의 스크립트·WASM·모델은 고정 npm 패키지에서 `publ
 
 `front/Dockerfile`은 이전 웹 배포 실험 설정이며 Windows 개발 표준이 아닙니다. Windows의 `moti.cmd package`와 `front`의 `npm run package`는 `scripts/package-windows.ps1`로 같은 작업을 실행합니다. 먼저 `scripts/package-keyboard.ps1`이 잠긴 PyInstaller로 Python 키보드 분석기와 런타임·모델·키 맵을 만들고, 별도 임시 작업 폴더와 시스템 PATH만 사용하는 자식 프로세스로 시작·토큰 거부·합성 프레임의 손/YOLO 추론·수동 61키 맵·입력 결과·일시정지를 검사합니다. 실패하면 설치 파일 생성을 중단합니다. 분석기는 `resources/keyboard/moti-keyboard.exe`와 `_internal/` 폴더로 함께 설치됩니다. 설정 캐시는 사용자 `LOCALAPPDATA/Moti/keyboard/` 아래에 두며 설치 폴더에 쓰지 않습니다. 설치 사용자는 개발 환경용 `setup.cmd`를 실행할 필요가 없습니다.
 
-키보드 실행 환경 약 940MiB를 포함해 압축하므로 `build`보다 여러 분 더 걸립니다. 콘솔은 `[1/4]` 분석기 빌드·검사 → `[2/4]` 앱 빌드 → `[3/4]` 설치 파일 압축 → `[4/4]` 결과 저장을 표시합니다. 마지막 **`Setup complete: …`**가 나오고 명령이 성공해야 이번 설치 파일 생성이 완료된 것입니다. 기존 Setup 파일의 존재만으로 성공을 판단하지 않습니다. 패키징은 실행마다 새로운 `front/.moti-cache/package-<고유 ID>/`에서 로컬의 잠긴 Electron 배포본을 재사용하므로, 기존 `release/win-unpacked/resources/app.asar` 잠금과 Electron zip 해제 후 rename 문제를 피합니다. 완성된 Setup과 blockmap만 `front/release/`에 복사하고 임시 폴더는 정리합니다. Windows가 임시 파일을 잡고 있으면 정리 경고를 내고 남겨 두지만 완료된 Setup은 사용할 수 있습니다.
+키보드 실행 환경 약 380MiB(2026-11-28 ONNX 전환 전에는 약 940MiB)를 포함해 압축하므로 `build`보다 여러 분 더 걸립니다. 콘솔은 `[1/4]` 분석기 빌드·검사 → `[2/4]` 앱 빌드 → `[3/4]` 설치 파일 압축 → `[4/4]` 결과 저장을 표시합니다. 마지막 **`Setup complete: …`**가 나오고 명령이 성공해야 이번 설치 파일 생성이 완료된 것입니다. 기존 Setup 파일의 존재만으로 성공을 판단하지 않습니다. 패키징은 실행마다 새로운 `front/.moti-cache/package-<고유 ID>/`에서 로컬의 잠긴 Electron 배포본을 재사용하므로, 기존 `release/win-unpacked/resources/app.asar` 잠금과 Electron zip 해제 후 rename 문제를 피합니다. 완성된 Setup과 blockmap만 `front/release/`에 복사하고 임시 폴더는 정리합니다. Windows가 임시 파일을 잡고 있으면 정리 경고를 내고 남겨 두지만 완료된 Setup은 사용할 수 있습니다.
+
+키보드 YOLO 모델을 바꿀 때(2026-11-28부터): 분석기는 `models/best.onnx`만 ONNX Runtime으로 실행하고, `best.pt`는 학습 원본입니다. `best.pt`를 다시 학습했다면 `model` 그룹으로 ONNX를 다시 내보내고, Roboflow 내보내기(YOLOv8 형식, 기본 위치 `keyboard-detect/datasets/keyboard-60-detect-3/`, Git 제외)로 두 모델이 같은 결과를 내는지 확인합니다. `best.onnx` 메타데이터의 `source_sha256`이 `best.pt`와 다르면 Python 단위 테스트가 실패합니다. `uv run --group model`이 설치한 PyTorch 등은 다음 `setup.cmd`가 정리합니다.
+
+```powershell
+. .\scripts\toolchain.ps1
+Set-Location keyboard-detect
+& $MotiUv run --locked --managed-python --group model python scripts/export_onnx.py
+& $MotiUv run --locked --managed-python --group model python scripts/check_onnx_parity.py
+```
 
 ## 5. 이번 작업에서 확인한 결과
 
@@ -541,3 +550,14 @@ macOS `bash scripts/moti.sh check`에서 타입·린트, 프론트 264개(상세
 먼저 서버 소스·빌드·환경 파일과 DB 전체(`mysqldump`, 17개 테이블)를 `/home/ubuntu/moti-backups/20261125-155324-before-balance/`에 접근 권한 600으로 남겼습니다. 새 `dist/server.js`와 `database/contracts.ts`, `server/src/services/aiReview.ts`, `server/schema.sql`을 바꾸고 서비스를 재시작했습니다. 바로 이어서 사용자 승인으로 `posture_records`의 `shoulder` 기록 174개(사용자 6명, 2026-10-03~11-25)를 한 트랜잭션에서 지웠고, 연결된 `posture_buckets` 352행과 `posture_batches` 60,489행이 함께 지워졌습니다(ON DELETE CASCADE). 목 기록 174개는 그대로이고 연결이 끊긴 행은 없습니다.
 
 반영 후 서비스는 정상 실행 중이고 서버 안팎에서 `/health`가 `ok`, 로그인 없는 기록 조회가 401로 응답했습니다. 로그인한 계정의 실제 저장·조회와 새 앱의 `balance` 기록 저장은 확인하지 않았습니다. 예전 버전 앱은 이제 상체 기록 저장이 거부되므로 새 버전으로 바꿔야 합니다. 이전 `/api/sessions` 경로의 표(`sessions` 등)는 손대지 않았습니다.
+
+## 2026-11-28 키보드 YOLO를 ONNX Runtime으로
+
+브랜치 `feat/keyboard-onnx`. PC가 절전(11:15–12:21)에서 깬 뒤 키보드 분석을 시작하자 "키보드 분석 프로세스 준비 시간이 초과되었습니다"가 떴습니다. 진단 기록에서는 분석기가 MediaPipe 손 모델까지 29초를 쓰고, 이어서 PyTorch·Ultralytics를 불러오던 중 45초 준비 제한에 걸려 종료됐습니다. 캐시가 데워진 같은 PC에서는 MediaPipe까지 약 2초, PyTorch·Ultralytics import가 약 3초입니다. 절전이나 재부팅 직후 첫 실행에서는 PyTorch(설치 폴더 464MB)를 디스크에서 새로 읽는 단계가 가장 무겁습니다.
+
+- **변경:** `scripts/export_onnx.py`가 `models/best.pt`를 `models/best.onnx`(45MB, opset 18, 입력 크기 가변)로 내보내고, `src/corner_detector.py`가 ONNX Runtime 1.32로 실행합니다. 전처리(비율 유지, stride 32까지만 패딩, 값 114, 가운데 정렬)와 후처리(앵커별 최고 클래스, 프레임 좌표로 되돌리고 자르기)는 Ultralytics 8.4.142의 predict와 같습니다. 매퍼는 모서리마다 가장 확신이 높은 상자만 쓰고 NMS는 클래스별 1등 상자를 항상 남기므로 NMS는 생략했습니다. 쓰이지 않던 `tta` 인자는 지웠습니다. PyTorch·Ultralytics·onnx·onnxslim은 새 `model` 그룹으로 옮기고 기본 실행에는 `onnxruntime`만 더했습니다.
+- **일치 검사(`scripts/check_onnx_parity.py`):** Roboflow `keyboard-60-detect` v3(164장, 640×640)을 그대로·960×540·640×480으로 바꾼 492프레임을 앱과 같은 `map_frame`(보정 재시도 포함)으로 두 모델에 넣었습니다. 492/492프레임에서 찾은 모서리·매핑 결과·보정 재시도가 같았고, 최대 차이는 모서리 0.0001 px, 신뢰도 0.000002, 키 다각형 0.0002 px입니다. 라벨 상자 안에서 모서리를 찾은 수도 같습니다(학습에 쓰지 않은 valid+test 324/336, 매핑 성공 138/147프레임). 데이터셋은 학습 사진이라 Git에 넣지 않고 `keyboard-detect/datasets/`에만 둡니다.
+- **시작 시간(캐시가 데워진 같은 PC, 3회):** `/api/status` 응답까지 바꾸기 전 5.6–6.1초 → 바꾼 뒤 2.7–3.4초. 분석기 객체 생성은 0.7초이고 PyTorch를 불러오지 않습니다. 절전 직후의 느린 첫 실행은 재현하지 못해 직접 비교하지 않았습니다.
+- **설치 파일용 분석기:** PyInstaller 묶음이 약 940MiB → 378MiB입니다. `check_package.py`(시작·토큰 거부·MediaPipe/YOLO 추론·61키 수동 맵·입력 결과·일시정지)를 통과했고, 묶음에 torch·ultralytics가 들어가면 실패하도록 검사를 더했습니다. 이 검사의 Socket.IO 클라이언트가 쓰는 `requests`는 Ultralytics에 딸려 설치되던 것이라 `build` 그룹에 명시했습니다.
+- **시험:** `tests/test_corner_detector.py` 7개(전처리·좌표 복원·클래스별 1등 상자, 실제 `best.onnx`의 클래스와 빈 프레임, `best.onnx`의 `source_sha256`이 `best.pt`의 SHA-256과 같은지, 분석기가 PyTorch 없이 시작하는지). PyTorch가 없는 기본+web 환경(43개 패키지)에서 Python 23개 테스트와 `check_environment.py`가 통과했습니다. 프론트·서버는 바꾸지 않아 다시 검사하지 않았습니다.
+- **한계:** 실제 손캠과 키보드로 자동 인식과 손가락 판정은 확인하지 않았습니다(데이터셋 사진에서 같은 결과만 확인). Electron 설치 파일 전체(`moti.cmd package`)는 만들지 않았습니다. 45초 준비 제한은 그대로입니다.

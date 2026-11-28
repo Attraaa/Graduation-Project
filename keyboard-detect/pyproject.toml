@@ -5,11 +5,10 @@ requires-python = ">=3.12,<3.13"
 dependencies = [
     "opencv-python>=4.8.0,<4.12",
     "numpy>=1.26.0,<2.0",
-    "ultralytics>=8.0.0",
+    # Runs models/best.onnx; PyTorch is not needed to analyze keyboards.
+    "onnxruntime>=1.20",
     "pynput>=1.7.6",
     "mediapipe==0.10.21",
-    "torch",
-    "torchvision",
 ]
 
 [project.optional-dependencies]
@@ -18,8 +17,18 @@ web = ["flask>=3.0.0", "flask-socketio>=5.3.6", "simple-websocket>=1.0.0"]
 [dependency-groups]
 build = [
     "pyinstaller==6.22.3",
+    # check_package.py's Socket.IO client polls over HTTP with requests.
+    "requests",
 ]
 dev = ["roboflow>=1.1.0"]
+# Training models/best.pt, exporting it to best.onnx and checking the two agree.
+model = [
+    "ultralytics>=8.0.0",
+    "torch",
+    "torchvision",
+    "onnx>=1.12.0,<2.0.0",
+    "onnxslim>=0.1.82",
+]
 
 [tool.uv]
 package = false

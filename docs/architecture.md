@@ -28,7 +28,7 @@ flowchart TD
   DB -->|날짜 · 모드 · 정책별 조회| R
   M --> KM[키보드 카메라 · 실시간 결과 UI]
   KM -->|loopback 프레임·현재 화면 keydown| K
-  K --> F[YOLO 키보드 맵 · MediaPipe 손끝 · 키 입력 매칭]
+  K --> F[YOLO 키보드 맵 ONNX Runtime · MediaPipe 손끝 · 키 입력 매칭]
   KM --> FP[버전된 권장 손가락 정책 · 보수적 판정]
 ```
 

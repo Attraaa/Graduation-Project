@@ -19,6 +19,11 @@ import socketio
 
 def check_package(executable):
     executable = str(Path(executable).resolve(strict=True))
+    # The analyzer runs best.onnx; model tools in the bundle would add hundreds of MB.
+    bundled = Path(executable).parent / "_internal"
+    leaked = [name for name in ("torch", "torchvision", "ultralytics") if (bundled / name).exists()]
+    if leaked:
+        raise AssertionError(f"Model tools were packaged: {leaked}")
     with socket.socket() as listener:
         listener.bind(("127.0.0.1", 0))
         port = listener.getsockname()[1]
@@ -31,7 +36,6 @@ def check_package(executable):
         # No project Python, DLLs, config directories or approved apps in the child environment.
         env.update(PATH=str(Path(os.environ["SystemRoot"]) / "System32"),
                    MOTI_KEYBOARD_TOKEN=token, MOTI_APPROVED_APPS="[]",
-                   YOLO_CONFIG_DIR=str(Path(temporary) / "ultralytics"),
                    MPLCONFIGDIR=str(Path(temporary) / "matplotlib"))
         with (Path(temporary) / "service.log").open("w+b") as log:
             child = subprocess.Popen([executable, "--host", "127.0.0.1", "--port", str(port), "--embedded"],
