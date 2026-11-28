@@ -93,6 +93,10 @@ test('the gateway receives compact Korean facts from completed local summaries a
   assert.match(body, /64%/);
   assert.doesNotMatch(body, /private-id|좌우 균형 점수|scorePolicyVersions/);
   assert.equal(review.model, 'gemma3:4b');
+  assert.deepEqual(review.strengths, ['최근 측정에서 목 점수가 80~85점인 구간이 유효 관찰 시간의 64%였어요.']);
+  assert.deepEqual(review.improvements, ['다음에도 같은 작업을 할 때 자세를 측정해 이번 점수가 이어지는지 확인해 보세요.']);
+  const sentRecord = JSON.parse(body).record;
+  assert.ok(sentRecord.includes(review.strengths[0]) && sentRecord.includes(review.improvements[0]));
   assert.match(review.summary, /80점/);
   assert.doesNotMatch(review.summary, /180점/);
   assert.equal(review.adviceSource, 'model');

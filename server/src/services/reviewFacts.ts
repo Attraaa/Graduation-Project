@@ -131,7 +131,7 @@ function upper(facts: Draft, area: Candidates, input: NonNullable<ReviewInput['u
   }
 }
 
-// Blinking is not a score, so it only gets records and cautions, never strengths or improvements.
+// Blink frequency is a measurement. Changes in the rate carry no positive or negative judgement.
 function eye(facts: Draft, input: NonNullable<ReviewInput['eye']>) {
   if (input.blinkRate !== null) {
     const rate = Math.round(input.blinkRate);
@@ -176,6 +176,29 @@ function keyboard(facts: Draft, area: Candidates, input: NonNullable<ReviewInput
 const interleave = (lists: string[][]) =>
   Array.from({ length: Math.max(0, ...lists.map(list => list.length)) }, (_, i) => lists.flatMap(list => (i < list.length ? [list[i]] : []))).flat();
 
+/** An observed achievement and a next measurement to try when the scoring rules have no candidate. */
+function recordingFeedback(input: ReviewInput) {
+  const posture = input.localPosture ?? input.upper;
+  const side = input.localPosture?.side.current ?? input.upper?.balance.current;
+  if (posture && posture.sessions > 0 && (posture.neck.current !== null || side != null)) {
+    const band = input.localPosture?.latestNeckBand;
+    const strength = posture.neck.current !== null && band && band.fromPoints >= HIGH_SCORE && band.percentOfValidTime > 0
+      ? `최근 측정에서 목 점수가 ${band.fromPoints}~${band.toPoints}점인 구간이 유효 관찰 시간의 ${band.percentOfValidTime}%였어요.`
+      : `이번 기간에 상체 자세를 ${posture.sessions}회 측정해 비교할 기록을 남겼어요.`;
+    return { strength, improvement: '다음에도 같은 작업을 할 때 자세를 측정해 이번 점수가 이어지는지 확인해 보세요.' };
+  }
+  if (input.keyboard && input.keyboard.judged > 0) {
+    return { strength: `손가락을 판정할 수 있는 타자 입력을 ${input.keyboard.judged}회 기록했어요.`,
+      improvement: '다음 타자 연습에서도 비슷한 속도로 입력해 손가락 사용이 일정한지 확인해 보세요.' };
+  }
+  if (input.eye && input.eye.validMinutes > 0) {
+    const strength = input.eye.validMinutes >= 1 ? `눈 깜빡임을 ${duration(input.eye.validMinutes)} 동안 기록했어요.`
+      : '눈 깜빡임을 관찰해 다음 측정과 비교할 기록을 남겼어요.';
+    return { strength, improvement: '다음에도 비슷한 작업을 할 때 측정해 깜빡임 기록을 비교해 보세요.' };
+  }
+  return null;
+}
+
 function overview({ days, clauses, blink }: Draft) {
   const sentences = [
     ...(clauses.length ? [clauses.map(([joined, last], i) => (i < clauses.length - 1 ? joined : last)).join(', ')] : []),
@@ -204,10 +227,16 @@ export function buildReviewFacts(input: ReviewInput): ReviewFacts {
   if (input.upper) upper(draft, upperArea, input.upper);
   if (input.eye) eye(draft, input.eye);
   if (input.keyboard) keyboard(draft, keyboardArea, input.keyboard);
+  const strengths = interleave([upperArea.strengths, keyboardArea.strengths]);
+  const improvements = interleave([upperArea.improvements, keyboardArea.improvements]);
+  const fallback = recordingFeedback(input);
+  if (fallback) {
+    if (!strengths.length) strengths.push(fallback.strength);
+    if (!improvements.length) improvements.push(fallback.improvement);
+  }
   return {
     days: draft.days, records: draft.records, highlights: draft.highlights, cautions: draft.cautions, limited: draft.limited,
-    strengths: interleave([upperArea.strengths, keyboardArea.strengths]),
-    improvements: interleave([upperArea.improvements, keyboardArea.improvements]),
+    strengths, improvements,
     overview: overview(draft),
   };
 }

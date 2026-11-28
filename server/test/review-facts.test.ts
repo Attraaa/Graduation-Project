@@ -45,7 +45,7 @@ test('a well-measured period becomes the exact sheet of records and candidates',
   ].join('\n'));
 });
 
-test('thin samples keep their records but give no judgement, only cautions and how to measure better', () => {
+test('thin samples acknowledge recording and suggest better measurement without rating posture', () => {
   // Only 55% of the time had the body in view, so the counts of leaving the reference posture are left out too.
   const facts = buildReviewFacts({
     days: 30,
@@ -66,7 +66,7 @@ test('thin samples keep their records but give no judgement, only cautions and h
     '손가락을 판정할 수 있었던 입력 비율 40%',
     '같은 키를 같은 손가락으로 누른 비율 95%',
   ]);
-  assert.deepEqual(facts.strengths, []);
+  assert.deepEqual(facts.strengths, ['이번 기간에 상체 자세를 1회 측정해 비교할 기록을 남겼어요.']);
   assert.deepEqual(facts.improvements, [
     '카메라에 얼굴과 양쪽 어깨가 모두 보이게 위치를 맞춰 보세요.',
     '손과 키보드가 카메라에 잘 보이게 위치를 맞춰 보세요.',
@@ -82,13 +82,17 @@ test('thin samples keep their records but give no judgement, only cautions and h
   assert.equal(facts.overview, '최근 30일 동안 목 자세 점수는 20점 내려갔고, 좌우 균형 점수는 90점이었고, 타자 훈련 점수는 90점이었어요.');
 });
 
-test('blinking is reported but never judged, and empty sections are left out', () => {
+test('eye-only cards describe observation and comparison without judging the blink rate', () => {
   const changed = buildReviewFacts({ days: 7, upper: null, keyboard: null, eye: { blinkRate: 9, previousBlinkRate: 20, validMinutes: 5 } });
   assert.equal(renderReviewFacts(changed), [
     '기간: 최근 7일',
     '[기록]',
     '- 분당 깜빡임 9회 (직전 7일 20회, 11회 줄어듦)',
     '- 깜빡임을 제대로 관찰한 시간 5분',
+    '[잘한 점 후보]',
+    '- 눈 깜빡임을 5분 동안 기록했어요.',
+    '[개선할 점 후보]',
+    '- 다음에도 비슷한 작업을 할 때 측정해 깜빡임 기록을 비교해 보세요.',
     '[해석 주의]',
     '- 깜빡임 관찰 시간이 10분이 안 돼 깜빡임 기록은 참고용이에요.',
   ].join('\n'));
@@ -96,6 +100,8 @@ test('blinking is reported but never judged, and empty sections are left out', (
   assert.equal(cautionNote(changed), '깜빡임 기록은 측정이 부족해 참고용으로 봐 주세요.');
   const unknown = buildReviewFacts({ days: 7, upper: null, keyboard: null, eye: { blinkRate: null, previousBlinkRate: null, validMinutes: 0 } });
   assert.deepEqual(unknown.records, ['깜빡임을 제대로 관찰한 시간 0분']);
+  assert.deepEqual(unknown.strengths, []);
+  assert.deepEqual(unknown.improvements, []);
   assert.equal(unknown.overview, '최근 7일 동안의 기록이에요.');
 });
 
@@ -110,7 +116,7 @@ test('changes are judged on the rounded numbers the text shows', () => {
   // 80 vs 79 and 71 vs 72 both differ by 1 point, below the 2-point "same" range.
   assert.deepEqual(facts.records.slice(0, 2), ['목 자세 점수 80점 (직전 7일 79점, 비슷함)', '좌우 균형 점수 71점 (직전 7일 72점, 비슷함)']);
   assert.deepEqual(facts.strengths, ['목 자세 점수가 80점으로 높았어요.']);
-  assert.deepEqual(facts.improvements, []);
+  assert.deepEqual(facts.improvements, ['다음에도 같은 작업을 할 때 자세를 측정해 이번 점수가 이어지는지 확인해 보세요.']);
 });
 
 test('a falling score gives one candidate, the advice is not repeated, and areas take turns', () => {
@@ -128,7 +134,15 @@ test('a falling score gives one candidate, the advice is not repeated, and areas
     '좌우 균형 점수가 64점으로 직전 7일보다 7점 내려갔어요.',
     '기준 자세에서 벗어나 있던 시간이 38%예요. 화면을 오래 볼 때 기준 자세를 떠올려 보세요.',
   ]);
-  assert.deepEqual(facts.strengths, []);
+  assert.deepEqual(facts.strengths, ['이번 기간에 상체 자세를 2회 측정해 비교할 기록을 남겼어요.']);
+});
+
+test('a few judged keystrokes can fill both cards without scoring typing technique', () => {
+  const facts = buildReviewFacts({ days: 7, upper: null, eye: null, keyboard: {
+    score: 50, previousScore: null, coverage: 100, consistency: null, judged: 3, frequentKeys: [],
+  } });
+  assert.deepEqual(facts.strengths, ['손가락을 판정할 수 있는 타자 입력을 3회 기록했어요.']);
+  assert.deepEqual(facts.improvements, ['다음 타자 연습에서도 비슷한 속도로 입력해 손가락 사용이 일정한지 확인해 보세요.']);
 });
 
 test('a summary sees only the highlights and the candidates shown beside it, and the plain summary joins the changes', () => {
