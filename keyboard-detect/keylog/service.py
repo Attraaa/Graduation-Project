@@ -62,6 +62,7 @@ class RealtimeAttributionService:
         token: Optional[str] = None,
         expose_test_page: bool = True,
         approved_apps=None,
+        control_token: Optional[str] = None,
     ):
         try:
             from flask_socketio import SocketIO
@@ -72,6 +73,8 @@ class RealtimeAttributionService:
             ) from exc
 
         self.security = LocalSessionSecurity(token=token)
+        # Only Electron's main process holds this token. The page's token cannot widen what is observed.
+        self.control = LocalSessionSecurity(token=control_token) if control_token else None
         self.frame_buffer = FrameBuffer(max_frames=max_frames)
         self.camera_receive_delay_ms = camera_receive_delay_ms
         self.analysis_wait_ms = analysis_wait_ms
@@ -85,6 +88,9 @@ class RealtimeAttributionService:
         self._client = None
         self.observer = None
         self.observation_status = 'off'
+        # Whether the page asked to observe approved apps (not paused); a list added later starts at once.
+        self._observation_requested = False
+        self._observer_lock = threading.Lock()
         if approved_apps:
             self.observer = RawInputObserver(approved_apps, self._external_press, self._observation_status)
         self._frame_sequence = 0
@@ -154,6 +160,30 @@ class RealtimeAttributionService:
         if status != 'observing': self._clear_transient()
         if self._client: self.socketio.emit('observation_status', {'status': status}, to=self._client)
 
+    def set_approved_apps(self, paths) -> str:
+        """Apply a changed approval list to the running session and return the observation status.
+
+        An empty list stops approved-app observation ('off'); the first app added while the page
+        is observing starts it without restarting the analyzer.
+        """
+        with self._observer_lock:
+            if not paths:
+                if self.observer:
+                    self.observer.stop()
+                    self.observer = None
+                    self._observation_status('off')
+                return self.observation_status
+            if self.observer:
+                self.observer.set_approved(paths)
+            else:
+                self.observer = RawInputObserver(paths, self._external_press, self._observation_status)
+                if self._observation_requested and self._client:
+                    try:
+                        self.observer.start()
+                    except RuntimeError:
+                        self._observation_status('error')
+            return self.observation_status
+
     def _bind_routes(self) -> None:
         @self.app.route("/")
         def index():
@@ -194,6 +224,15 @@ class RealtimeAttributionService:
             self.keylogger.stop()
             return jsonify({"ok": True, "running": self.keylogger.running})
 
+        @self.app.route("/api/approved-apps", methods=["POST"])
+        def update_approved_apps():
+            if not self.control or not self.control.require_token(request.headers.get("X-Moti-Control-Token")):
+                return jsonify({"ok": False, "error": "unauthorized"}), 401
+            apps = (request.get_json(silent=True) or {}).get("apps")
+            if not _valid_app_paths(apps):
+                return jsonify({"ok": False, "error": "invalid_apps"}), 400
+            return jsonify({"ok": True, "status": self.set_approved_apps(apps)})
+
         @self.app.route("/api/timing", methods=["POST"])
         def update_timing():
             if not self._authorized_request():
@@ -224,20 +263,24 @@ class RealtimeAttributionService:
         def disconnect():
             if request.sid == self._client:
                 self._client = None
-                if self.observer: self.observer.stop()
+                with self._observer_lock:
+                    self._observation_requested = False
+                    if self.observer: self.observer.stop()
                 self._clear_transient()
 
         @self.socketio.on('start_observation')
         def start_observation(payload):
             if not self.security.require_token((payload or {}).get('token')) or request.sid != self._client:
                 return {'ok': False}
-            if not self.observer: return {'ok': True, 'status': 'off'}
-            try:
-                self.observer.start()
-                return {'ok': True, 'status': self.observation_status}
-            except RuntimeError:
-                self._observation_status('error')
-                return {'ok': False, 'status': 'error'}
+            with self._observer_lock:
+                self._observation_requested = True
+                if not self.observer: return {'ok': True, 'status': 'off'}
+                try:
+                    self.observer.start()
+                    return {'ok': True, 'status': self.observation_status}
+                except RuntimeError:
+                    self._observation_status('error')
+                    return {'ok': False, 'status': 'error'}
 
         @self.socketio.on('reset_analysis')
         def reset_analysis(payload):
@@ -251,8 +294,10 @@ class RealtimeAttributionService:
         def stop_observation(payload):
             if not self.security.require_token((payload or {}).get('token')) or request.sid != self._client:
                 return {'ok': False}
-            if self.observer:
-                self.observer.stop()
+            with self._observer_lock:
+                self._observation_requested = False
+                if self.observer:
+                    self.observer.stop()
             with self._state_lock:
                 self._mapping_ready = False
                 self._clear_transient()
@@ -426,6 +471,13 @@ class RealtimeAttributionService:
             self.analyzer.finger_tracker.close()
 
 
+def _valid_app_paths(apps) -> bool:
+    """At most 32 absolute .exe paths, the same limits Electron applies when saving approvals."""
+    return (isinstance(apps, list) and len(apps) <= 32
+            and all(isinstance(p, str) and 0 < len(p) <= 4096 and os.path.isabs(p) and p.lower().endswith('.exe')
+                    for p in apps))
+
+
 def _optional_float(value) -> Optional[float]:
     if value is None:
         return None
@@ -454,6 +506,7 @@ def main(argv=None) -> int:
         token=os.environ.get("MOTI_KEYBOARD_TOKEN"),
         expose_test_page=not args.embedded,
         approved_apps=json.loads(os.environ.get('MOTI_APPROVED_APPS', '[]')),
+        control_token=os.environ.get("MOTI_KEYBOARD_CONTROL_TOKEN"),
     )
     try:
         service.run(args.host, args.port)

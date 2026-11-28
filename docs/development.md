@@ -587,3 +587,12 @@ macOS `bash scripts/moti.sh check`에서 타입·린트, 프론트 264개(상세
 - **시험:** `tests/test_corner_detector.py` 7개(전처리·좌표 복원·클래스별 1등 상자, 실제 `best.onnx`의 클래스와 빈 프레임, `best.onnx`의 `source_sha256`이 `best.pt`의 SHA-256과 같은지, 분석기가 PyTorch 없이 시작하는지). PyTorch가 없는 기본+web 환경(43개 패키지)에서 Python 23개 테스트와 `check_environment.py`가 통과했습니다. 프론트·서버는 바꾸지 않아 다시 검사하지 않았습니다.
 - **한계:** 실제 손캠과 키보드로 자동 인식과 손가락 판정은 확인하지 않았습니다(데이터셋 사진에서 같은 결과만 확인). Electron 설치 파일 전체(`moti.cmd package`)는 만들지 않았습니다.
 - **main 병합:** 같은 날 main에 들어온 준비 단계 신호(`MOTI_KEYBOARD_LOADING hands`·`layout`, `MOTI_KEYBOARD_READY`, `electron/keyboardReady.ts`)와 합쳤습니다. 45초 제한은 이제 단계마다 새로 시작하고, ONNX 전환으로 `layout` 단계(키보드 모델 로드)에서 PyTorch를 불러오지 않습니다.
+
+## 2026-11-28 승인 앱 변경 즉시 적용과 열려 있는 앱에서 고르기
+
+브랜치 `feat/approved-apps-picker`. 측정 중에 Chrome을 승인했는데 관찰되지 않았습니다. 진단 기록에서 분석기는 14:07:00에 승인 앱 1개로 시작했고 Chrome은 14:08:32에 저장됐습니다. 분석기는 시작 때 받은 `MOTI_APPROVED_APPS`만 썼습니다. 승인 취소도 같은 이유로 다시 시작할 때까지 적용되지 않았습니다. [결정](product-decisions.md#2026-11-28-후속-결정--승인-앱-변경-즉시-적용과-열려-있는-앱에서-고르기)
+
+- **바로 적용:** `main.ts`가 분석기마다 제어 토큰(`MOTI_KEYBOARD_CONTROL_TOKEN`)을 따로 만들어 main만 갖고, 승인 목록을 저장할 때마다(파일 선택·열린 앱 승인·승인 취소) 실행 중인 분석기의 `POST /api/approved-apps`로 보냅니다. 페이지가 가진 토큰으로는 401입니다. 분석기가 준비되는 동안 바뀐 목록은 준비 직후 보냅니다. 전달에 실패하면 `keyboard-approved-apps-failed`를 기록하고 키보드 분석만 멈춥니다(이전 목록으로 계속 관찰하지 않음). Python은 `set_approved_apps`로 실행 중인 관찰기의 목록을 바꾸고(`RawInputObserver.set_approved`), 빈 목록이면 관찰기를 멈춰 `off`를 알리며, 측정 중 첫 앱이 추가되면 관찰을 바로 시작합니다. 일시정지 중이면 재개할 때 시작합니다.
+- **고르기:** 설정의 "열려 있는 앱에서 고르기"가 창이 있는 프로그램을 파일 설명·아이콘으로 보여 줍니다(PowerShell `Get-Process`, 창 제목은 읽지 않음). Windows 폴더의 셸 프로그램(Explorer·설정 등), Moti, 게임은 뺍니다. 승인은 main이 10분 안에 보여 준 목록의 경로만 받습니다. "실행 파일·바로가기 직접 선택"은 시작 메뉴 폴더에서 열리고, 바로가기는 그것이 실행하는 .exe로 승인하며 실행 파일이 없는 바로가기(Store 앱 등)는 거부합니다.
+- **시험:** Python `tests/test_approved_apps.py` 7개(main 토큰만 허용, 잘못된 목록 거부, 측정 중 첫 앱 추가 시 관찰 시작, 실행 중 목록 교체, 빈 목록이면 `off`, 일시정지 중 추가는 시작하지 않음, `set_approved`). 프론트 `keyboard-settings.test.mjs` 3개(열린 앱 필터·PowerShell 단일 객체, 보여 준 목록 밖 경로 거부, 바로가기 대상 승인·실행 파일 없는 바로가기 거부). Python 31개, 프론트 타입·린트와 306개 중 304개 통과(2개 skip). 실제 분석기 프로세스에서 페이지 토큰 401, main 토큰 200, 잘못된 목록 400을 확인했습니다. 이 PC의 열린 앱 목록에서 Chrome이 "Google Chrome"으로 잡혔습니다(PowerShell 약 3.5초).
+- **한계:** 실제 Chrome 입력이 측정 중 승인 직후 판정되는지는 앱에서 사람이 확인해야 합니다. Electron 설치 파일 전체와 서버는 이번에 바꾸거나 검사하지 않았습니다.

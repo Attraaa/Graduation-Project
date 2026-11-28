@@ -48,7 +48,7 @@ def foreground_allowed(path: str | None, elevated: bool | None, approved: set[st
 
 class RawInputObserver:
     def __init__(self, approved_paths, on_press, on_status=lambda _status: None):
-        self.approved = {os.path.normcase(os.path.realpath(p)) for p in approved_paths}
+        self.set_approved(approved_paths)
         self.on_press, self.on_status = on_press, on_status
         self._thread = None
         self._hwnd = None
@@ -57,6 +57,14 @@ class RawInputObserver:
         self._ready = threading.Event()
         self._failure = None
         self._stop_requested = threading.Event()
+
+    def set_approved(self, approved_paths):
+        """Replace the approved programs, also while observing.
+
+        Every key message and the 200 ms foreground check read this set, so a removed
+        program stops counting with its next key and an added one at the next check.
+        """
+        self.approved = {os.path.normcase(os.path.realpath(p)) for p in approved_paths}
 
     def start(self):
         if self._thread and self._thread.is_alive(): return
