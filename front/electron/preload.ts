@@ -68,6 +68,8 @@ contextBridge.exposeInMainWorld('motiKeyboard', {
   settings: () => ipcRenderer.invoke('keyboard-settings:read'),
   chooseApp: () => ipcRenderer.invoke('keyboard-settings:choose'),
   updateSettings: (input: unknown) => ipcRenderer.invoke('keyboard-settings:update', input),
+  openApps: () => ipcRenderer.invoke('keyboard-settings:open-apps'),
+  approveOpenApp: (path: string) => ipcRenderer.invoke('keyboard-settings:approve-open-app', path),
   onHalt: (listener: () => void) => {
     const handle = () => listener()
     ipcRenderer.on('keyboard-service:halt', handle)

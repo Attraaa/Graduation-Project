@@ -34,6 +34,10 @@ declare global {
       settings: () => Promise<{ apps: { name: string; path: string }[] }>
       chooseApp: () => Promise<{ apps: { name: string; path: string }[] }>
       updateSettings: (input: { removePath?: string }) => Promise<{ apps: { name: string; path: string }[] }>
+      /** Programs with a window now (file description as `title`, icon as a data URL). */
+      openApps: () => Promise<{ name: string; path: string; title: string; approved: boolean; icon: string | null }[]>
+      /** Approves one program from the last `openApps` list; other paths are refused. */
+      approveOpenApp: (path: string) => Promise<{ apps: { name: string; path: string }[] }>
       onHalt: (listener: () => void) => () => void
     }
   }

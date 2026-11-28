@@ -1,7 +1,8 @@
 <!doctype html>
 <html lang="ko">
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' https://dapi.kakao.com https://t1.daumcdn.net https://t1.kakaocdn.net; style-src 'unsafe-inline' https://t1.daumcdn.net https://t1.kakaocdn.net; img-src https: data: blob:; connect-src https://dapi.kakao.com https://t1.daumcdn.net https://t1.kakaocdn.net; base-uri 'none'; form-action 'none'">
+<!-- On an http:// page (the dev server, localhost:5173) the Kakao SDK loads kakao.js, its styles and map tiles over http://, so those hosts are allowed over http too. file:// (the installed app) uses https://. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' https://dapi.kakao.com https://t1.daumcdn.net https://t1.kakaocdn.net http://t1.daumcdn.net http://t1.kakaocdn.net; style-src 'unsafe-inline' https://t1.daumcdn.net https://t1.kakaocdn.net http://t1.daumcdn.net http://t1.kakaocdn.net; img-src https: http://*.kakaocdn.net http://*.daumcdn.net data: blob:; connect-src https://dapi.kakao.com https://t1.daumcdn.net https://t1.kakaocdn.net; base-uri 'none'; form-action 'none'">
 <style>html,body,#map{width:100%;height:100%;margin:0;overflow:hidden}</style>
 <div id="map" aria-label="병원 위치"></div>
 <script>
