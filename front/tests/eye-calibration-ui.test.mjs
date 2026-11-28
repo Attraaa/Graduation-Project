@@ -58,9 +58,9 @@ test('history recognizes all three exact preset policy IDs as current and retain
   for (const sensitivity of ['low', 'normal', 'high']) {
     const policyVersion = `eye-habits-v3:${sensitivity}`;
     assert.equal(eyePolicyVersion(sensitivity), policyVersion);
-    assert.equal(isLegacy({ mode: 'eye', record: { policyVersion } }), false);
+    assert.equal(isLegacy({ mode: 'upper', records: [], eye: { policyVersion } }), false);
   }
   for (const policyVersion of ['eye-habits-v1', 'eye-habits-v2', 'eye-habits-v3', 'eye-habits-v3:unknown']) {
-    assert.equal(isLegacy({ mode: 'eye', record: { policyVersion } }), true);
+    assert.equal(isLegacy({ mode: 'upper', records: [], eye: { policyVersion } }), true);
   }
 });

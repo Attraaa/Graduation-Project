@@ -54,10 +54,10 @@ const LearningHistory = () => {
         canForward={canMoveForward(view, date, today)}
         onSelect={choose} onMove={direction => choose(movePeriod(view, date, direction, today))} />
       {loading && <p role="status" className="text-sm text-muted">
-        {[status.history === 'loading' && '상체·안구', status.keyboard === 'loading' && '키보드'].filter(Boolean).join(', ')} 기록을 불러오는 중이에요
+        {[status.history === 'loading' && '상체', status.keyboard === 'loading' && '키보드'].filter(Boolean).join(', ')} 기록을 불러오는 중이에요
       </p>}
       {status.history === 'error' && <SourceError onRetry={retryHistory}
-        message={hasLoadedCameraRecords ? '상체·안구 기록 일부를 불러오지 못했어요' : '상체·안구 기록을 불러오지 못했어요'} />}
+        message={hasLoadedCameraRecords ? '상체 기록 일부를 불러오지 못했어요' : '상체 기록을 불러오지 못했어요'} />}
       {status.keyboard === 'error' && <SourceError onRetry={retryKeyboard} message="키보드 기록을 불러오지 못했어요" />}
       {selected ? (
         <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,13rem)_minmax(0,1fr)] xl:grid-cols-[minmax(0,15rem)_minmax(0,1fr)]">

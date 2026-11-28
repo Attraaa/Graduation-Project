@@ -8,7 +8,7 @@ export default function RateGauge({ label, value, max = 30, unit = '회/분', co
   label: string; value: number | null; max?: number; unit?: string; compact?: boolean;
 }) {
   const filled = value === null ? 0 : Math.max(0, Math.min(1, value / max)) * LENGTH;
-  return <div className={`flex min-w-0 flex-col items-center text-center ${compact ? 'gap-0.5' : 'gap-2'}`}>
+  return <div className={`flex min-w-0 flex-col items-center text-center ${compact ? 'shrink-0 gap-0.5' : 'gap-2'}`}>
     <div className={`relative flex max-w-full shrink-0 flex-col justify-end ${compact ? 'h-10 w-20' : 'h-[var(--monitor-meter-size,6.5rem)] w-[132px]'}`}>
       <svg viewBox="0 0 132 74" className={`block w-full ${compact ? 'h-10' : 'h-auto max-h-[calc(100%-0.875rem)]'}`} aria-hidden="true">
         <path d="M10 66A56 56 0 0 1 122 66" fill="none" strokeWidth="9" strokeLinecap="round" className="stroke-track" />
@@ -20,6 +20,6 @@ export default function RateGauge({ label, value, max = 30, unit = '회/분', co
         {value === null ? '—' : value.toFixed(1)}{value !== null && <small className={`${compact ? 'text-[9px]' : 'text-[11px]'} font-semibold text-muted`}>{unit}</small>}
       </p>
     </div>
-    <p className={compact ? 'whitespace-nowrap text-[11px] font-semibold text-muted' : 'text-sm font-bold text-heading'}>{label}</p>
+    <p className={compact ? 'whitespace-nowrap text-[11px] leading-[13px] font-semibold text-muted' : 'text-sm font-bold text-heading'}>{label}</p>
   </div>;
 }

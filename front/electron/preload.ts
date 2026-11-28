@@ -1,14 +1,14 @@
 import { ipcRenderer, contextBridge } from 'electron'
 import type { PostureTimelineBatch } from '../src/features/records/postureTimelineContract'
 import type { SystemNotificationRequest } from '../src/features/notifications/contract'
-import type { OverlayCommand, OverlayMode, OverlayResult, OverlaySnapshot, OverlayView } from '../src/features/overlay/contract'
+import type { OverlayCommand, OverlayResult, OverlaySnapshot, OverlayView } from '../src/features/overlay/contract'
 import type { DesktopApi } from '../src/utils/desktopApiContract'
 
 if (process.argv.includes('--moti-overlay')) {
   contextBridge.exposeInMainWorld('motiOverlay', {
     state: () => ipcRenderer.invoke('overlay:state'), ready: () => ipcRenderer.invoke('overlay:ready'),
     command: (command: OverlayCommand) => ipcRenderer.invoke('overlay:command', command),
-    back: (mode?: OverlayMode) => ipcRenderer.invoke('overlay:back', mode),
+    back: () => ipcRenderer.invoke('overlay:back'),
     onState: (listener: (state: OverlayView) => void) => {
       const handle = (_event: Electron.IpcRendererEvent, value: OverlayView) => listener(value)
       ipcRenderer.on('overlay:state', handle); return () => { ipcRenderer.removeListener('overlay:state', handle) }

@@ -142,22 +142,57 @@ const eyeRecord = (over = {}) => ({ id: 'e1', owner: '7', mode: 'eye',
   policyVersion: 'eye-habits-v2', status: 'finished',
   runMs: 40 * 60_000, validMs: 40 * 60_000, blinks: 560, breaks: 2, nearReminders: 0, openReminders: 0, ...over });
 
-test('day entries merge one upper session, keyboard and eye, newest first', () => {
+test('day entries merge one upper session and keyboard; an eye record without a camera run is a 상체 row of its own', () => {
   const turtle = postureRecord();
   const balance = postureRecord({ id: 's1:balance', mode: 'balance',
     scorePolicyVersion: 'upper-body-balance-v3-b', scoreTimeSum: 25 * 60_000 * 89 });
   const yesterday = postureRecord({ id: 's0:turtle', startedAt: at('2026-10-05T00:12:00Z') });
   const entries = dayEntries([eyeRecord({ status: 'interrupted' }), balance, turtle, yesterday], [keyboardStored()], TODAY);
-  assert.deepEqual(entries.map(entry => [entry.mode, entry.id]), [['eye', 'e1'], ['keyboard', 'k1'], ['upper', 's1']]);
+  assert.deepEqual(entries.map(entry => [entry.mode, entry.id]), [['upper', 'e1'], ['keyboard', 'k1'], ['upper', 's1']]);
   const [eye, keyboard, upper] = entries;
   assert.equal(upper.turtle, 84);
   assert.equal(upper.balance, 89);
   assert.equal(upper.endedAt - upper.startedAt, 25 * 60_000);
   assert.equal(upper.interrupted, false);
+  assert.equal(upper.source.eye, null);
   assert.equal(keyboard.score, keyboardSummary(keyboardStored().counts, 70).score);
   assert.equal(keyboard.endedAt - keyboard.startedAt, 18 * 60_000);
   assert.equal(eye.rate, 14);
   assert.equal(eye.interrupted, true);
+  assert.equal(eye.turtle, null);
+  assert.deepEqual(eye.source.records, []);
+  assert.equal(eye.source.eye.id, 'e1');
+});
+
+test('one camera run is one 상체 row: every reference segment and the eye record of the same camera (2026-11-28)', () => {
+  const run = '0f8c1a2e-5b7d-4c3a-9e21-6d4f8a9b0c11';
+  const segment = (name, mode, over) => postureRecord({ id: `camera:${run}:${name}:${mode}`, mode,
+    scorePolicyVersion: mode === 'balance' ? 'upper-body-balance-v3-b' : 'upper-body-neck-v3-a', ...over });
+  const first = { startedAt: at('2026-10-06T00:12:00Z'), runMs: 10 * 60_000, validMs: 10 * 60_000 };
+  const second = { startedAt: at('2026-10-06T00:22:00Z'), runMs: 15 * 60_000, validMs: 15 * 60_000 };
+  const entries = dayEntries([
+    segment('a', 'turtle', { ...first, scoreTimeSum: 10 * 60_000 * 90 }),
+    segment('a', 'balance', { ...first, scoreTimeSum: 10 * 60_000 * 80 }),
+    // A new reference ("기준 다시 잡기") starts another segment of the same camera run.
+    segment('b', 'turtle', { ...second, scoreTimeSum: 15 * 60_000 * 70 }),
+    segment('b', 'balance', { ...second, scoreTimeSum: 15 * 60_000 * 85 }),
+    eyeRecord({ id: `camera:${run}:eye`, startedAt: at('2026-10-06T00:11:30Z'), runMs: 26 * 60_000, validMs: 20 * 60_000, blinks: 300 }),
+  ], [], TODAY);
+  assert.deepEqual(entries.map(entry => [entry.mode, entry.id]), [['upper', `camera:${run}`]]);
+  const [row] = entries;
+  assert.equal(row.turtle, 78);   // (90 x 10분 + 70 x 15분) / 25분
+  assert.equal(row.balance, 83);  // (80 x 10분 + 85 x 15분) / 25분
+  assert.equal(row.rate, 15);     // 300회 / 유효 관찰 20분
+  assert.equal(row.startedAt, at('2026-10-06T00:11:30Z'));
+  assert.equal(row.endedAt, at('2026-10-06T00:37:30Z'));
+  assert.equal(row.source.records.length, 4);
+  assert.equal(row.source.eye.id, `camera:${run}:eye`);
+});
+
+test('the day total counts the shared 상체 camera time once: the longer of 상체 and 안구, plus keyboard', () => {
+  const today = day({ posture: [postureRow({ runMs: 240_000, validMs: 240_000, scoreTimeSum: 240_000 * 80 })],
+    eye: [eyeRow({ runMs: 300_000, validMs: 300_000 })], keyboard: [keyboardStored()] });
+  assert.equal(today.totalMs, 300_000 + 18 * 60_000);
 });
 
 test('deviation hours sum neck and balance episodes over the shown hour range', () => {

@@ -6,7 +6,8 @@ import type { CalendarDay } from './calendar';
 import { MODE_DOT, MODE_NAME } from './labels';
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
-const LEGEND = ['upper', 'keyboard', 'eye'] as const;
+/** 상체 includes the eye since 2026-11-28 (one camera run is one row), so the legend names both parts. */
+const LEGEND = [{ mode: 'upper', name: '상체 (자세·눈)' }, { mode: 'keyboard', name: MODE_NAME.keyboard }] as const;
 const EMPTY_LABEL = { loading: '기록 불러오는 중', error: '기록을 불러오지 못함', ready: '기록 없음' };
 
 function DayCell({ day, selected, between, recordsStatus, buttonRef, onSelect }: {
@@ -62,9 +63,9 @@ export default function HistoryCalendar({ title, days, blanks, selected, rangeEn
           </button>
         </div>
         <ul className="flex gap-3 text-xs text-muted">
-          {LEGEND.map(mode => (
-            <li key={mode} className="flex items-center gap-1">
-              <span aria-hidden="true" className={`h-2 w-2 rounded-full ${MODE_DOT[mode]}`} />{MODE_NAME[mode]}
+          {LEGEND.map(item => (
+            <li key={item.mode} className="flex items-center gap-1">
+              <span aria-hidden="true" className={`h-2 w-2 rounded-full ${MODE_DOT[item.mode]}`} />{item.name}
             </li>
           ))}
         </ul>

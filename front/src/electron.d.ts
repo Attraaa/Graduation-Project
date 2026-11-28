@@ -1,5 +1,5 @@
 import type { SystemNotificationRequest, SystemNotificationResult } from './features/notifications/contract'
-import type { OverlayCommand, OverlayMode, OverlayResult, OverlaySnapshot, OverlayView } from './features/overlay/contract'
+import type { OverlayCommand, OverlayResult, OverlaySnapshot, OverlayView } from './features/overlay/contract'
 import type { DesktopApi } from './utils/desktopApiContract'
 
 declare global {
@@ -10,7 +10,7 @@ declare global {
       ready: () => Promise<void>
       onState: (listener: (state: OverlayView) => void) => () => void
       command: (command: OverlayCommand) => Promise<OverlayResult>
-      back: (mode?: OverlayMode) => Promise<void>
+      back: () => Promise<void>
     }
     motiDesktop?: {
       publish: (snapshot: OverlaySnapshot | null) => void

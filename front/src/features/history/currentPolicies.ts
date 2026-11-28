@@ -22,11 +22,11 @@ export const CURRENT_POLICIES = {
  * row keeps the rule it was counted with, so an older or different rule does not mark the row.
  */
 export function isLegacy(source: EntrySource) {
-  if (source.mode === 'eye') return !isCurrentEyePolicy(source.record.policyVersion);
   if (source.mode === 'keyboard') {
     return source.stored.record.policyVersion !== CURRENT_POLICIES.keyboard
       || source.stored.record.recognitionVersion !== CURRENT_POLICIES.recognition;
   }
-  return source.records.some(record =>
+  // A 상체 row also carries the eye record of the same camera run (2026-11-28); either standard can be an earlier one.
+  return (source.eye !== null && !isCurrentEyePolicy(source.eye.policyVersion)) || source.records.some(record =>
     record.mode === 'turtle' ? record.scorePolicyVersion !== CURRENT_POLICIES.turtle : !isCurrentBalancePolicy(record.scorePolicyVersion));
 }

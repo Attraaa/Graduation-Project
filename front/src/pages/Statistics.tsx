@@ -5,20 +5,18 @@ import { SourceError, SourceLoading } from '../features/dashboard/SourceState';
 import { pastDateOrNull } from '../features/dashboard/summary';
 import KeyboardStatistics from '../features/keyboard/KeyboardStatistics';
 import { todayDateKey } from '../features/records/views';
-import EyePanel from '../features/statistics/EyePanel';
-import UpperPanel from '../features/statistics/UpperPanel';
+import UpperBodyPanel from '../features/statistics/UpperBodyPanel';
 import type { PeriodDays } from '../features/statistics/period';
 import { rangeText } from '../features/statistics/text';
 import { useStatisticsData } from '../features/statistics/useStatisticsData';
 
-type StatMode = 'upper' | 'keyboard' | 'eye';
+/** Two tabs since 2026-11-28 (시안 S02): 상체 carries the eye, measured by the same camera, as its 눈 section. */
+type StatMode = 'upper' | 'keyboard';
 const MODES: { id: StatMode; name: string; dot: string }[] = [
   { id: 'upper', name: '상체', dot: 'bg-mode-upper' },
   { id: 'keyboard', name: '키보드', dot: 'bg-mode-keyboard' },
-  { id: 'eye', name: '안구', dot: 'bg-mode-eye' },
 ];
 const PERIODS: PeriodDays[] = [1, 7, 30];
-const isMode = (value: string | null): value is StatMode => MODES.some(mode => mode.id === value);
 
 export default function Statistics() {
   const [params, setParams] = useSearchParams();
@@ -29,7 +27,9 @@ export default function Statistics() {
   const requestedDays = Number(params.get('days'));
   const days = requestedDays === 7 || requestedDays === 30 ? requestedDays : 1;
   const requestedMode = params.get('mode');
-  const mode = isMode(requestedMode) ? requestedMode : 'upper';
+  const mode: StatMode = requestedMode === 'keyboard' ? 'keyboard' : 'upper';
+  // The former 안구 tab: an old `mode=eye` address opens 상체 at its 눈 section.
+  const focusEye = requestedMode === 'eye';
   const update = (key: 'end' | 'days' | 'mode', next: string) => setParams(current => {
     const updated = new URLSearchParams(current);
     updated.set(key, next);
@@ -59,9 +59,17 @@ export default function Statistics() {
     const day = summary.days.find(item => item.date === date);
     return day?.hasRecords ? <DayDetail day={day} hint="눌러서 학습이력 보기 →" /> : null;
   };
-  const source = mode === 'upper' ? 'posture' : mode;
-  const panelStatus = status[source];
   const shared = { today, detail, onSelectDate: openHistory, onOpenHistory: () => openHistory(end) };
+  const panel = (id: StatMode) => {
+    if (id === 'keyboard') {
+      return status.keyboard === 'loading' ? <SourceLoading className="h-96" />
+        : status.keyboard === 'error' ? <SourceError onRetry={retrySource.keyboard} />
+        : <KeyboardStatistics data={keyboard} date={end} days={days} {...shared} />;
+    }
+    return status.posture === 'loading' && status.eye === 'loading' ? <SourceLoading className="h-96" />
+      : <UpperBodyPanel summary={summary} periodDays={days} focusEye={focusEye}
+        status={{ posture: status.posture, eye: status.eye }} retry={{ posture: retrySource.posture, eye: retrySource.eye }} {...shared} />;
+  };
 
   return (
     <div className="space-y-4 pb-4">
@@ -97,11 +105,7 @@ export default function Statistics() {
       </div>
       {MODES.map(item => <section key={item.id} role="tabpanel" id={`stats-panel-${item.id}`}
         aria-labelledby={`stats-tab-${item.id}`} hidden={mode !== item.id}>
-        {mode === item.id && (panelStatus === 'loading' ? <SourceLoading className="h-96" />
-          : panelStatus === 'error' ? <SourceError onRetry={retrySource[source]} />
-          : mode === 'upper' ? <UpperPanel upper={summary.upper} days={summary.days} periodDays={days} floor={summary.upperFloor} {...shared} />
-          : mode === 'eye' ? <EyePanel eye={summary.eye} days={summary.days} periodDays={days} max={summary.eyeMax} {...shared} />
-          : <KeyboardStatistics data={keyboard} date={end} days={days} {...shared} />)}
+        {mode === item.id && panel(item.id)}
       </section>)}
     </div>
   );

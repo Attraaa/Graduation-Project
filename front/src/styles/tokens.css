@@ -35,6 +35,8 @@
   --color-mode-shoulder-soft: #fff4cc;
   --color-mode-keyboard-soft: #e1f4fe;
   --color-mode-eye-soft: #ffe3e3;
+  /* Blink rate inside 상체 (통계·학습이력 2026-11-28): not a score, so neither a score colour nor the red of 기준 이탈. */
+  --color-mode-blink: #8b7cf6;
   --color-track: #eef0f3;
   --color-nav-active: #eef1f6;
 

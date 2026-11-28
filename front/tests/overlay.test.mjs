@@ -188,31 +188,37 @@ test('failed overlay readiness leaves the owner available; display changes keep 
 test('the overlay grows for two modes, shrinks for one and repairs its size after a display change', async () => {
   const h = harness(); h.call('desktop:publish', snapshot()); const open = h.controller.open(); h.childCall('overlay:ready'); await open;
   const w = h.children[0];
-  assert.deepEqual([w.bounds.width, w.bounds.height], [430, 144]);
+  assert.deepEqual([w.bounds.width, w.bounds.height], [340, 112]);
   const both = { ...snapshot(2), keyboard: { ...session, paused: true } };
   assert.deepEqual(visibleOverlayModes(both), ['upper_body', 'keyboard']);
   h.call('desktop:publish', both);
-  assert.deepEqual([w.bounds.width, w.bounds.height], [430, 232]);
+  assert.deepEqual([w.bounds.width, w.bounds.height], [340, 196]);
   const keys = { ...both, sequence: 3, upper_body: { ...both.upper_body, running: false } };
   assert.deepEqual(visibleOverlayModes(keys), ['keyboard']);
   h.call('desktop:publish', keys);
-  assert.deepEqual([w.bounds.width, w.bounds.height], [430, 144]);
+  assert.deepEqual([w.bounds.width, w.bounds.height], [340, 112]);
   w.bounds = { x: 325, y: 474, width: 276, height: 86 };  // what Windows reported after a long session
   h.screen.emit('display-metrics-changed');
-  assert.deepEqual(w.getBounds(), { x: 325, y: 474, width: 430, height: 144 });
+  assert.deepEqual(w.getBounds(), { x: 325, y: 474, width: 340, height: 112 });
   h.controller.shutdown();
 });
 
-test('the overlay restores the main window and opens only the selected mode statistics route', async () => {
+test('a stop the main window ran returns to it for the result; other commands, a refused stop and back open no route', async () => {
   const h = harness(); h.call('desktop:publish', snapshot());
-  for (const [mode, target] of [['upper_body', '/statistics?mode=upper'], ['keyboard', '/statistics?mode=keyboard']]) {
-    const open = h.controller.open(); h.childCall('overlay:ready'); await open;
-    assert.throws(() => h.childCall('overlay:back', '/settings'), /잘못된 통계 요청/);
-    assert.equal(h.owner.minimized, true);
-    h.childCall('overlay:back', mode);
-    assert.equal(h.owner.minimized, false);
-    assert.deepEqual(h.owner.webContents.messages.at(-1), ['desktop:navigate', target]);
-  }
+  const open = h.controller.open(); h.childCall('overlay:ready'); await open;
+  const command = { id: 'pause', owner: 'owner-1', mode: 'upper_body', run: 1, action: 'pause' };
+  const pause = h.childCall('overlay:command', command); h.call('desktop:complete', 'pause', { ok: true });
+  assert.deepEqual(await pause, { ok: true }); assert.equal(h.controller.isActive(), true);
+  const refused = h.childCall('overlay:command', { ...command, id: 'refused', action: 'stop' }); h.call('desktop:complete', 'refused', { ok: false });
+  assert.deepEqual(await refused, { ok: false }); assert.equal(h.controller.isActive(), true); assert.equal(h.owner.minimized, true);
+  const stop = h.childCall('overlay:command', { ...command, id: 'stop', action: 'stop' }); h.call('desktop:complete', 'stop', { ok: true });
+  assert.deepEqual(await stop, { ok: true });
+  assert.equal(h.controller.isActive(), false); assert.equal(h.children[0].destroyed, true);
+  assert.equal(h.owner.minimized, false); assert.equal(h.owner.focused, true);
+  // Statistics open from the result dialog in the main window, so returning never carries a route.
+  const again = h.controller.open(); h.childCall('overlay:ready'); await again;
+  h.childCall('overlay:back', 'keyboard'); assert.equal(h.controller.isActive(), false); assert.equal(h.owner.minimized, false);
+  assert.equal(h.owner.webContents.messages.some(m => m[0] === 'desktop:navigate'), false);
   h.controller.shutdown();
 });
 

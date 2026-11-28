@@ -12,7 +12,8 @@ export type EntryMode = TimelineEntry['mode'];
 export interface HistoryEntry extends TimelineEntry { legacy: boolean; running: boolean; coverage: number | null }
 export interface CalendarDay { date: string; modes: EntryMode[]; totalMs: number; isToday: boolean; isFuture: boolean }
 
-const MODES: EntryMode[] = ['upper', 'keyboard', 'eye'];
+/** 상체 carries the eye since 2026-11-28, so a day shows at most two modes. */
+const MODES: EntryMode[] = ['upper', 'keyboard'];
 const parts = (date: string) => date.split('-').map(Number) as [number, number, number];
 const utcDate = (year: number, monthIndex: number, day: number) => new Date(Date.UTC(year, monthIndex, day)).toISOString().slice(0, 10);
 
@@ -78,12 +79,13 @@ export const entryKey = (entry: TimelineEntry) => `${entry.mode}:${entry.id}`;
 export const entryMs = (entry: TimelineEntry) => Math.max(0, entry.endedAt - entry.startedAt);
 
 const statuses = (source: EntrySource) =>
-  source.mode === 'upper' ? source.records.map(record => record.status)
-    : source.mode === 'eye' ? [source.record.status] : [source.stored.record.status];
+  source.mode === 'upper' ? [...source.records, ...(source.eye ? [source.eye] : [])].map(record => record.status)
+    : [source.stored.record.status];
 
 /**
- * Rows per date with every policy kept: one per upper session, keyboard and eye record, newest first.
- * A running record that stopped saving minutes before `now` counts as interrupted (summary.ts STALE_RUNNING_MS).
+ * Rows per date with every policy kept, newest first: one per 상체 camera run (neck, balance and eye together) and one
+ * per keyboard record. A running record that stopped saving minutes before `now` counts as interrupted (summary.ts
+ * STALE_RUNNING_MS).
  */
 export function entriesByDate(history: HistoryRecord[], keyboard: KeyboardStored[], dates: string[], now = Date.now()) {
   const byDate = new Map<string, HistoryEntry[]>();
@@ -99,7 +101,7 @@ export function entriesByDate(history: HistoryRecord[], keyboard: KeyboardStored
   return byDate;
 }
 
-/** Calendar cells: the modes and the summed length of the same rows the list shows. */
+/** Calendar cells: the modes and the summed length of the same rows the list shows (상체 camera time counts once). */
 export function calendarDays(dates: string[], byDate: Map<string, HistoryEntry[]>, today: string): CalendarDay[] {
   return dates.map(date => {
     const entries = byDate.get(date) ?? [];

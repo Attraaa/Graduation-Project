@@ -8,6 +8,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { entriesByDate } from '../src/features/history/calendar.ts';
 import { CURRENT_POLICIES } from '../src/features/history/currentPolicies.ts';
 import { eyeMinutes } from '../src/features/history/detail.ts';
+import { buildStatistics } from '../src/features/statistics/period.ts';
 
 async function load(entry) {
   const bundle = await build({ entryPoints: [entry], bundle: true, write: false, loader: { '.css': 'empty' },
@@ -22,6 +23,7 @@ const DayRecords = await load('src/features/history/DayRecords.tsx');
 const EmptyDay = await load('src/features/history/EmptyDay.tsx');
 const RecordDetail = await load('src/features/history/RecordDetail.tsx');
 const KeyboardKeyExploration = await load('src/features/keyboard/KeyboardKeyExploration.tsx');
+const UpperBodyPanel = await load('src/features/statistics/UpperBodyPanel.tsx');
 const html = (component, props) => renderToStaticMarkup(createElement(MemoryRouter, null, createElement(component, props)));
 
 test('key heatmap colours follow the whole score shown: 90 or more green, 70–89 yellow, below 70 red', () => {
@@ -80,43 +82,73 @@ const posture = (over = {}) => ({ id: 's1:turtle', owner: '7', mode: 'turtle',
   longestContinuousMs: 0, status: 'finished',
   runMs: 18 * 60_000, validMs: 18 * 60_000, scoreTimeSum: 18 * 60_000 * 70, deviationMs: 0, deviationEpisodeCount: 1, ...over });
 
-test('record rows leave scores and record status to the detail panel', () => {
+test('record rows repeat the main numbers under the time and leave record status to the detail panel', () => {
   const old = posture({ id: 'old:turtle', scorePolicyVersion: 'reference-similarity-turtle-v1', status: 'interrupted',
     startedAt: Date.parse('2026-10-02T00:00:00Z'), updatedAt: Date.parse('2026-10-02T00:05:00Z'),
     runMs: 5 * 60_000, validMs: 5 * 60_000, scoreTimeSum: 5 * 60_000 * 60 });
   const balance = posture({ id: 's1:balance', mode: 'balance', scorePolicyVersion: CURRENT_POLICIES.balance, scoreTimeSum: 18 * 60_000 * 86 });
-  const entries = entriesByDate([posture(), balance, old], [], ['2026-10-02']).get('2026-10-02');
+  const entries = entriesByDate([posture(), balance, old], [keyboardStored()], ['2026-10-02']).get('2026-10-02');
   const out = html(DayRecords, { date: '2026-10-02', entries, selectedKey: 'upper:s1', onSelect: () => {} });
   assert.match(out, /10월 2일 \(금\) 기록/);
-  assert.match(out, /2회</);
+  assert.match(out, /3회</);
   assert.match(out, /상체<\/b><span[^>]*>10:05 – 10:23</);
-  assert.doesNotMatch(out, /목 70|좌우 균형 86|\(18분\)|중단됨|이전 기준/);
+  // 시안 H01 (2026-11-28): one short line of numbers per row; a part without records shows "—".
+  assert.match(out, />목 70 · 균형 86</);
+  assert.match(out, />목 60 · 균형 —</);
+  assert.match(out, />훈련 점수 94 · 판정 가능 100%</);
+  assert.doesNotMatch(out, /\(18분\)|중단됨|이전 기준|안구/);
   const detail = html(RecordDetail, { entry: entries.find(entry => entry.interrupted), query: {} });
   assert.match(detail, /중단됨 · 이전 기준/);
 });
 
-test('record detail: every record type shows a few whole numbers without boxes, then one picture', () => {
-  const eyeRecord = { id: 'e1', owner: '7', mode: 'eye', startedAt: Date.parse('2026-10-02T04:00:00Z'), updatedAt: Date.parse('2026-10-02T04:10:00Z'),
-    offsetMinutes: -540, policyVersion: CURRENT_POLICIES.eye, status: 'finished',
-    runMs: 10 * 60_000, validMs: 9 * 60_000, blinks: 125, breaks: 1, nearReminders: 3, openReminders: 2 };
-  const entries = entriesByDate([posture(), posture({ id: 's1:balance', mode: 'balance', scorePolicyVersion: CURRENT_POLICIES.balance,
-    scoreTimeSum: 18 * 60_000 * 86 }), eyeRecord], [keyboardStored()], ['2026-10-02']).get('2026-10-02');
+test('record detail: a camera run shows 자세 and 눈 numbers in two rows without boxes, then one picture (시안 H01)', () => {
+  const run = '9b8a7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d';
+  const eyeRecord = { id: `camera:${run}:eye`, owner: '7', mode: 'eye', startedAt: Date.parse('2026-10-02T01:05:00Z'),
+    updatedAt: Date.parse('2026-10-02T01:23:00Z'), offsetMinutes: -540, policyVersion: CURRENT_POLICIES.eye, status: 'finished',
+    runMs: 18 * 60_000, validMs: 9 * 60_000, blinks: 126, breaks: 1, nearReminders: 3, openReminders: 2 };
+  const lone = { ...eyeRecord, id: 'e1', startedAt: Date.parse('2026-10-02T04:00:00Z'), updatedAt: Date.parse('2026-10-02T04:10:00Z'),
+    runMs: 10 * 60_000, blinks: 125 };
+  const entries = entriesByDate([posture({ id: `camera:${run}:a:turtle` }), posture({ id: `camera:${run}:a:balance`, mode: 'balance',
+    scorePolicyVersion: CURRENT_POLICIES.balance, scoreTimeSum: 18 * 60_000 * 86 }), eyeRecord, lone], [keyboardStored()], ['2026-10-02']).get('2026-10-02');
   const idle = { data: null, loading: false, error: null, retry: () => {} };
-  const detail = (mode, data = null) => html(RecordDetail, { entry: entries.find(entry => entry.mode === mode), query: { ...idle, data } });
+  const detail = (id, data = null) => html(RecordDetail, { entry: entries.find(entry => entry.id === id), query: { ...idle, data } });
   const numbers = out => [...out.matchAll(/<p class="truncate[^"]*" title="([^"]+)">[^<]+<\/p><p[^>]*>([^<]+)/g)].map(match => `${match[1]} ${match[2]}`);
-  // User request 2026-11-25: values were all in boxes and the eye detail matched nothing else.
-  const upper = detail('upper');
-  assert.deepEqual(numbers(upper), ['목 70', '좌우 균형 86', '기준에서 벗어남 2', '제대로 측정 100']);
-  assert.match(upper, />분별 점수</);
-  assert.doesNotMatch(upper, /rounded-xl bg-surface-muted|정상 종료/);
-  const eye = detail('eye', { mode: 'eye', detail: { record: eyeRecord, buckets: [] } });
-  assert.deepEqual(numbers(eye), ['깜빡임 빈도 14', '깜빡임 125', '유효 관찰 시간 9분', '눈 휴식 완료 1']);
-  assert.match(eye, />분별 깜빡임 빈도</);
-  assert.doesNotMatch(eye, /가까워짐 안내|깜빡임 안내|분별 안구 관찰|<table/);
-  const keyboard = detail('keyboard', { mode: 'keyboard', stored: keyboardStored() });
+  // User request 2026-11-25: values were all in boxes. 2026-11-28: one camera run, so 자세 and 눈 sit together.
+  const upper = detail(`camera:${run}`);
+  assert.match(upper, /상체 · 10:05 – 10:23/);
+  assert.deepEqual(numbers(upper), ['목 70', '좌우 균형 86', '기준에서 벗어남 2', '제대로 측정 100',
+    '깜빡임 빈도 14', '깜빡임 126', '깜빡임 안내 2', '유효 관찰 9분']);
+  assert.match(upper, /<\/span>자세<\/p>.*<\/span>눈<\/p>/);
+  assert.match(upper, />분별 기록</);
+  assert.doesNotMatch(upper, /rounded-xl bg-surface-muted|정상 종료|눈 휴식 완료|가까워짐 안내|안구/);
+  // An eye record from before the merge (or without posture records) keeps only its 눈 row.
+  const eye = detail('e1', { mode: 'upper', details: [], eye: { record: lone, buckets: [] } });
+  assert.deepEqual(numbers(eye), ['깜빡임 빈도 14', '깜빡임 125', '깜빡임 안내 2', '유효 관찰 9분']);
+  assert.doesNotMatch(eye, /<\/span>자세<\/p>|<table/);
+  assert.match(eye, /표시할 분별 기록이 없어요/);
+  const keyboard = detail('k1', { mode: 'keyboard', stored: keyboardStored() });
   assert.deepEqual(numbers(keyboard), ['훈련 점수 94', '판정한 입력 10', '판정 가능 비율 100']);
   assert.match(keyboard, /키별 히트맵/);
-  assert.doesNotMatch(keyboard, /키보드 학습 기록|다음에 연습할 키|관찰 품질|점수 계산과 기록 정보|분별 점수/);
+  assert.doesNotMatch(keyboard, /키보드 학습 기록|다음에 연습할 키|관찰 품질|점수 계산과 기록 정보|분별 기록/);
+});
+
+test('상체 statistics: one page with 자세, 눈 and 측정 품질·기록 sections and a bar that jumps to them (시안 S02)', () => {
+  const summary = buildStatistics({ end: '2026-10-07', days: 7, posture: [], eye: [], keyboard: [] });
+  const props = { summary, periodDays: 7, today: '2026-10-07', detail: () => null, onSelectDate: () => {}, onOpenHistory: () => {},
+    status: { posture: 'ready', eye: 'ready' }, retry: { posture: () => {}, eye: () => {} } };
+  const out = html(UpperBodyPanel, props);
+  for (const [id, name] of [['posture', '자세'], ['eye', '눈'], ['quality', '측정 품질·기록']]) {
+    assert.match(out, new RegExp(`aria-controls="stats-section-${id}"[^>]*>(<span[^>]*></span>)?${name}</button>`), name);
+    assert.match(out, new RegExp(`id="stats-section-${id}"`), id);
+  }
+  for (const term of ['목 평균 점수', '좌우 균형 평균 점수', '기준에서 벗어남', '측정 시간', '깜빡임 빈도', '깜빡임 안내', '가까워짐 안내',
+    '유효 관찰 시간', '자세 제대로 측정', '눈 유효 관찰', '측정 기록', '학습이력에서 보기 →']) assert.match(out, new RegExp(term), term);
+  assert.doesNotMatch(out, /눈 휴식 완료|안구/);
+  // Each section waits for its own source: a failed eye request keeps the posture numbers.
+  const failed = html(UpperBodyPanel, { ...props, status: { posture: 'ready', eye: 'error' } });
+  assert.match(failed, /눈 기록을 불러오지 못했어요/);
+  assert.match(failed, /목 평균 점수/);
+  assert.doesNotMatch(failed, /가까워짐 안내/);
 });
 
 test('eye detail chart: blink rate per minute, no rate for a minute under 30 s of valid observation', () => {

@@ -128,36 +128,45 @@ try {
   };
   const expectMinuteGap = async label => {
     const selector = `[role="img"][aria-label^="${label}"]`;
+    const isBlink = label.includes('깜빡임');
+    const series = isBlink ? 'area' : 'line';
     const plot = await eventually(() => read(`(() => {
       const chart = document.querySelector(${JSON.stringify(selector)});
-      const curve = chart?.querySelector('.recharts-line-curve')?.getAttribute('d');
-      const points = Array.from(chart?.querySelectorAll('.recharts-line-dot') ?? [],
+      const curve = chart?.querySelector('.recharts-${series}-curve')?.getAttribute('d');
+      const points = Array.from(chart?.querySelectorAll('.recharts-${series}-dot') ?? [],
         dot => [Number(dot.getAttribute('cx')), Number(dot.getAttribute('cy'))]);
       return { curve, points };
     })()`), ({ curve, points }) => curve && points.length === 4, `${label} has four saved points`);
     assert.equal((plot.curve.match(/M/g) ?? []).length, 2, `${label} breaks the line across an unmeasured minute`);
     const [first, second, third, fourth] = plot.points;
     assert.ok(Math.abs(third[0] - second[0] - 2 * (second[0] - first[0])) < 1, `${label} preserves elapsed time`);
-    if (label.includes('깜빡임')) assert.ok(third[1] > Math.max(first[1], second[1], fourth[1]), 'a saved zero is drawn at the bottom');
+    if (isBlink) assert.ok(third[1] > Math.max(first[1], second[1], fourth[1]), 'a saved zero is drawn at the bottom');
   };
   await send('Page.addScriptToEvaluateOnNewDocument', { source: `
     window.captionCalls = [];
-    window.fixture = { requests: [], failures: [], reviews: {}, generation: 0, deleteCount: 0 };
+    window.fixture = { requests: [], failures: [], reviews: {}, reviewBodies: {}, generation: 0, deleteCount: 0 };
     window.motiWindow = { setTheme: async (...input) => { window.captionCalls.push(input); } };
     Object.defineProperty(navigator.mediaDevices, 'getUserMedia', { configurable: true, value: () => new Promise(() => {}) });
     window.motiKeyboard = { start: () => new Promise(() => {}), stop: async () => {}, onHalt: () => () => {}, settings: async () => ({ apps: [] }) };
     const normalFetch = window.fetch;
     const date = new Date().toLocaleDateString('sv-SE');
+    const prior = new Date(date + 'T12:00:00');
+    prior.setDate(prior.getDate() - 2);
+    window.fixture.reviewDates = { today: date, prior: prior.toLocaleDateString('sv-SE') };
     const login = { token: 'local-fixture', user: { id: '7', nickname: 'Moti', username: 'moti' } };
     if (location.hash === '#/login') localStorage.removeItem('moti.session');
     else localStorage.setItem('moti.session', JSON.stringify(login));
+    const camera = 'camera:00000000-0000-4000-8000-000000000001';
+    const postureId = mode => camera + ':segment:' + mode;
     const posture = (mode, hour, score) => ({ date, hour: String(hour), mode, scorePolicyVersion: mode + '-fixture', habitPolicyVersion: 'fixture',
-      runMs: 60_000, validMs: 60_000, scoreTimeSum: score * 60_000, deviationMs: 0, deviationEpisodeCount: 0, sessionCount: 1, recordIds: ['s1:' + mode], longestContinuousMs: 0 });
-    const start = new Date(date + 'T09:15:00').getTime(), record = { ...posture('turtle', 9, 82), id: 's1:turtle', owner: '7',
-      startedAt: start, updatedAt: start + 300_000, runMs: 300_000, offsetMinutes: new Date(start).getTimezoneOffset(), status: 'finished' };
+      runMs: 60_000, validMs: 60_000, scoreTimeSum: score * 60_000, deviationMs: 0, deviationEpisodeCount: 0, sessionCount: 1, recordIds: [postureId(mode)], longestContinuousMs: 0 });
+    const start = new Date(date + 'T09:15:00').getTime();
+    const postureRecord = (mode, score) => ({ ...posture(mode, 9, score), id: postureId(mode), owner: '7',
+      startedAt: start, updatedAt: start + 300_000, runMs: 300_000, offsetMinutes: new Date(start).getTimezoneOffset(), status: 'finished' });
+    const record = postureRecord('turtle', 82), balance = postureRecord('balance', 91);
     const eyeRow = { date, hour: '9', policyVersion: 'eye-local', sessionCount: 1, runMs: 60_000, validMs: 60_000, blinks: 16, breaks: 0, nearReminders: 0, openReminders: 0 };
-    const eyeRecord = { ...eyeRow, id: 'eye-local', owner: '7', mode: 'eye', startedAt: start - 300_000,
-      updatedAt: start, runMs: 300_000, offsetMinutes: record.offsetMinutes, status: 'running' };
+    const eyeRecord = { ...eyeRow, id: camera + ':eye', owner: '7', mode: 'eye', startedAt: start,
+      updatedAt: start + 300_000, runMs: 300_000, offsetMinutes: record.offsetMinutes, status: 'running' };
     const observed = [0, 1, 3, 4];
     const keyRecord = { id: 'key-local', owner: '7', startedAt: start + 360_000, updatedAt: start + 480_000, offsetMinutes: record.offsetMinutes, status: 'finished',
       policyVersion: 'ansi-qwerty-touch:2.0.0', recognitionVersion: 'hands-camera-manual-v3', nearbyCredit: 70, total: 33 };
@@ -174,8 +183,10 @@ try {
         return Promise.resolve(Response.json({ generation: ++window.fixture.generation }));
       }
       if (path === '/api/ai/review') {
-        const days = JSON.parse(options.body).days;
-        return new Promise(resolve => { window.fixture.reviews[days] = resolve; });
+        const review = JSON.parse(options.body);
+        const key = review.date ?? review.from + ':' + review.to;
+        window.fixture.reviewBodies[key] = review;
+        return new Promise(resolve => { window.fixture.reviews[key] = resolve; });
       }
       if (path === '/api/hospitals') {
         const data = JSON.parse(options.body);
@@ -184,25 +195,33 @@ try {
         return Promise.resolve(Response.json({ center: { label, lat: 37.57, lng: 126.98 }, hospitals: data.department === '안과' ? [] :
           [{ id: '19', name: label + ' 병원', category: '의원', lat: 37.57, lng: 126.98, phone: '', address: label, distance: 80, url: '' }] }));
       }
+      const query = new URLSearchParams(search);
+      const to = query.get('to');
+      const includesToday = !to || to >= date;
       const routes = { '/api/auth/login': login, '/api/auth/me': { email: 'moti@example.test' }, '/api/records/generation': { generation: window.fixture.generation },
         '/api/records/history': { records: window.fixture.deleteCount ? [] : [record, eyeRecord], hasMore: false },
         '/api/records/keyboard': window.fixture.deleteCount ? [] : [keyboard],
-        '/api/records/keyboard/key-local': keyboard, '/api/records/posture-statistics': [posture('turtle', 9, 82), posture('balance', 9, 91), posture('turtle', 16, 77)],
-        '/api/records/eye-statistics': [eyeRow], '/api/records/posture/s1%3Aturtle':
+        '/api/records/keyboard/key-local': keyboard, '/api/records/posture-statistics': includesToday ? [posture('turtle', 9, 82), posture('balance', 9, 91), posture('turtle', 16, 77)] : [],
+        '/api/records/eye-statistics': includesToday ? [eyeRow] : [], ['/api/records/posture/' + encodeURIComponent(record.id)]:
           { record, buckets: observed.map(index => ({ ...posture('turtle', 9, 78 + 4 * index), minute: start + 60_000 * index })) },
-        '/api/records/eye/eye-local':
+        ['/api/records/posture/' + encodeURIComponent(balance.id)]:
+          { record: balance, buckets: [{ ...posture('balance', 9, 91), minute: start }] },
+        ['/api/records/eye/' + encodeURIComponent(eyeRecord.id)]:
           { record: eyeRecord, buckets: observed.map(index => ({ ...eyeRow, minute: eyeRecord.startedAt + 60_000 * index, blinks: index === 3 ? 0 : 12 + 3 * index })) } };
       if (call === 'GET /api/records/history' && window.fixture.deferHistory) {
         return new Promise(resolve => { window.fixture.finishHistory = status => resolve(Response.json(routes[path], { status })); });
       }
       if (call === 'GET /api/records/history' && window.fixture.historyOffsets) {
-        const offset = Number(new URLSearchParams(search).get('offset'));
+        const offset = Number(query.get('offset'));
         window.fixture.historyOffsets.push(offset);
         const page = { records: [record, eyeRecord].slice(offset, offset + 1), hasMore: offset === 0 };
         if (offset === 1) {
           return new Promise(resolve => { window.fixture.finishHistoryPage = status => resolve(Response.json(page, { status })); });
         }
         return Promise.resolve(Response.json(page));
+      }
+      if (method === 'GET' && path.startsWith('/api/records/eye/') && !(path in routes)) {
+        return Promise.resolve(Response.json({ message: '안구 기록을 찾을 수 없습니다.' }, { status: 404 }));
       }
       return Promise.resolve(Response.json(routes[path] ?? []));
     };
@@ -427,13 +446,14 @@ try {
     };
     setOverlay(['upper_body']);
     window.motiOverlay = { state: async () => view, onState: callback => { update = callback; return () => {}; }, ready: async () => {},
-      back: async mode => { window.backMode = mode ?? 'previous'; }, command: async ({ mode, action }) => {
+      back: async () => { window.backs = (window.backs ?? 0) + 1; }, command: async ({ mode, action }) => {
+        if (action === 'stop') window.stops = [...(window.stops ?? []), mode];
         const snapshot = { ...view.snapshot, [mode]: { ...view.snapshot[mode], running: action !== 'stop', paused: action === 'pause', status: '일시정지' } };
         view = { ...view, snapshot }; update(view); return { ok: true };
       } };
     })();
   ` });
-  await viewport(414, 136); await page('/overlay.html');
+  await viewport(324, 104); await page('/overlay.html');
   await text('.overlay-values', '15.2회/분');
   const rows = () => read(`Array.from(document.querySelectorAll('section[aria-label$="오버레이"]')).map(row => row.getAttribute('aria-label'))`);
   assert.deepEqual(await rows(), ['상체 오버레이']);
@@ -442,7 +462,7 @@ try {
   await read(`setOverlay(['keyboard'])`);
   await eventually(rows, list => list[0] === '키보드 오버레이', 'keyboard-only overlay');
   await screen('04-overlay-keyboard');
-  await viewport(414, 224); await read(`setOverlay(['upper_body','keyboard'], true, true)`);
+  await viewport(324, 188); await read(`setOverlay(['upper_body','keyboard'], true, true)`);
   await text('.overlay-keyboard .overlay-detail', '전체 키보드가');
   assert.deepEqual(await rows(), ['상체 오버레이', '키보드 오버레이']);
   assert.equal(await read(`document.querySelectorAll('.overlay-back').length`), 1);
@@ -453,17 +473,15 @@ try {
   assert.deepEqual(clipped, []);
   await screen('05-overlay-both');
   await modeButton('상체', '일시정지'); await modeButton('상체', '재개');
-  await activate('상체 중지'); await viewport(414, 136);
-  await text('dialog[open]', '키보드 측정은 계속 진행 중입니다.');
-  assert.equal(await read(`(() => { const d = document.querySelector('dialog'); return d.scrollHeight <= d.clientHeight; })()`), true);
-  await key('Escape', 27);
-  assert.equal(await read(`document.activeElement?.classList.contains('overlay-back')`), true);
-  assert.deepEqual(await rows(), ['키보드 오버레이']);
-  await modeButton('키보드', '중지'); await clickTopEdge('dialog[open] button', '통계로 이동하기');
-  assert.equal(await read('backMode'), 'keyboard');
-  await click('dialog[open] button', '닫기');
-  await click('.overlay-back', '돌아가기'); assert.equal(await read('backMode'), 'previous');
-  assert.deepEqual(await rows(), []);
+  // A stop ends in the main window (Electron main closes the overlay there), so no result dialog opens here.
+  await activate('상체 중지'); await viewport(324, 104);
+  await eventually(rows, list => list.length === 1 && list[0] === '키보드 오버레이', 'upper stopped');
+  assert.equal(await read(`!!document.querySelector('dialog')`), false);
+  await modeButton('키보드', '중지');
+  await eventually(rows, list => list.length === 0, 'keyboard stopped');
+  assert.deepEqual(await read('window.stops'), ['upper_body', 'keyboard']);
+  assert.equal(await read(`!!document.querySelector('dialog')`), false);
+  await click('.overlay-back', '돌아가기'); assert.equal(await read('window.backs'), 1);
   console.log('Overlay verified in light and dark with one, both and no active modes, blink rate, wrapping and stop controls.');
 
   await viewport(1100, 800); await page('/#/statistics');
@@ -474,9 +492,15 @@ try {
   assert.equal(await read(`document.querySelector('main').textContent.includes('AI 기능 예정')`), false);
   assert.equal(await read(`!!document.querySelector('section[aria-label="날짜별 점수"]')`), false);
   await screen('06-daily-statistics');
-  await click('[role="tab"]', '안구');
-  await text('section[aria-label="시간대별 깜빡임 빈도"]', '시간대별 깜빡임 빈도');
-  await eventually(() => read(`document.querySelectorAll('section[aria-label="시간대별 깜빡임 빈도"] .recharts-line-dot').length`), n => n > 0, 'a measured blink point');
+  assert.deepEqual(await read(`[...document.querySelectorAll('[role="tab"]')].map(tab => tab.textContent)`), ['상체', '키보드']);
+  const eyeChart = '#stats-section-eye section[aria-label="시간대별 깜빡임 빈도"]';
+  await text(eyeChart, '시간대별 깜빡임 빈도');
+  await eventually(() => read(`document.querySelectorAll('${eyeChart} .recharts-line-dot').length`), n => n > 0, 'a measured blink point in the upper-body tab');
+  await click('nav[aria-label="상체 통계 바로가기"] button', '눈');
+  await text('nav[aria-label="상체 통계 바로가기"] button[aria-current="true"]', '눈');
+  await page('/#/statistics?mode=eye');
+  await text('[role="tab"][aria-selected="true"]', '상체');
+  await text('nav[aria-label="상체 통계 바로가기"] button[aria-current="true"]', '눈');
   await click('[role="tab"]', '키보드');
   await text('section[aria-label="연습 변화"]', '세션별 연습 변화');
   await text('section[aria-label="연습 변화"] svg', '09:21');
@@ -490,21 +514,21 @@ try {
   await text('[role="group"][aria-label="기간"] [aria-pressed="true"]', '30일');
   await click('nav a', '학습이력');
   await text('h1', '학습이력');
-  await click('section[aria-label$="기록"] ol button', '상체');
-  await text('section[aria-label="기록 상세"]', '분별 점수');
-  await expectMinuteGap('분별 점수');
+  const historyList = 'section[aria-label$="기록"]:has(ol)';
+  await click(historyList + ' ol button', '상체');
+  await text('section[aria-label="기록 상세"]', '분별 기록');
+  await expectMinuteGap('분별 목·좌우 균형 점수');
+  await expectMinuteGap('분별 깜빡임 빈도');
   const history = await read(`(() => {
-    const list = document.querySelector('section[aria-label$="기록"]:has(ol)');
+    const list = document.querySelector('${historyList}');
     return [list.innerText, document.querySelector('section[aria-label="기록 상세"]').innerText,
       list.clientWidth, document.querySelector('section[aria-label="기록 상세"]').clientWidth, document.querySelector('main header').innerText];
   })()`);
-  assert.doesNotMatch(history[0], /목 |좌우 균형|\(\d+분\)/);
+  assert.match(history[0], /목 82.*깜빡임 16회\/분/);
+  assert.equal(await read(`[...document.querySelectorAll('${historyList} ol button')].filter(button => button.textContent.includes('상체')).length`), 1);
   assert.doesNotMatch(history[1], /정상\s*종료/);
   assert.ok(history[3] > history[2] * 2);
   assert.doesNotMatch(history[4], /7일 통계/);
-  await click('section[aria-label$="기록"] ol button', '안구');
-  await text('section[aria-label="기록 상세"]', '분별 깜빡임 빈도');
-  await expectMinuteGap('분별 깜빡임 빈도');
   await click('nav a', '설정');
   await text('h1', '설정');
   const alertSettings = await text('section[aria-label="알림"]', '알림 켜기');
@@ -532,7 +556,7 @@ try {
     await click('[aria-label="기간"] button', `${days}일`);
     await click('[role="tab"]', '상체');
     await read(`document.getElementById('stats-tab-upper').focus()`);
-    for (const [press, code, label] of [['ArrowRight', 39, '키보드'], ['End', 35, '안구'], ['Home', 36, '상체']]) {
+    for (const [press, code, label] of [['ArrowRight', 39, '키보드'], ['Home', 36, '상체'], ['End', 35, '키보드'], ['ArrowLeft', 37, '상체']]) {
       await key(press, code);
       await text('[role="tab"][aria-selected="true"]', label);
       assert.ok(await read(`(() => {
@@ -570,7 +594,7 @@ try {
   assert.match(await calendarLabel(), /기록 불러오는 중/);
   await eventually(() => read(`typeof window.fixture.finishHistory === 'function'`), Boolean, 'the history request is pending');
   await read(`window.fixture.deferHistory = false; window.fixture.finishHistory(503)`);
-  await text('[role="alert"]', '상체·안구 기록을 불러오지 못했어요');
+  await text('[role="alert"]', '상체 기록을 불러오지 못했어요');
   await eventually(calendarLabel, label => label?.includes('기록을 불러오지 못함'), 'the focused date reports a query failure');
   const weekView = '[aria-label="달력 보기"] button[aria-pressed="true"]';
   await read(`document.querySelector(${JSON.stringify(weekView)}).focus()`);
@@ -580,7 +604,7 @@ try {
     'record loading does not steal focus');
   await click('nav a', '통계');
   await openHistoryByKeyboard(30);
-  await click('section[aria-label$="기록"] ol button', '안구');
+  await click(historyList + ' ol button', '상체');
   await text('[aria-label="기록 상세"]', '종료 미확인');
   await click('[aria-label="달력 보기"] button', '월간');
   await noHorizontal(320, 568);
@@ -589,21 +613,21 @@ try {
   await click('nav a', '통계');
   await read(`window.fixture.historyOffsets = []; window.fixture.requests = []`);
   await click('nav a', '학습이력');
-  const historyList = 'section[aria-label$="기록"]:has(ol)';
   await eventually(() => read(`typeof window.fixture.finishHistoryPage === 'function'`), Boolean, 'the second history page is pending');
-  await text('main [role="status"]', '상체·안구 기록을 불러오는 중이에요');
+  await text('main [role="status"]', '상체 기록을 불러오는 중이에요');
   await click(historyList + ' button', '상체');
   await text('[aria-label="기록 상세"]', '상체');
   await read(`window.fixture.finishHistoryPage(503); delete window.fixture.finishHistoryPage`);
-  await text('[role="alert"]', '상체·안구 기록 일부를 불러오지 못했어요');
+  await text('[role="alert"]', '상체 기록 일부를 불러오지 못했어요');
   await text('[aria-label="기록 상세"]', '상체');
   assert.equal(await read(`document.querySelector('${historyList} button[aria-pressed="true"]').textContent.includes('상체')`), true);
   await click('[role="alert"] button', '다시 시도');
   await eventually(() => read(`typeof window.fixture.finishHistoryPage === 'function'`), Boolean, 'the retried second history page is pending');
   await text('[aria-label="기록 상세"]', '상체');
   await read(`window.fixture.finishHistoryPage(200)`);
-  await eventually(() => read(`!document.querySelector('main [role="alert"]') && document.querySelector('${historyList}').textContent.includes('안구')`),
-    Boolean, 'the remaining page restores the eye record');
+  await eventually(() => read(`!document.querySelector('main [role="alert"]') && document.querySelector('${historyList} button[aria-pressed="true"]').textContent.includes('깜빡임')`),
+    Boolean, 'the remaining page adds the eye record to the selected camera run');
+  await expectMinuteGap('분별 깜빡임 빈도');
   assert.deepEqual(await read(`window.fixture.historyOffsets`), [0, 1, 0, 1]);
   await noHorizontal(320, 568);
   await screen('review-history-paginated-320');
@@ -612,7 +636,7 @@ try {
 
   await read(`window.fixture.failures = ['GET /api/records/history']; window.fixture.requests = []`);
   await click('nav a', '학습이력');
-  await text('[role="alert"]', '상체·안구 기록을 불러오지 못했어요');
+  await text('[role="alert"]', '상체 기록을 불러오지 못했어요');
   await text('[aria-label="기록 상세"]', '키보드');
   const keyboardRequests = `window.fixture.requests.filter(path => path === 'GET /api/records/keyboard').length`;
   const keyboardBeforeRetry = await read(keyboardRequests);
@@ -644,35 +668,53 @@ try {
   await viewport(1100, 800);
 
   await click('nav a', 'AI 총평');
-  const generation = () => click('button', '총평 받기');
-  const periodSelect = days => click('[aria-label="기간"] button', days + '일');
-  const pendingReview = days => eventually(() => read(`typeof fixture.reviews[${days}] === 'function'`), Boolean, `review request ${days}`);
-  const resolveReview = (days, body, status = 200) => read(`fixture.reviews[${days}](Response.json(${JSON.stringify(body)}, { status: ${status} }))`);
+  const generation = () => click('section[aria-label="선택한 날짜의 측정 기록"] button', '총평 받기');
+  const { today: reviewToday, prior: reviewPrior } = await read('fixture.reviewDates');
+  const rangeKey = `${reviewPrior}:${reviewToday}`;
+  const selectReviewDate = async date => {
+    const [, month, day] = date.split('-').map(Number);
+    const selector = `[aria-label="달력"] button[aria-label^="${month}월 ${day}일 ("]`;
+    if (!await read(`!!document.querySelector(${JSON.stringify(selector)})`)) {
+      await activate(date === reviewToday ? '다음 기간' : '이전 기간');
+    }
+    await click(selector);
+  };
+  const pendingReview = key => eventually(() => read(`typeof fixture.reviews[${JSON.stringify(key)}] === 'function'`), Boolean, `review request ${key}`);
+  const resolveReview = (key, body, status = 200) => read(`fixture.reviews[${JSON.stringify(key)}](Response.json(${JSON.stringify(body)}, { status: ${status} }))`);
   const reviewMeta = { strengths: [], model: 'fixture', generatedAt: new Date().toISOString() };
   const recentReview = {
-    ...reviewMeta, headline: '최근 삼십일 응답', sections: [
-      { key: 'overall', title: '최근 30일 총평', text: '기록한 날이 늘었어요.' },
+    ...reviewMeta, headline: '선택한 기간의 응답', sections: [
+      { key: 'overall', title: '선택한 기간 총평', text: '선택한 날짜의 기록을 비교했어요.' },
       { key: 'keyboard', title: '키보드', text: '훈련 점수가 올랐어요.' },
     ], weaknesses: [], goals: ['같은 시간에 다시 측정하기'], caution: null,
   };
-  await generation(); await pendingReview(7);
+  await generation(); await pendingReview(reviewToday);
+  assert.equal(await read(`fixture.reviewBodies[${JSON.stringify(reviewToday)}].date`), reviewToday);
   await text('[role="status"]', '총평 작성 중');
   assert.equal(await read(`[...document.querySelectorAll('main [role="status"]')].filter(node => node.textContent.includes('총평 작성 중')).length`), 1);
-  await periodSelect(30); await generation(); await pendingReview(30);
-  await resolveReview(30, recentReview);
-  await text('main', '최근 삼십일 응답');
+  await selectReviewDate(reviewToday);
+  await text('main', '종료일을 선택하거나');
+  await selectReviewDate(reviewPrior);
+  if (reviewPrior.slice(0, 7) === reviewToday.slice(0, 7)) {
+    await eventually(() => read(`document.querySelectorAll('${calendarDate}').length`), n => n === 3, 'all dates of the selected range are highlighted');
+  }
+  await generation(); await pendingReview(rangeKey);
+  assert.deepEqual(await read(`(() => { const review = fixture.reviewBodies[${JSON.stringify(rangeKey)}]; return [review.from, review.to, review.days.map(day => day.date)]; })()`),
+    [reviewPrior, reviewToday, [reviewToday]]);
+  await resolveReview(rangeKey, recentReview);
+  await text('main', recentReview.headline);
   await text('section[aria-label="키보드"]', '훈련 점수가 올랐어요.');
   await text('section[aria-label="다음 목표"]', '같은 시간에 다시 측정하기');
-  await resolveReview(7, { message: '늦은 칠일 오류' }, 503);
-  assert.equal(await read(`document.querySelector('main').textContent.includes('늦은 칠일 오류')`), false);
+  await resolveReview(reviewToday, { message: '늦은 하루 오류' }, 503);
+  assert.equal(await read(`document.querySelector('main').textContent.includes('늦은 하루 오류')`), false);
   await read('fixture.reviews = {}');
-  await click('button', '다시 받기'); await pendingReview(30);
-  await periodSelect(7); await generation(); await pendingReview(7);
-  await resolveReview(7, { ...reviewMeta, summary: '최근 칠일 응답', improvements: ['카메라 위치 확인하기'] });
-  await text('main', '최근 칠일 응답');
+  await click('button', '다시 받기'); await pendingReview(rangeKey);
+  await selectReviewDate(reviewToday); await generation(); await pendingReview(reviewToday);
+  await resolveReview(reviewToday, { ...recentReview, headline: '선택한 하루의 응답', weaknesses: ['카메라 위치 확인하기'] });
+  await text('main', '선택한 하루의 응답');
   await text('section[aria-label="아쉬운 점"]', '카메라 위치 확인하기');
-  await resolveReview(30, { ...recentReview, headline: '늦은 삼십일 응답' });
-  await text('main', '최근 칠일 응답');
+  await resolveReview(rangeKey, { ...recentReview, headline: '늦은 기간 응답' });
+  await text('main', '선택한 하루의 응답');
   const typeAddress = value => read(`(() => {
     const input = document.querySelector('input[aria-label="동네 이름이나 주소"]');
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, '${value}');

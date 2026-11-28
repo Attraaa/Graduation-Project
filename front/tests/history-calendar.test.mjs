@@ -53,7 +53,7 @@ test('the loaded range adds a week on each side but never passes today, and movi
   assert.deepEqual(datesBetween('2026-09-29', '2026-10-02'), ['2026-09-29', '2026-09-30', '2026-10-01', '2026-10-02']);
 });
 
-test('rows: one line per upper session with keyboard and eye, newest first, every policy kept', () => {
+test('rows: one line per 상체 session (a lone eye record too) and per keyboard record, newest first, every policy kept', () => {
   const old = posture({ id: 'old:turtle', scorePolicyVersion: 'reference-similarity-turtle-v1',
     startedAt: at('2026-10-02T00:00:00Z'), updatedAt: at('2026-10-02T00:05:00Z'),
     runMs: 5 * 60_000, validMs: 5 * 60_000, scoreTimeSum: 5 * 60_000 * 60 });
@@ -61,7 +61,7 @@ test('rows: one line per upper session with keyboard and eye, newest first, ever
   const byDate = entriesByDate([eye({ status: 'running' }), balance(), posture(), old],
     [keyboard({ status: 'interrupted' })], datesBetween('2026-10-01', '2026-10-03'), at('2026-10-02T04:11:00Z'));
   const rows = byDate.get('2026-10-02');
-  assert.deepEqual(rows.map(row => [row.mode, row.id]), [['eye', 'e1'], ['keyboard', 'k1'], ['upper', 's1'], ['upper', 'old']]);
+  assert.deepEqual(rows.map(row => [row.mode, row.id]), [['upper', 'e1'], ['keyboard', 'k1'], ['upper', 's1'], ['upper', 'old']]);
   const [blink, typing, upper, legacy] = rows;
   assert.equal(legacy.legacy, true);
   assert.equal(legacy.balance, null);
@@ -81,7 +81,7 @@ test('a record still marked running that stopped saving over three minutes ago s
   const rows = now => entriesByDate([eye({ status: 'running' }), posture({ status: 'running' }), balance({ status: 'running' })],
     [keyboard({ status: 'running' })], ['2026-10-02'], now).get('2026-10-02');
   const live = rows(at('2026-10-02T04:12:00Z'));  // eye saved 2 min ago; upper (01:23) and keyboard (02:20) long ago
-  assert.deepEqual(live.map(row => [row.mode, row.running, row.interrupted]), [['eye', true, false], ['keyboard', false, true], ['upper', false, true]]);
+  assert.deepEqual(live.map(row => [row.mode, row.running, row.interrupted]), [['upper', true, false], ['keyboard', false, true], ['upper', false, true]]);
   const later = rows(at('2026-10-02T04:13:01Z'));
   assert.deepEqual(later.map(row => [row.running, row.interrupted]), [[false, true], [false, true], [false, true]]);
 });
@@ -128,13 +128,35 @@ test('calendar cells match the rows of the same date, and neighbours stay inside
   assert.deepEqual(neighborDates(byDate, '2026-09-27', TODAY), { previous: null, next: '2026-10-02' });
 });
 
-test('upper detail joins neck and balance per minute and keeps empty minutes empty', () => {
+test('one camera run is one row, and its camera time counts once in the calendar (2026-11-28)', () => {
+  const run = '3a4b5c6d-7e8f-4a1b-9c2d-1e2f3a4b5c6d';
+  const sameCamera = (over = {}) => eye({ id: `camera:${run}:eye`, startedAt: at('2026-10-02T01:05:00Z'), updatedAt: at('2026-10-02T01:23:00Z'),
+    runMs: 18 * 60_000, validMs: 18 * 60_000, blinks: 252, ...over });
+  const records = over => [posture({ id: `camera:${run}:seg:turtle` }), balance({ id: `camera:${run}:seg:balance` }), sameCamera(over)];
+  const byDate = entriesByDate(records(), [], ['2026-10-02']);
+  const rows = byDate.get('2026-10-02');
+  assert.deepEqual(rows.map(row => [row.mode, row.id]), [['upper', `camera:${run}`]]);
+  assert.deepEqual([rows[0].turtle, rows[0].balance, rows[0].rate, rows[0].legacy], [70, 86, 14, false]);
+  const [day] = calendarDays(['2026-10-02'], byDate, TODAY);
+  assert.deepEqual(day.modes, ['upper']);
+  assert.equal(day.totalMs, 18 * 60_000);  // 같은 카메라 시간: 상체 18분 + 안구 18분이 아니라 18분
+  // The eye record of the run can also carry an earlier standard.
+  assert.equal(entriesByDate(records({ policyVersion: 'eye-habits-v1' }), [], ['2026-10-02']).get('2026-10-02')[0].legacy, true);
+});
+
+test('upper detail joins neck, balance and the blink rate of the same camera per minute and keeps empty minutes empty', () => {
   const minute = at('2026-10-02T01:05:00Z');
   const bucket = (over = {}) => ({ minute, runMs: 60_000, validMs: 60_000, scoreTimeSum: 60_000 * 70, deviationMs: 0, deviationEpisodeCount: 0, ...over });
-  const rows = upperMinutes([
+  const details = [
     { record: posture(), buckets: [bucket(), bucket({ minute: minute + 60_000, validMs: 0, scoreTimeSum: 0 })] },
     { record: balance(), buckets: [bucket({ scoreTimeSum: 60_000 * 86 })] },
-  ]);
-  assert.deepEqual(rows.map(row => [row.time, row.turtle, row.balance]), [['10:05', 70, 86], ['10:06', null, null]]);
+  ];
+  assert.deepEqual(upperMinutes(details).map(row => [row.time, row.turtle, row.balance, row.rate]),
+    [['10:05', 70, 86, null], ['10:06', null, null, null]]);
+  const eyeBucket = { minute, runMs: 60_000, validMs: 60_000, blinks: 15, breaks: 0, nearReminders: 0, openReminders: 0 };
+  // A minute under 30 s of valid observation has no rate, like the eye chart before the merge.
+  const short = { ...eyeBucket, minute: minute + 60_000, validMs: 20_000, blinks: 4 };
+  assert.deepEqual(upperMinutes(details, { record: eye(), buckets: [short, eyeBucket] }).map(row => [row.time, row.turtle, row.balance, row.rate]),
+    [['10:05', 70, 86, 15], ['10:06', null, null, null]]);
   assert.deepEqual(upperTotals([posture(), balance({ validMs: 9 * 60_000 })]), { deviations: 2, validRate: 75 });
 });

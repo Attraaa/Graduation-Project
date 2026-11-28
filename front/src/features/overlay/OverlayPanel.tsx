@@ -1,8 +1,7 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import { ArrowUpRight, Pause, Play, Square } from 'lucide-react';
-import MeasurementEndedDialog from '../session/MeasurementEndedDialog';
 import RateGauge from '../session/RateGauge';
-import { modeName, otherMode } from '../session/modes';
+import { modeName } from '../session/modes';
 import { commandAllowed, overlayTime, visibleOverlayModes, type OverlayAction, type OverlayMode, type OverlayView } from './contract';
 
 const ACTION_LABEL = { pause: '일시정지', resume: '재개', stop: '중지' };
@@ -13,14 +12,14 @@ function BackButton({ onClick }: { onClick: () => void }) {
   </button>;
 }
 
-/** One row per mode with score rings, status, active time and measurement controls. */
+/**
+ * One row per mode with score rings, status, active time and measurement controls.
+ * A stop that runs closes this window: the main window comes back and shows the result (MonitoringDesktopBridge).
+ */
 export default function OverlayPanel() {
-  const panel = useRef<HTMLElement>(null);
   const [view, setView] = useState<OverlayView>({ snapshot: null, connected: false });
   const [pending, setPending] = useState<Partial<Record<OverlayMode, { id: string; action: OverlayAction }>>>({});
   const [message, setMessage] = useState('');
-  const [ended, setEnded] = useState<OverlayMode | null>(null);
-  const [statisticsError, setStatisticsError] = useState('');
   const snapshot = view.snapshot;
   const owner = snapshot?.owner;
   useEffect(() => {
@@ -43,18 +42,15 @@ export default function OverlayPanel() {
     try {
       const result = await window.motiOverlay.command({ id, owner: snapshot.owner, mode, run: snapshot[mode].run, action });
       if (!result.ok) setMessage(result.message ?? '본창에서 측정 상태를 확인해 주세요.');
-      else if (action === 'stop') { setStatisticsError(''); setEnded(mode); }
     } catch { setMessage('본창 연결을 확인해 주세요.'); }
     finally { setPending(current => current[mode]?.id === id ? { ...current, [mode]: undefined } : current); }
   };
   const stopPending = Object.values(pending).some(command => command?.action === 'stop');
-  const remainingMode = ended && otherMode(ended);
-  const remaining = remainingMode && snapshot?.[remainingMode];
   const notice = message || (snapshot?.savingFailed ? '기록 저장에 실패했어요. 본창에서 다시 시도해 주세요.' : !view.connected ? '본창 연결을 확인해 주세요.' : '');
   const visible = visibleOverlayModes(snapshot);
   const back = () => { void window.motiOverlay?.back().catch(() => setMessage('본창 연결을 확인해 주세요.')); };
-  return <>
-    <main ref={panel} className="overlay-panel overlay-drag text-heading">
+  return (
+    <main className="overlay-panel overlay-drag text-heading">
       {!visible.length && <div className="overlay-empty">
         <p>{view.connected ? '측정 중인 모드가 없어요.' : '측정 정보를 기다리고 있어요.'}</p>
         <BackButton onClick={back} />
@@ -97,11 +93,5 @@ export default function OverlayPanel() {
       })}
       {notice && <p role="status" className="overlay-notice">{notice}</p>}
     </main>
-    {ended && <MeasurementEndedDialog mode={ended} className="overlay-completion" error={statisticsError}
-      remaining={remainingMode && remaining && remaining.running ? { mode: remainingMode, paused: remaining.paused } : null}
-      returnFocus={() => panel.current?.querySelector<HTMLButtonElement>('.overlay-back') ?? null}
-      onClose={() => setEnded(null)} onStatistics={() => {
-        void window.motiOverlay?.back(ended).catch(() => setStatisticsError('본창 연결을 확인해 주세요.'));
-      }} />}
-  </>;
+  );
 }

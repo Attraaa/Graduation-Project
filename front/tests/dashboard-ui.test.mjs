@@ -29,6 +29,11 @@ test('day detail lists only the modes recorded that day', () => {
   assert.match(out, /분당 16회/);
   assert.doesNotMatch(out, /키보드/);
   assert.match(out, /총 관찰 35분/);
+  // 2026-11-28: the blink rate is a second line of the 상체 row (same camera), not an 안구 row of its own.
+  assert.match(out, />상체<\/span>.*>깜빡임 분당 16회</);
+  assert.doesNotMatch(out, /안구/);
+  const eyeOnly = { ...day, upper: { turtle: null, balance: null, sessions: 0, runMs: 0, deviations: 0 } };
+  assert.match(html(DayDetail, { day: eyeOnly }), />상체<\/span><b[^>]*>깜빡임 분당 16회<\/b><span[^>]*>20분</);
 });
 
 test('deviation hours show an empty state and name the busiest hour', () => {

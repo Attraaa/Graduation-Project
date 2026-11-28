@@ -1,10 +1,9 @@
 import type { BrowserWindow, BrowserWindowConstructorOptions, IpcMain, IpcMainInvokeEvent, Rectangle, Screen } from 'electron';
 import { parseOverlayCommand, parseOverlaySnapshot, visibleOverlayModes, type OverlayCommand, type OverlayResult, type OverlaySnapshot, type OverlayView } from '../src/features/overlay/contract.ts';
-import { statisticsTarget } from '../src/features/session/modes.ts';
 import { trustedRecordUrl } from './recordHandlers.ts';
 
-// One mode or the empty state fits the compact size, including the stop dialog.
-const overlaySize = (snapshot: OverlaySnapshot | null) => ({ width: 430, height: visibleOverlayModes(snapshot).length === 2 ? 232 : 144 });
+// One mode or the empty state fits the compact size. Each size keeps room for one notice line (saving failure, lost connection).
+const overlaySize = (snapshot: OverlaySnapshot | null) => ({ width: 340, height: visibleOverlayModes(snapshot).length === 2 ? 196 : 112 });
 export function fitOverlay(bounds: Rectangle, area: Rectangle): Rectangle {
   const width = Math.min(bounds.width, area.width), height = Math.min(bounds.height, area.height);
   return { width, height, x: Math.round(Math.max(area.x, Math.min(bounds.x, area.x + area.width - width))), y: Math.round(Math.max(area.y, Math.min(bounds.y, area.y + area.height - height))) };
@@ -31,7 +30,7 @@ export class OverlayWindow {
   private active = false;
   private opening: Promise<void> | null = null;
   private ready: { resolve: () => void; reject: (error: Error) => void } | null = null;
-  private pending = new Map<string, { owner: string; resolve: (value: OverlayResult) => void; timer: ReturnType<typeof setTimeout> }>();
+  private pending = new Map<string, { owner: string; stop: boolean; resolve: (value: OverlayResult) => void; timer: ReturnType<typeof setTimeout> }>();
   private completed = new Map<string, OverlayResult>();
   private previous: { maximized: boolean; bounds: Rectangle; displayId: number; area: Rectangle } | null = null;
 
@@ -56,22 +55,17 @@ export class OverlayWindow {
       deps.trustedOwner(event);
       if (typeof id !== 'string' || !result || typeof result !== 'object' || typeof (result as OverlayResult).ok !== 'boolean') return;
       const p = this.pending.get(id);
-      if (p?.owner !== this.snapshot?.owner) return;
-      this.finish(id, { ok: (result as OverlayResult).ok });
+      if (!p || p.owner !== this.snapshot?.owner) return;
+      const ok = (result as OverlayResult).ok;
+      this.finish(id, { ok });
+      // The main window shows the result of a stop, so a stop that ran returns to it.
+      if (ok && p.stop) this.back();
       } catch { /* Ignore replies from another window or expired renderer. */ }
     });
     ipc.handle('overlay:state', event => { this.trusted(event); return this.view(); });
     ipc.handle('overlay:ready', event => { this.trusted(event); this.ready?.resolve(); });
     ipc.handle('overlay:command', (event, input: unknown) => { this.trusted(event); return this.command(parseOverlayCommand(input)); });
-    ipc.handle('overlay:back', (event, mode: unknown) => {
-      this.trusted(event);
-      if (mode === undefined) { this.back(); return; }
-      if (mode !== 'upper_body' && mode !== 'keyboard') throw Error('잘못된 통계 요청입니다.');
-      const owner = this.deps.owner();
-      if (!owner || owner.isDestroyed()) throw Error('본창 연결을 확인해 주세요.');
-      this.back();
-      owner.webContents.send('desktop:navigate', statisticsTarget(mode));
-    });
+    ipc.handle('overlay:back', event => { this.trusted(event); this.back(); });
     const heartbeat = setInterval(() => this.push(), 1000); heartbeat.unref();
     deps.screen.on('display-removed', () => this.reposition());
     deps.screen.on('display-metrics-changed', () => this.reposition());
@@ -106,7 +100,7 @@ export class OverlayWindow {
     if (!owner || owner.isDestroyed()) return Promise.resolve({ ok: false, message: '본창 연결을 확인해 주세요.' });
     return new Promise(resolve => {
       const timer = setTimeout(() => this.finish(command.id, { ok: false, message: '응답을 확인하지 못했습니다. 돌아가서 상태를 확인해 주세요.' }), 3000);
-      this.pending.set(command.id, { owner: s.owner, resolve, timer }); owner.webContents.send('desktop:command', command);
+      this.pending.set(command.id, { owner: s.owner, stop: command.action === 'stop', resolve, timer }); owner.webContents.send('desktop:command', command);
     });
   }
   open(): Promise<void> {

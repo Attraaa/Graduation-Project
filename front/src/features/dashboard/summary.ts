@@ -4,18 +4,22 @@ import { eyeRate } from '../../../../database/eye.ts';
 import type { EyeRecord, EyeStatisticsRow, HistoryRecord } from '../../../../database/eye.ts';
 import { keyboardSummary } from '../../../../database/keyboard.ts';
 import type { KeyboardStored } from '../../../../database/keyboard.ts';
+import { cameraRunOf } from '../session/cameraRecordId.ts';
 
 export interface UpperDay { turtle: number | null; balance: number | null; sessions: number; runMs: number; deviations: number }
 export interface KeyboardDay { score: number | null; coverage: number | null; sessions: number; runMs: number; present: boolean }
 export interface EyeDay { rate: number | null; runMs: number; breaks: number; present: boolean }
 export interface DashboardDay { date: string; upper: UpperDay; keyboard: KeyboardDay; eye: EyeDay; totalMs: number; hasRecords: boolean }
-/** Stored records behind one timeline row, which the history screen opens. */
+/**
+ * Stored records behind one timeline row, which the history screen opens. Since 2026-11-28 one 상체 row is one camera
+ * run: its neck and balance records (every reference segment) and the eye record of the same camera (`camera:<run>:…`).
+ * Records without a camera run id (before the eye merge, or an eye record without posture) stay rows of their own.
+ */
 export type EntrySource =
-  | { mode: 'upper'; records: PostureRecord[] }
-  | { mode: 'keyboard'; stored: KeyboardStored }
-  | { mode: 'eye'; record: EyeRecord };
+  | { mode: 'upper'; records: PostureRecord[]; eye: EyeRecord | null }
+  | { mode: 'keyboard'; stored: KeyboardStored };
 export interface TimelineEntry {
-  id: string; mode: 'upper' | 'keyboard' | 'eye';
+  id: string; mode: 'upper' | 'keyboard';
   startedAt: number; endedAt: number; offsetMinutes: number;
   turtle: number | null; balance: number | null; score: number | null; rate: number | null;
   interrupted: boolean;
@@ -127,12 +131,15 @@ function eyeDay(rows: EyeStatisticsRow[], date: string): EyeDay {
   };
 }
 
-/** One date's values from already selected policy groups. */
+/**
+ * One date's values from already selected policy groups. The eye runs in the same 상체 camera time (2026-10-10), so the
+ * total takes the longer of 상체 and 안구 instead of adding them (2026-11-28; adding counted the same time twice).
+ */
 export function dayValues(groups: PolicyGroups, date: string): DashboardDay {
   const upper = upperDay(groups.turtle, groups.balance, date);
   const typing = keyboardDay(groups.keyboard, date);
   const eyes = eyeDay(groups.eye, date);
-  return { date, upper, keyboard: typing, eye: eyes, totalMs: upper.runMs + typing.runMs + eyes.runMs,
+  return { date, upper, keyboard: typing, eye: eyes, totalMs: Math.max(upper.runMs, eyes.runMs) + typing.runMs,
     hasRecords: upper.sessions > 0 || typing.present || eyes.present };
 }
 
@@ -141,34 +148,50 @@ export function scoreFloor(scores: number[]) {
   return scores.length ? Math.min(90, Math.max(0, Math.floor(Math.min(...scores) / 10) * 10)) : 0;
 }
 
-/** Rows that started on `date`, newest first: one per upper session, keyboard and eye record, of every policy. */
+/** 상체 row key: the camera run since the eye merge, otherwise the posture session or the eye record itself. */
+function upperKey(record: PostureRecord | EyeRecord) {
+  const run = cameraRunOf(record.id);
+  if (run) return `camera:${run}`;
+  return record.mode === 'eye' ? record.id : sessionIdOf(record.id);
+}
+
+/** Valid-time weighted score of one mode's records (several reference segments of a run count together). */
+const recordsScore = (records: PostureRecord[]) => (records.length
+  ? averageScore({ validMs: total(records, record => record.validMs), scoreTimeSum: total(records, record => record.scoreTimeSum) })
+  : null);
+
+/**
+ * Rows that started on `date`, newest first, of every policy: one 상체 row per camera run (neck, balance and eye
+ * together; an older session or a lone eye record is a row of its own) and one row per keyboard record.
+ */
 export function dayEntries(history: HistoryRecord[], keyboard: KeyboardStored[], date: string, now = Date.now()): TimelineEntry[] {
   const startsOnDate = (record: { startedAt: number; offsetMinutes: number }) =>
     localDateKey(record.startedAt, record.offsetMinutes) === date;
   const entries: TimelineEntry[] = [];
-  const upper = new Map<string, PostureRecord[]>();
+  const upper = new Map<string, { records: PostureRecord[]; eye: EyeRecord | null }>();
   for (const record of history) {
     // Mixed history also carries compact keyboard entries; keyboard rows come once from `keyboard`.
     if (record.mode === 'keyboard') continue;
-    if (!startsOnDate(record)) continue;
-    if (record.mode === 'eye') {
-      entries.push({ id: record.id, mode: 'eye', startedAt: record.startedAt, endedAt: record.startedAt + record.runMs,
-        offsetMinutes: record.offsetMinutes, turtle: null, balance: null, score: null, rate: eyeRate(record),
-        interrupted: ended(record.status, record.startedAt + record.runMs, now), source: { mode: 'eye', record } });
-      continue;
-    }
-    const id = sessionIdOf(record.id);
-    upper.set(id, [...(upper.get(id) ?? []), record]);
+    const key = upperKey(record);
+    const group = upper.get(key) ?? { records: [], eye: null };
+    if (record.mode === 'eye') group.eye = record;
+    else group.records.push(record);
+    upper.set(key, group);
   }
-  for (const [id, records] of upper) {
-    const neck = records.find(record => record.mode === 'turtle');
-    const side = records.find(record => record.mode === 'balance');
-    entries.push({ id, mode: 'upper',
-      startedAt: Math.min(...records.map(record => record.startedAt)),
-      endedAt: Math.max(...records.map(record => record.startedAt + record.runMs)),
-      offsetMinutes: records[0].offsetMinutes,
-      turtle: neck ? averageScore(neck) : null, balance: side ? averageScore(side) : null, score: null, rate: null,
-      interrupted: records.some(record => ended(record.status, record.startedAt + record.runMs, now)), source: { mode: 'upper', records } });
+  for (const [id, { records, eye }] of upper) {
+    const spans = [...records, ...(eye ? [eye] : [])]
+      .map(record => ({ start: record.startedAt, end: record.startedAt + record.runMs, status: record.status }));
+    const first = records[0] ?? eye;
+    const startedAt = Math.min(...spans.map(span => span.start));
+    // A run that crosses midnight stays one row, on the date it started.
+    if (!first || !startsOnDate({ startedAt, offsetMinutes: first.offsetMinutes })) continue;
+    entries.push({ id, mode: 'upper', startedAt,
+      endedAt: Math.max(...spans.map(span => span.end)),
+      offsetMinutes: first.offsetMinutes,
+      turtle: recordsScore(records.filter(record => record.mode === 'turtle')),
+      balance: recordsScore(records.filter(record => record.mode === 'balance')),
+      score: null, rate: eye ? eyeRate(eye) : null,
+      interrupted: spans.some(span => ended(span.status, span.end, now)), source: { mode: 'upper', records, eye } });
   }
   for (const stored of keyboard) {
     if (!startsOnDate(stored.record)) continue;
