@@ -6,6 +6,9 @@ import electron from 'vite-plugin-electron'
 // https://vite.dev/config/
 export default defineConfig(({ mode, command }) => {
   const base = loadEnv(mode, process.cwd(), 'VITE_MOTI_').VITE_MOTI_API_URL;
+  const reviewTestToken = command === 'serve'
+    ? loadEnv(mode, process.cwd(), 'MOTI_DAILY_REVIEW_TEST_').MOTI_DAILY_REVIEW_TEST_TOKEN
+    : undefined;
   let appPolicy = ''
   if (command === 'build' && mode !== 'browser') {
     const url = URL.canParse(base ?? '') ? new URL(base) : null;
@@ -28,6 +31,17 @@ export default defineConfig(({ mode, command }) => {
   }
   return ({
   base: './',
+  define: { 'import.meta.env.MOTI_DAILY_REVIEW_TEST': JSON.stringify(!!reviewTestToken) },
+  server: reviewTestToken ? {
+    proxy: {
+      '^/__moti_daily_review$': {
+        target: 'http://127.0.0.1:39816',
+        changeOrigin: true,
+        rewrite: () => '/api/ai/review',
+        headers: { Authorization: `Bearer ${reviewTestToken}` },
+      },
+    },
+  } : undefined,
   cacheDir: './.vite-cache-screenshots',
   build: { rollupOptions: { input: { index: 'index.html', overlay: 'overlay.html' } } },
   // ONNX Runtime Web finds its wasm next to its own module; pre-bundling would move the module away from it.

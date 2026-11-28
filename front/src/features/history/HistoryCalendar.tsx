@@ -9,8 +9,8 @@ const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
 const LEGEND = ['upper', 'keyboard', 'eye'] as const;
 const EMPTY_LABEL = { loading: '기록 불러오는 중', error: '기록을 불러오지 못함', ready: '기록 없음' };
 
-function DayCell({ day, selected, recordsStatus, buttonRef, onSelect }: {
-  day: CalendarDay; selected: boolean; recordsStatus: SourceStatus; buttonRef?: Ref<HTMLButtonElement>;
+function DayCell({ day, selected, between, recordsStatus, buttonRef, onSelect }: {
+  day: CalendarDay; selected: boolean; between: boolean; recordsStatus: SourceStatus; buttonRef?: Ref<HTMLButtonElement>;
   onSelect: (date: string) => void;
 }) {
   const dayOfMonth = Number(day.date.slice(8));
@@ -19,10 +19,11 @@ function DayCell({ day, selected, recordsStatus, buttonRef, onSelect }: {
     ? `${longDate(day.date)}, ${day.modes.map(mode => MODE_NAME[mode]).join(', ')} ${minutesText(day.totalMs)}`
     : `${longDate(day.date)}, ${EMPTY_LABEL[day.isFuture ? 'ready' : recordsStatus]}`;
   return (
-    <button ref={buttonRef} type="button" disabled={day.isFuture} aria-pressed={selected} aria-label={spoken} aria-current={day.isToday ? 'date' : undefined}
+    <button ref={buttonRef} type="button" disabled={day.isFuture} aria-pressed={selected || between} aria-label={spoken} aria-current={day.isToday ? 'date' : undefined}
       onClick={() => onSelect(day.date)}
       className={`flex min-h-13 min-w-0 flex-col items-center gap-1 rounded-lg border px-0.5 py-1.5 text-center sm:min-h-16 sm:items-start sm:rounded-xl sm:p-2 sm:text-left ${
-        selected ? 'border-heading bg-nav-active' : day.isFuture ? 'border-dashed border-border bg-surface-muted' : 'border-border bg-surface hover:bg-nav-active'
+        selected ? 'border-heading bg-nav-active' : between ? 'border-border bg-nav-active'
+          : day.isFuture ? 'border-dashed border-border bg-surface-muted' : 'border-border bg-surface hover:bg-nav-active'
       } ${day.isFuture ? 'cursor-default opacity-40' : ''}`}>
       <span className="flex max-w-full flex-wrap items-center gap-1">
         <span className={`text-sm font-semibold ${day.isToday || recorded ? 'text-heading' : 'text-muted'}`}>{dayOfMonth}</span>
@@ -39,8 +40,9 @@ function DayCell({ day, selected, recordsStatus, buttonRef, onSelect }: {
 }
 
 /** Week or month calendar: mode dots and measured time per day, faded empty days, disabled future days. */
-export default function HistoryCalendar({ title, days, blanks, selected, recordsStatus, focusSelected, canForward, onSelect, onMove }: {
-  title: string; days: CalendarDay[]; blanks: number; selected: string; recordsStatus: SourceStatus; focusSelected?: boolean; canForward: boolean;
+export default function HistoryCalendar({ title, days, blanks, selected, rangeEnd = selected, recordsStatus, focusSelected, canForward, onSelect, onMove }: {
+  title: string; days: CalendarDay[]; blanks: number; selected: string; rangeEnd?: string;
+  recordsStatus: SourceStatus; focusSelected?: boolean; canForward: boolean;
   onSelect: (date: string) => void; onMove: (direction: -1 | 1) => void;
 }) {
   const selectedDay = useRef<HTMLButtonElement>(null);
@@ -70,7 +72,8 @@ export default function HistoryCalendar({ title, days, blanks, selected, records
       <div className="mb-1 grid grid-cols-7 gap-1 text-center text-xs text-muted sm:gap-2">{WEEKDAYS.map(day => <span key={day}>{day}</span>)}</div>
       <div className="grid grid-cols-7 gap-1 sm:gap-2">
         {Array.from({ length: blanks }, (_, index) => <span key={`blank-${index}`} aria-hidden="true" />)}
-        {days.map(day => <DayCell key={day.date} day={day} selected={day.date === selected} recordsStatus={recordsStatus}
+        {days.map(day => <DayCell key={day.date} day={day} selected={day.date === selected || day.date === rangeEnd}
+          between={day.date > selected && day.date < rangeEnd} recordsStatus={recordsStatus}
           buttonRef={day.date === selected ? selectedDay : undefined} onSelect={onSelect} />)}
       </div>
     </section>

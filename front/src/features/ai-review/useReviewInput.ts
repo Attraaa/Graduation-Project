@@ -1,5 +1,6 @@
 import { useCallback, useSyncExternalStore } from 'react';
 import type { KeyboardStored } from '../../../../database/keyboard.ts';
+import { MAX_REVIEW_DAYS, type DailyReviewInput, type ReviewRequest } from '../../../../database/localReview.ts';
 import { getCurrentUser } from '../../utils/authStore';
 import { shiftDate } from '../dashboard/summary';
 import { recordsApi, recordValue } from '../records/api';
@@ -22,28 +23,49 @@ function mergeKeyboardSessions(server: KeyboardStored[], local: KeyboardStored[]
   return [...sessions.values()];
 }
 
-export function useReviewInput(date: string) {
+export function useReviewInput(from: string, to = from) {
   const owner = getCurrentUser()?.id ?? '';
   const saved = useSyncExternalStore(subscribeLocalReview, localReviewRevision, localReviewRevision);
   const load = useCallback(async ({ signal }: { signal: AbortSignal }) => {
     if (!owner) throw new Error('로그인이 필요합니다.');
-    const query = { owner, from: date, to: date };
+    const query = { owner, from, to };
+    const dates: string[] = [];
+    for (let date = from; date <= to; date = shiftDate(date, 1)) {
+      dates.push(date);
+      if (dates.length > MAX_REVIEW_DAYS) throw new Error('총평 기간은 최대 7일까지 선택할 수 있어요.');
+    }
     // A completed snapshot is filed by its end date, including sessions ending after midnight.
-    const device = readLocalReviewResults(owner, date, date, shiftDate(date, 1)).catch(() => null);
+    const device = readLocalReviewResults(owner, from, to, shiftDate(to, 1)).catch(() => null);
     const readKeyboard = () => recordValue(recordsApi().keyboardStatistics(query)).catch(async error => {
       if ((await device)?.keyboard.length) return [];
       throw error;
     });
-    const [posture, eye, serverKeyboard, local] = await Promise.all([
-      loadDailyPosture(owner, date, signal),
-      device.then(snapshots => loadDailyEye(owner, date, snapshots?.eye ?? [], signal)),
-      readKeyboard(),
-      device,
-    ]);
+    const [serverKeyboard, local] = await Promise.all([readKeyboard(), device]);
     signal.throwIfAborted();
     const keyboard = mergeKeyboardSessions(serverKeyboard, local?.keyboard ?? []);
-    return buildDailyReviewInput(date, posture, eye, keyboard);
-  }, [owner, date]);
-  const review = useRecordQuery(`daily-review:${owner}:${date}:${saved}`, load);
-  return { owner, input: review.data, loading: review.loading, failed: !!review.error, retry: review.retry };
+    const days: DailyReviewInput[] = [];
+    const loadDay = async (date: string) => {
+      const localEye = (local?.eye ?? []).filter(session => session.rows.some(row => row.date === date));
+      const [posture, eye] = await Promise.all([
+        loadDailyPosture(owner, date, signal),
+        loadDailyEye(owner, date, localEye, signal),
+      ]);
+      return buildDailyReviewInput(date, posture, eye, keyboard);
+    };
+    for (let index = 0; index < dates.length; index += 2) {
+      signal.throwIfAborted();
+      const batch = await Promise.all(dates.slice(index, index + 2).map(loadDay));
+      for (const day of batch) if (day) days.push(day);
+    }
+    return days;
+  }, [owner, from, to]);
+  const review = useRecordQuery(`review:${owner}:${from}:${to}:${saved}`, load);
+  const days = review.data ?? [];
+  // Each day's mean and exact late change already include its whole timeline. The range does not need every five-minute bucket.
+  const input: ReviewRequest | null = !days.length ? null : from === to ? days[0] : { from, to,
+    days: days.map(day => ({ ...day, posture: day.posture && { ...day.posture,
+      scores: day.posture.scores.map(score => ({ ...score, periods: [] })),
+    } })),
+  };
+  return { owner, input, days, loading: review.loading, failed: !!review.error, retry: review.retry };
 }

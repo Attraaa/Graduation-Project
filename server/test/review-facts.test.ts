@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import type { ReviewInput } from '../src/services/aiReview.js';
+import type { DailyReviewInput as ReviewInput } from '../../database/localReview.ts';
 import { buildReviewPlan, renderRecord } from '../src/services/reviewFacts.js';
+import { buildRangeReviewPlan, renderRangeRecord } from '../src/services/rangeReviewFacts.js';
 import { recordedDay } from './review-fixtures.js';
 
 test('selected day describes an actual decline in its last ten measured minutes and retains measured modes', () => {
@@ -31,25 +32,47 @@ test('shallow, missing, and small changes do not become claims about a trend', (
   const input: ReviewInput = { ...recordedDay, posture: { ...recordedDay.posture!, scores: [score] }, keyboard: null, eye: null };
   const short = buildReviewPlan(input);
   assert.doesNotMatch(short.headline + short.sections[1].text, /마지막 10분/);
-  assert.match(short.strengths[0], /3회 측정/);
+  assert.match(short.strengths[0], /관찰 3분.*목 점수.*82.7점/);
+  assert.doesNotMatch(short.strengths.join(' '), /회 측정|기록을 남겼/);
   assert.match(short.caution!, /관찰량이 적어/);
-  assert.equal(short.focus, null);
+  assert.equal(short.focus, 'neck');
+  assert.match(short.goals[0], /관찰 3분.*82.7점.*턱/);
   const unobserved = buildReviewPlan({ ...input, posture: { ...input.posture!, scores: [{ ...score, lastTen: null }] } });
   assert.deepEqual(unobserved.weaknesses, []);
-  assert.equal(unobserved.focus, null);
+  assert.equal(unobserved.focus, 'neck');
   const stable = buildReviewPlan({ ...input, posture: { ...input.posture!, scores: [recordedDay.posture!.scores[1]] } });
   assert.match(stable.sections[1].text, /앞선 구간 평균 82점과 비슷했어요/);
-  assert.equal(stable.focus, null);
+  assert.match(stable.strengths[0], /좌우 균형 점수.*82.3점/);
 });
 
 test('day with only blinking reports observations without grading frequency', () => {
   const onlyEye: ReviewInput = { date: recordedDay.date, posture: null, keyboard: null, eye: { blinkRate: 8, validMinutes: 4 } };
   const facts = buildReviewPlan(onlyEye);
   assert.match(facts.sections[1].text, /분당 평균 8회/);
-  assert.match(facts.strengths[0], /관찰/);
+  assert.deepEqual(facts.strengths, []);
   assert.deepEqual(facts.weaknesses, []);
   assert.match(facts.goals[0], /기록 비교/);
   assert.match(facts.caution!, /깜빡임 기록/);
+});
+
+test('range distinguishes a previous day from a previous measured day and gives advice with the matching evidence', () => {
+  const day = (date: string, mean: number, policyVersion = 'neck-v1') => ({
+    date, eye: null, keyboard: null, posture: { sessions: 5, measuredMinutes: 15, scores: [
+      { metric: 'neck' as const, mean, validMinutes: 12, policyVersion, beforeLastTen: null, lastTen: null, periods: [] },
+    ] },
+  });
+  const range = { from: '2026-11-21', to: '2026-11-25', days: [
+    day('2026-11-21', 90), day('2026-11-22', 70), day('2026-11-24', 62), day('2026-11-25', 100, 'neck-v2'),
+  ] };
+  const plan = buildRangeReviewPlan(range);
+  assert.match(plan.evidence, /11월 22일.*70점.*전일 대비 \(90점\) 20점 내려/);
+  assert.match(plan.sections[1].text, /직전 측정일인 11월 22일 대비 \(70점\) 8점 내려/);
+  assert.doesNotMatch(plan.sections[1].text, /38점 올라/);
+  assert.match(plan.goals[0], /20점 내려.*턱/);
+  assert.match(plan.strengths[0], /11월 21일.*90점/);
+  assert.doesNotMatch(plan.strengths.join(' '), /회 측정|기록을 남겼/);
+  assert.match(plan.caution!, /없는 1일/);
+  assert.doesNotMatch(renderRangeRecord(plan, range), /neck-v[12]/);
 });
 
 test('whole-day chronology combines every bucket using valid observation time and fits the mini PC request', () => {

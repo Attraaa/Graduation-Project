@@ -1,11 +1,12 @@
-import type { DailyPostureScore, DailyReviewInput, ScorePeriod } from '../../../database/localReview.ts';
+import { MAX_REVIEW_DAYS, type DailyPostureScore, type DailyReviewInput, type ReviewRequest, type ScorePeriod } from '../../../database/localReview.ts';
 import { buildReviewPlan, renderRecord, type SectionKey } from './reviewFacts.js';
+import { buildRangeReviewPlan, renderRangeRecord } from './rangeReviewFacts.js';
 import { pickAdvice, reviewAdvice } from './reviewAdvice.js';
 import { KEYBOARD_CODES } from '../../../database/keyboard.ts';
 import { HttpError } from '../http.js';
 import { bodyObject, dateParam, decimal, integer, list, optional } from '../validation.js';
 
-export type ReviewInput = DailyReviewInput;
+export type ReviewInput = ReviewRequest;
 
 export interface ReviewSection { key: SectionKey; title: string; text: string }
 export interface Review {
@@ -39,6 +40,10 @@ function postureScore(value: unknown, measuredMinutes: number): DailyPostureScor
   const item = bodyObject(value);
   const metric = METRICS.find(candidate => candidate === item.metric);
   if (!metric) throw new HttpError(400, '상체 점수 항목이 올바르지 않습니다.');
+  const policyVersion = item.policyVersion;
+  if (policyVersion !== undefined && (typeof policyVersion !== 'string' || !/^[a-z0-9._:-]{1,120}$/i.test(policyVersion))) {
+    throw new HttpError(400, '상체 점수 기준이 올바르지 않습니다.');
+  }
   const total = scorePeriod(item, measuredMinutes);
   const lastWindowMinutes = Math.min(10, measuredMinutes);
   const beforeLastTen = section(item.beforeLastTen, part => scorePeriod(part, measuredMinutes - lastWindowMinutes));
@@ -58,7 +63,7 @@ function postureScore(value: unknown, measuredMinutes: number): DailyPostureScor
     previousEnd = endMinute;
     return { startMinute, endMinute, ...scorePeriod(period, length) };
   });
-  return { metric, ...total, beforeLastTen, lastTen, periods };
+  return { metric, ...(policyVersion === undefined ? {} : { policyVersion }), ...total, beforeLastTen, lastTen, periods };
 }
 
 function frequentKeys(value: unknown) {
@@ -71,14 +76,13 @@ function frequentKeys(value: unknown) {
 }
 
 // Only a calendar date, bounded numbers and known key codes reach the reviewer.
-export function parseReviewInput(body: unknown): ReviewInput {
-  const input = bodyObject(body);
+function parseDay(input: Record<string, unknown>, allowEmpty = false): DailyReviewInput {
   const date = dateParam(input.date);
   if (!date) throw new HttpError(400, '총평을 받을 날짜를 선택해 주세요.');
   const posture = section(input.posture, item => {
     const measuredMinutes = minutes(item.measuredMinutes, '상체 측정 시간');
     const scores = list(item.scores, '상체 점수', METRICS.length).map(score => postureScore(score, measuredMinutes));
-    if (new Set(scores.map(score => score.metric)).size !== scores.length) throw new HttpError(400, '중복 상체 점수가 있습니다.');
+    if (!scores.length || new Set(scores.map(score => score.metric)).size !== scores.length) throw new HttpError(400, '상체 점수 항목을 확인해 주세요.');
     return { measuredMinutes, scores, sessions: integer(item.sessions, '측정 횟수', 1, 100_000) };
   });
   const eye = section(input.eye, item => ({
@@ -90,8 +94,25 @@ export function parseReviewInput(body: unknown): ReviewInput {
     consistency: percent(item.consistency, '사용 일관성'), judged: integer(item.judged, '판정한 입력 수', 0, 1_000_000_000),
     frequentKeys: frequentKeys(item.frequentKeys),
   }));
-  if (!posture && !eye && !keyboard) throw new HttpError(400, '기록이 있는 날짜만 총평을 만들 수 있습니다.');
+  if (!allowEmpty && !posture && !eye && !keyboard) throw new HttpError(400, '기록이 있는 날짜만 총평을 만들 수 있습니다.');
   return { date, posture, eye, keyboard };
+}
+
+export function parseReviewInput(body: unknown): ReviewInput {
+  const input = bodyObject(body);
+  if (!('days' in input) && !('from' in input) && !('to' in input)) return parseDay(input);
+  const from = dateParam(input.from), to = dateParam(input.to);
+  const ms = (day: string) => Date.parse(`${day}T00:00:00Z`);
+  if (!from || !to || to < from || ms(to) - ms(from) >= MAX_REVIEW_DAYS * 86_400_000) {
+    throw new HttpError(400, '총평 기간은 연속된 날짜로 최대 7일까지 선택할 수 있어요.');
+  }
+  const days = list(input.days, '날짜별 기록', MAX_REVIEW_DAYS).map(value => parseDay(bodyObject(value), true));
+  if (days.some((day, index) => day.date < from || day.date > to || (index > 0 && day.date <= days[index - 1].date))) {
+    throw new HttpError(400, '날짜별 기록은 선택한 기간 안에서 날짜순으로 보내 주세요.');
+  }
+  const measured = days.filter(day => day.posture || day.eye || day.keyboard);
+  if (!measured.length) throw new HttpError(400, '선택한 기간에 측정한 기록이 없어요.');
+  return { from, to, days: measured };
 }
 
 /**
@@ -100,10 +121,11 @@ export function parseReviewInput(body: unknown): ReviewInput {
  */
 export function createMiniPcReviewer(url: string, send: typeof fetch = fetch): Reviewer {
   return async input => {
-    const plan = buildReviewPlan(input);
-    const options = reviewAdvice(input, plan.focus);
-    const record = [renderRecord(plan, input), '[다음 측정에서 연습할 수 있는 습관]', ...options.map(item => item.text),
-      '선택한 하루의 기록을 읽고, 마지막 문장에 위 습관 중 가장 도움이 되는 한 가지를 숫자 없이 직접 권해 주세요. 누적 측정 마지막 구간에 점수가 내려간 항목이 있으면 그 항목을 우선해 주세요.'].join('\n');
+    const plan = 'days' in input ? buildRangeReviewPlan(input) : buildReviewPlan(input);
+    const options = reviewAdvice(plan.focus);
+    const facts = 'days' in input ? renderRangeRecord(plan, input) : renderRecord(plan, input);
+    const record = [facts, `[조언의 근거] ${plan.evidence}`, '[선택할 수 있는 습관]', ...options,
+      '선택한 날짜들의 기록과 조언의 근거를 읽어 주세요. 마지막 문장에 위 습관 중 가장 적절한 문장 하나를 그대로 써 주세요.'].join('\n');
     const timeout = AbortSignal.timeout(95_000);
     const offline = () => new HttpError(503, '미니 PC 총평 서버에 연결할 수 없어요. 잠시 후 다시 시도해 주세요.');
     const timedOut = () => new HttpError(504, '총평 작성 시간이 초과됐어요. 잠시 후 다시 시도해 주세요.');
@@ -126,8 +148,9 @@ export function createMiniPcReviewer(url: string, send: typeof fetch = fetch): R
       || typeof reply.model !== 'string' || !reply.model.trim() || reply.model.length > 120) throw invalid();
     const advice = pickAdvice(reply.summary, options);
     const [overall, ...areas] = plan.sections;
+    const explanation = overall.text.includes(plan.evidence) ? '' : plan.evidence;
     return {
-      headline: plan.headline, sections: [{ ...overall, text: `${overall.text} ${advice.text}` }, ...areas],
+      headline: plan.headline, sections: [{ ...overall, text: [overall.text, explanation, advice.text].filter(Boolean).join(' ') }, ...areas],
       strengths: plan.strengths, weaknesses: plan.weaknesses, goals: plan.goals, caution: plan.caution,
       model: reply.model, adviceSource: advice.source,
     };

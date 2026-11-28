@@ -136,7 +136,7 @@ test('Gemma receives daily observations and advice for the decline while the app
   let body = '';
   const review = await createMiniPcReviewer('https://mini.example/review', async (_url, init) => {
     body = String(init?.body);
-    return Response.json({ summary: '목 자세는 평균 180점이었어요. 화면을 볼 때 턱이 앞으로 빠지지 않게 확인해 보세요.', model: 'gemma3:4b' });
+    return Response.json({ summary: '목 자세는 평균 180점이었어요. 화면을 오래 볼 때 턱이 앞으로 나오는지 확인하고 편한 위치로 가볍게 당겨 보세요.', model: 'gemma3:4b' });
   })(safe);
   assert.deepEqual(Object.keys(JSON.parse(body)), ['record']);
   assert.match(body, /2026-11-21/);
@@ -149,7 +149,7 @@ test('Gemma receives daily observations and advice for the decline while the app
   assert.match(overall, /68점/);
   assert.doesNotMatch(overall, /180점/);
   assert.equal(review.adviceSource, 'model');
-  assert.match(overall, /턱이 앞으로 빠지지 않게 확인해 보세요\.$/);
+  assert.match(overall, /턱이 앞으로 나오는지 확인하고 편한 위치로 가볍게 당겨 보세요\.$/);
   assert.deepEqual(review.sections.map(section => section.title), ['하루당 총평', '상체 자세', '키보드', '깜빡임']);
 });
 
@@ -160,7 +160,7 @@ test('wrong blink interpretations are excluded and the new daily facts still use
   const overall = answer.sections[0].text;
   assert.match(answer.sections[1].text, /분당 평균 9회/);
   assert.doesNotMatch(overall, /9회 감소/);
-  assert.match(overall, /깜빡여 보세요\.$/);
+  assert.match(overall, /깜빡임 기록을 다시 비교해 보세요\.$/);
   assert.equal(answer.adviceSource, 'record');
 });
 
@@ -169,7 +169,18 @@ test('advice for a decline must address its measured area', async () => {
     Response.json({ summary: '눈을 편하게 깜빡여 보세요.', model: 'gemma3:4b' }));
   const answer = await reviewer(input);
   assert.equal(answer.adviceSource, 'record');
-  assert.match(answer.sections[0].text, /턱이 앞으로 나왔는지 확인/);
+  assert.match(answer.sections[0].text, /22점 낮았어요.*턱이 앞으로 나오는지 확인/);
+});
+
+test('the daily review route accepts an ordered date range up to seven days and rejects wider or out-of-order input', async t => {
+  const request = await start(t, async () => review);
+  const dates = { from: input.date, to: '2026-11-27' };
+  const last = { ...input, date: dates.to };
+  assert.equal((await request({ ...dates, days: [input, last] })).status, 200);
+  assert.equal((await request({ ...dates, days: [last, input] })).status, 400);
+  assert.equal((await request({ ...dates, to: '2026-11-28', days: [input, last] })).status, 400);
+  assert.equal((await request({ ...dates, days: [{ ...input, date: '2026-11-20' }] })).status, 400);
+  assert.equal((await request({ ...dates, days: [{ date: dates.to, posture: null, eye: null, keyboard: null }] })).status, 400);
 });
 
 test('invalid gateway responses and unavailable or busy models surface actionable errors', async () => {

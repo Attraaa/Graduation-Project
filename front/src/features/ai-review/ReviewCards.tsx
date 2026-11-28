@@ -46,7 +46,7 @@ export default function ReviewCards({ review }: { review: AiReview }) {
               <h3 className="flex items-center gap-2 font-bold text-heading">
                 <span aria-hidden="true" className={`h-2 w-2 rounded-full ${AREA_DOT[area.key]}`} />{area.title}
               </h3>
-              <p className="text-sm leading-relaxed text-heading">{area.text}</p>
+              <p className="whitespace-pre-line text-sm leading-relaxed text-heading">{area.text}</p>
             </section>
           ))}
         </div>

@@ -1,29 +1,26 @@
-import type { ReviewInput } from './aiReview.js';
-import type { PostureMetric } from './reviewFacts.js';
+import type { ReviewFocus } from './reviewFacts.js';
 
-interface Advice { text: string; topic: RegExp }
-const posture: Record<PostureMetric, Advice> = {
-  neck: { text: '화면을 오래 볼 때 중간에 턱이 앞으로 나왔는지 확인하고 가볍게 당겨 보세요.', topic: /목|턱|머리/ },
-  balance: { text: '화면을 오래 볼 때 중간에 체중이 한쪽으로 쏠렸는지 확인하고 앉은 자세를 바로잡아 보세요.', topic: /균형|체중|한쪽/ },
-  shoulder: { text: '화면을 오래 볼 때 중간에 양쪽 어깨의 힘을 빼고 자세를 확인해 보세요.', topic: /어깨/ },
+const actions: Record<ReviewFocus, readonly [string, ...string[]]> = {
+  neck: [
+    '화면을 오래 볼 때 턱이 앞으로 나오는지 확인하고 편한 위치로 가볍게 당겨 보세요.',
+    '화면이 눈높이보다 낮은지 확인하고 목을 앞으로 내밀지 않아도 읽을 수 있게 맞춰 보세요.',
+  ],
+  balance: [
+    '화면을 정면에 두고 고개와 양쪽 어깨선이 한쪽으로 기울었는지 확인해 보세요.',
+    '작업 중 고개가 한쪽으로 기울지 않도록 정면을 보고 양 어깨를 편하게 내려 보세요.',
+  ],
+  shoulder: [
+    '양쪽 어깨에 힘이 들어갔는지 확인하고 편하게 내려 보세요.',
+    '팔을 편하게 받쳐 양쪽 어깨에 걸리는 힘을 덜어 보세요.',
+  ],
+  eye: ['다음에는 비슷한 화면 작업에서 깜빡임 기록을 다시 비교해 보세요.'],
+  keyboard: ['속도를 낮춰 권장 손가락으로 같은 키를 눌러 보는 연습을 해 보세요.'],
 };
-const eye: Advice = { text: '화면에서 잠시 시선을 떼고 눈을 편하게 깜빡여 보세요.', topic: /눈|깜빡|시선/ };
-const keyboard: Advice = { text: '다음 타자 연습은 속도를 낮추고 손가락을 기본 자리에 놓고 시작해 보세요.', topic: /손가락|타자|키보드/ };
 
-export function reviewAdvice(input: ReviewInput, focus: PostureMetric | null): Advice[] {
-  if (focus) return [posture[focus]];
-  const scores = (input.posture?.scores ?? []).slice().sort((a, b) => a.mean - b.mean);
-  const options = scores.map(score => posture[score.metric]);
-  if (input.eye) options.push(eye);
-  if (input.keyboard) options.push(keyboard);
-  return options;
-}
+export const reviewAdvice = (focus: ReviewFocus) => actions[focus];
 
-// The factual part of the review is set by the records. Keep only the model's matching habit suggestion.
-export function pickAdvice(text: string, options: Advice[]) {
-  const sentences = text.split(/(?<=[.!?。])\s*|\n+/u).map(s => s.trim()).filter(Boolean);
-  const found = sentences.find(s => s.length <= 180 && !/[0-9%~]|점수|평균|감소|증가|분당|도수|진단|질환|치료|통증|질병|증후군|디스크|거북목|예방/u.test(s)
-    && /(?:보세요|주세요|해봐요|해 보아요|좋겠어요|해도 좋아요|해 보시는 게 좋아요)[.!。]?$/u.test(s)
-    && options.some(option => option.topic.test(s)));
-  return { text: found ?? options[0].text, source: found ? 'model' as const : 'record' as const };
+/** Gemma selects a supported action. Reasons and measurements come from the plan. */
+export function pickAdvice(text: string, options: readonly [string, ...string[]]) {
+  const matched = options.find(option => text.includes(option));
+  return { text: matched ?? options[0], source: matched ? 'model' as const : 'record' as const };
 }

@@ -129,7 +129,7 @@ export function summarizePostureDay(local: DailyTimelineSession[], cloud: Record
       const bin = result(t, end - start);
       return bin && bin.validMinutes > 0 ? [{ startMinute: minute(start), endMinute: minute(end), ...bin }] : [];
     });
-    scores.push({ metric, ...average, beforeLastTen: result(before, cutoff),
+    scores.push({ metric, policyVersion: latest.policy, ...average, beforeLastTen: result(before, cutoff),
       lastTen: result(last, duration - cutoff), periods });
   }
   return scores.length ? { sessions: new Set(tracks.map(t => t.id)).size, measuredMinutes: minute(duration), scores } : null;
